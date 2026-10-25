@@ -24,6 +24,9 @@ use mod_sideline\local\model\activity_state;
  * @package    mod_sideline
  * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers \mod_sideline\local\service\availability_analyser
+ * @covers \mod_sideline\local\service\state_collector
+ * @covers \mod_sideline\local\service\rule_evaluator
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(availability_analyser::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(state_collector::class)]
@@ -66,6 +69,11 @@ final class state_model_test extends \advanced_testcase {
         ];
     }
 
+    /**
+     * Test with data provider.
+     *
+     * @dataProvider tree_provider
+     */
     #[\PHPUnit\Framework\Attributes\DataProvider('tree_provider')]
     public function test_earliest_opening_follows_tree_semantics(array $tree, ?int $expected): void {
         $this->assertSame($expected, (new availability_analyser())->earliest_opening(json_encode($tree), self::NOW));

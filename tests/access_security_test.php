@@ -32,6 +32,10 @@ require_once(__DIR__ . '/fixtures/fake_text_generator.php');
  * @package    mod_sideline
  * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers \mod_sideline\local\service\scope_resolver
+ * @covers \mod_sideline\local\service\message_composer
+ * @covers \mod_sideline\local\service\commentary_service
+ * @covers \mod_sideline\external\get_commentary
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\scope_resolver::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\message_composer::class)]

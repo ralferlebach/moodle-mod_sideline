@@ -22,6 +22,7 @@ namespace slcmod_assign;
  * @package    slcmod_assign
  * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers \slcmod_assign\adapter
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(adapter::class)]
 final class adapter_test extends \advanced_testcase {

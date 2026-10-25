@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1 (beta)
+
+* Unterstützt Moodle 4.5, 5.0, 5.1, 5.2 und 5.3 (vorher nur 5.3)
+* AMD-Panel für Moodle 4.5 bis 5.2 mit demselben Funktionsumfang wie das React-Panel (React erst ab 5.3)
+* Größere Klickflächen für Auswahlfelder (WCAG 2.5.8), durch axe auf Moodle 4.5 gefunden
+* Kompatibilität: Modul-Feature-Konstante nur ab 5.x entfernt, KI-Kontextprüfung nur wo vorhanden, Tests mit PHPUnit 9.6 und 11
+
 ## 0.2.0 (beta)
 
 * Inline-Anzeige auf der Kursseite wie ein Text- und Medienfeld, mehrere Instanzen je Kurs

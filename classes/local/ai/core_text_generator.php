@@ -42,7 +42,11 @@ class core_text_generator implements text_generator {
         if (!$manager->is_action_available(generate_text::class)) {
             return false;
         }
-        return $manager->is_action_enabled_in_context($context, generate_text::class);
+        // Moodle 5.1+ can switch AI off per course and per course module. Older versions have no such switch.
+        if (method_exists($manager, 'is_action_enabled_in_context')) {
+            return $manager->is_action_enabled_in_context($context, generate_text::class);
+        }
+        return true;
     }
 
     #[\Override]

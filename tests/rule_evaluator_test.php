@@ -24,6 +24,7 @@ use mod_sideline\local\model\activity_state;
  * @package    mod_sideline
  * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers \mod_sideline\local\service\rule_evaluator
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\rule_evaluator::class)]
 final class rule_evaluator_test extends \advanced_testcase {

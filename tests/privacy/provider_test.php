@@ -31,6 +31,7 @@ defined('MOODLE_INTERNAL') || die();
  * @package    mod_sideline
  * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers \mod_sideline\privacy\provider
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\privacy\provider::class)]
 final class provider_test extends \core_privacy\tests\provider_testcase {

@@ -27,6 +27,8 @@ use Psr\Http\Message\RequestInterface;
  * @package    mod_sideline
  * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers \mod_sideline\local\ai\core_text_generator
+ * @covers \mod_sideline\local\ai\ai_gateway
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(core_text_generator::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(ai_gateway::class)]
@@ -47,15 +49,27 @@ final class ai_integration_test extends \advanced_testcase {
         set_config('enablecompletion', 1);
         set_config('aienabled', 1, 'mod_sideline');
         $manager = \core\di::get(\core_ai\manager::class);
-        $manager->create_provider_instance(
-            classname: '\aiprovider_openai\provider',
-            name: 'test',
-            enabled: true,
-            config: ['apikey' => '123', 'enableuserratelimit' => false, 'enableglobalratelimit' => false],
-            actionconfig: [\core_ai\aiactions\generate_text::class => ['enabled' => true, 'settings' => [
-                'model' => 'gpt-4o', 'endpoint' => 'https://api.openai.com/v1/chat/completions', 'systeminstruction' => '',
-            ]]],
-        );
+        if (method_exists($manager, 'create_provider_instance')) {
+            // Moodle 5.0 and later: provider instances.
+            $manager->create_provider_instance(
+                classname: '\aiprovider_openai\provider',
+                name: 'test',
+                enabled: true,
+                config: ['apikey' => '123', 'enableuserratelimit' => false, 'enableglobalratelimit' => false],
+                actionconfig: [\core_ai\aiactions\generate_text::class => ['enabled' => true, 'settings' => [
+                    'model' => 'gpt-4o', 'endpoint' => 'https://api.openai.com/v1/chat/completions', 'systeminstruction' => '',
+                ]]],
+            );
+        } else {
+            // Moodle 4.5: one configuration per provider plugin.
+            set_config('apikey', '123', 'aiprovider_openai');
+            set_config('enableuserratelimit', 0, 'aiprovider_openai');
+            set_config('enableglobalratelimit', 0, 'aiprovider_openai');
+            set_config('action_generate_text_model', 'gpt-4o', 'aiprovider_openai');
+            set_config('action_generate_text_endpoint', 'https://api.openai.com/v1/chat/completions', 'aiprovider_openai');
+            \core\plugininfo\aiprovider::enable_plugin('openai', 1);
+            \core_ai\manager::set_action_state('aiprovider_openai', 'generate_text', 1);
+        }
         $this->course = $this->getDataGenerator()->create_course(['enablecompletion' => 1, 'fullname' => 'Secret course']);
         $this->student = $this->getDataGenerator()->create_and_enrol(
             $this->course,

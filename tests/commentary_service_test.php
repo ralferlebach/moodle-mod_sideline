@@ -30,6 +30,10 @@ require_once(__DIR__ . '/fixtures/fake_text_generator.php');
  * @package    mod_sideline
  * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers \mod_sideline\local\service\commentary_service
+ * @covers \mod_sideline\local\cache\commentary_cache
+ * @covers \mod_sideline\local\consent\consent_manager
+ * @covers \mod_sideline\local\observer
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\commentary_service::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\cache\commentary_cache::class)]
@@ -340,7 +344,12 @@ final class commentary_service_test extends \advanced_testcase {
         $record = $DB->get_record('sideline', ['id' => $instance->id]);
         consent_manager::record_decision($record, (int) $this->student->id, true, $context->id, time());
         $this->get($instance, $context);
-        \core_courseformat\formatactions::cm($this->course->id)->delete($cm->id);
+        if (method_exists(\core_courseformat\local\cmactions::class, 'delete')) {
+            \core_courseformat\formatactions::cm($this->course->id)->delete($cm->id);
+        } else {
+            // Moodle 4.5 and 5.0.
+            course_delete_module($cm->id);
+        }
         foreach (['sideline', 'sideline_cache', 'sideline_consent', 'sideline_consent_log', 'sideline_scope'] as $table) {
             $this->assertSame(0, $DB->count_records($table), $table);
         }

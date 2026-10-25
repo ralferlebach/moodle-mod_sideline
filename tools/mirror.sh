@@ -2,16 +2,22 @@
 # Mirror the working copy into the Moodle tree (a throw-away copy, never edit it there).
 #
 # Usage: tools/mirror.sh [MOODLE_ROOT]
-#   default MOODLE_ROOT is /home/claude/moodle (Moodle 5.3 layout, plugins below public/)
+#   default MOODLE_ROOT is /home/claude/moodle (Moodle 5.3). Further test trees:
+#   /home/claude/moodle405, moodle500 (classic layout), moodle501, moodle502 (public/ layout).
 #
-# Afterwards run the upgrade and re-initialise PHPUnit:
+# Afterwards run the upgrade and re-initialise PHPUnit, for example:
 #   php admin/cli/upgrade.php --non-interactive
-#   php public/admin/tool/phpunit/cli/init.php
+#   php [public/]admin/tool/phpunit/cli/init.php
 set -euo pipefail
 
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ROOT="${1:-/home/claude/moodle}"
-DEST="$ROOT/public/mod/sideline"
+# Moodle 5.1 and later keep plugins below public/, older versions in the root.
+if [ -f "$ROOT/public/version.php" ]; then
+    DEST="$ROOT/public/mod/sideline"
+else
+    DEST="$ROOT/mod/sideline"
+fi
 
 # Start PostgreSQL when it is not running: it does not survive a container restart.
 if command -v pg_lsclusters >/dev/null && ! pg_lsclusters -h | grep -q online; then

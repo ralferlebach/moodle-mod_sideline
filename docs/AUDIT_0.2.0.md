@@ -1,7 +1,7 @@
 # Audit 0.2.0 – Bearbeitungsstand
 
 Bezug: `Sideline_0.2.0_Nacharbeitsauftrag_aktualisiert.md` (statische Prüfung von 0.1.0) einschließlich Gruppenmodus V1.2.
-Stand: Version 0.2.0 (Build 2026102501, MATURITY_BETA). Einzelnachweise je Anforderung: `docs/TRACEABILITY.md`.
+Stand: Version 0.2.1 (Build 2026102502, MATURITY_BETA), unterstützt Moodle 4.5 bis 5.3. Einzelnachweise je Anforderung: `docs/TRACEABILITY.md`.
 
 **Ausgeführt im Container:** PHPUnit 172/172 auf PostgreSQL 17.11 und MariaDB 11.4.13 · Behat 11/11 (4 mit Headless-Chrome 153,
 2 davon mit axe-WCAG-Prüfung) · Jest 20/20 aus dem Moodle-Root (inkl. axe) · Moodles ESM-Build · phpcs 0 Fehler/0 Warnungen ·
@@ -48,7 +48,7 @@ Acht Befunde, alle behoben, jeder mit Regressionstest in `tests/review_findings_
 ## Release-Gate 0.2.0
 - [x] P0-Befunde behoben und reproduzierbar getestet
 - [x] Abdeckungsmatrix (`docs/TRACEABILITY.md`), offene Punkte benannt
-- [~] Moodle 5.3, PostgreSQL und MariaDB lokal getestet; GitHub-CI und echter KI-Provider stehen aus
+- [~] Moodle 4.5, 5.0, 5.1, 5.2 und 5.3 mit PostgreSQL, 4.5 und 5.3 zusätzlich mit MariaDB lokal getestet; GitHub-CI und echter KI-Provider stehen aus
 - [x] Privacy API, Widerruf, Rollenzugriff, Debug-Export, Datenminimierung
 - [x] Budgets gemessen, Parallelität, Barrierefreiheit, Backup/Restore, Upgrade
 - [ ] Commit und CI-Run dokumentieren (beim Push durch den Auftraggeber)

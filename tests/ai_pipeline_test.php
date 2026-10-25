@@ -24,6 +24,9 @@ use mod_sideline\local\model\recommendation;
  * @package    mod_sideline
  * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers \mod_sideline\local\ai\pseudonymizer
+ * @covers \mod_sideline\local\ai\prompt_builder
+ * @covers \mod_sideline\local\ai\response_validator
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\ai\pseudonymizer::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\ai\prompt_builder::class)]
@@ -128,6 +131,11 @@ final class ai_pipeline_test extends \advanced_testcase {
      * Unsafe or unfaithful texts are rejected.
      *
      * @param string $text Text for the first block.
+     */
+    /**
+     * Test with data provider.
+     *
+     * @dataProvider rejected_texts
      */
     #[\PHPUnit\Framework\Attributes\DataProvider('rejected_texts')]
     public function test_validator_rejects_unsafe_or_unfaithful_text(string $text): void {

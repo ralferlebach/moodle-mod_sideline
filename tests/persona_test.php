@@ -34,6 +34,9 @@ require_once(__DIR__ . '/fixtures/fake_text_generator.php');
  * @package    mod_sideline
  * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers \mod_sideline\local\persona\persona_manager
+ * @covers \mod_sideline\local\persona\persona_resolver
+ * @covers \mod_sideline\local\ai\persona_registry
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(persona_manager::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(persona_resolver::class)]

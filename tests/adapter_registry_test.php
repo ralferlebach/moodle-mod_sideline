@@ -22,6 +22,8 @@ namespace mod_sideline\local\adapter;
  * @package    mod_sideline
  * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers \mod_sideline\local\adapter\registry
+ * @covers \mod_sideline\local\adapter\facts
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(registry::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(facts::class)]

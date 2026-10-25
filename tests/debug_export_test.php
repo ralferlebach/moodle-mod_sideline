@@ -31,6 +31,9 @@ require_once(__DIR__ . '/fixtures/fake_text_generator.php');
  * @package    mod_sideline
  * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers \mod_sideline\local\debug\debug_exporter
+ * @covers \mod_sideline\local\debug\trace_recorder
+ * @covers \mod_sideline\privacy\provider
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(debug_exporter::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(trace_recorder::class)]

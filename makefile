@@ -43,9 +43,11 @@
 
 THIS_DIR      := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 PLUGIN_DIR    ?= $(THIS_DIR)
-MOODLE_ROOT   ?= $(abspath $(PLUGIN_DIR)/../../..)
+# Moodle 5.1+ keeps plugins below public/ (plugin at <root>/public/mod/sideline), 4.5 and 5.0 in the root.
+PUBLIC        := $(if $(wildcard $(PLUGIN_DIR)/../../../public/version.php),public/,)
+MOODLE_ROOT   ?= $(if $(PUBLIC),$(abspath $(PLUGIN_DIR)/../../..),$(abspath $(PLUGIN_DIR)/../..))
 PLUGIN_NAME   ?= mod_sideline
-PLUGIN_REL    ?= public/mod/sideline
+PLUGIN_REL    ?= $(PUBLIC)mod/sideline
 PHP           ?= $(shell which php 2>/dev/null || echo /usr/bin/php)
 PHPCS         ?= phpcs
 PHPCBF        ?= phpcbf
@@ -137,7 +139,7 @@ fix-lint-php:
 lint-phpdoc:
 	@echo ""
 	@echo "=== PHPDoc (local_moodlecheck, excludes tools/) ==="
-	-cd $(MOODLE_ROOT) && $(PHP) public/local/moodlecheck/cli/moodlecheck.php \
+	-cd $(MOODLE_ROOT) && $(PHP) $(PUBLIC)local/moodlecheck/cli/moodlecheck.php \
 		--path=$(PLUGIN_REL) \
 		--exclude=$(PLUGIN_REL)/tools \
 		--format=text 2>&1 | grep -B1 '    Line' | grep -v '^--$$' || true
@@ -226,7 +228,7 @@ phpunit:
 			--testdox 2>&1 | head -5); \
 		if printf '%s\n' "$$reinit_check" | grep -q "initialised for different version"; then \
 			echo "PHPUnit environment outdated — reinitialising..."; \
-			cd $(MOODLE_ROOT) && $(PHP) public/admin/tool/phpunit/cli/init.php; \
+			cd $(MOODLE_ROOT) && $(PHP) $(PUBLIC)admin/tool/phpunit/cli/init.php; \
 		fi; \
 		tmpout=$$(mktemp); \
 		cd $(MOODLE_ROOT) && $(PHP) vendor/bin/phpunit \

@@ -29,6 +29,8 @@ require_once($CFG->dirroot . '/webservice/tests/helpers.php');
  * @package    mod_sideline
  * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers \mod_sideline\external\get_commentary
+ * @covers \mod_sideline\external\set_consent
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\external\get_commentary::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\external\set_consent::class)]

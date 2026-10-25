@@ -5,13 +5,13 @@ Stand: 25.10.2026. Jede Zeile nennt die Umsetzung und den **ausgeführten** Nach
 Legende: ✔ umgesetzt und getestet · ◐ teilweise / mit benannter Lücke · ✘ offen
 
 Testorte: `tests/*.php` (PHPUnit, mod_sideline_testsuite), `adapter/*/tests` (slcmod-Suites), `tests/behat/sideline.feature` (Behat), `js/esm/tests` (Jest).
-Läufe: PHPUnit 172/172 auf PostgreSQL 17.11 **und** MariaDB 11.4.13 · Behat 11/11 Szenarien (4 mit Headless-Chrome, 2 davon mit axe-WCAG-Prüfung) · Jest 20/20 (inkl. axe) · phpcs Moodle-Standard 0 Fehler / 0 Warnungen.
+Läufe: PHPUnit 172/172 auf Moodle 4.5, 5.0, 5.1, 5.2 und 5.3 (PostgreSQL 17.11), zusätzlich MariaDB 11.4.13 mit 4.5 und 5.3 · Behat 11/11 Szenarien auf allen fünf Versionen 4.5, 5.0, 5.1, 5.2 und 5.3 (4 mit Headless-Chrome, 2 davon mit axe-WCAG-Prüfung) · Jest 20/20 React-Panel, 17/17 AMD-Panel (je inkl. axe) · ESLint (Moodle-Regeln) für das AMD-Panel · phpcs Moodle-Standard 0 Fehler / 0 Warnungen.
 
 ## Lastenheft
 
 | ID | Status | Umsetzung | Nachweis |
 |---|---|---|---|
-| L-01 Aktivität mit Textfeldcharakter, mehrfach | ✔ | `display=inline`, `sideline_cm_info_view()`, `set_no_view_link()` | `inline_display_test`, Behat „Two inline instances“ |
+| L-01 Aktivität mit Textfeldcharakter, mehrfach | ✔ | `display=inline`, `sideline_cm_info_view()`, `set_no_view_link()`; React ab 5.3, AMD-Panel 4.5–5.2 | `inline_display_test`, Behat „Two inline instances“ |
 | L-02 Beobachtungsbereich | ✔ | `scope_resolver` (Kurs, Abschnitt rekursiv mit Subsektionen, Aktivitäten, Kursverbund) | `scope_test` |
 | L-03 Nutzung, Abschluss, Bewertung, Bestehen, Fristen, Zugang, Kursabschluss | ✔ | `state_collector` (Log, Completion, Gradebook, Adapter, Availability), Kursabschluss über `completion_info` | `state_model_test`, `rule_evaluator_test`, Adapter-Tests |
 | L-04 Statische Texte, Templates, KI | ✔ | `message_composer`, eigene Regel-Templates, `ai_gateway` | `commentary_service_test`, `custom_rules_test` |
@@ -70,7 +70,7 @@ Läufe: PHPUnit 172/172 auf PostgreSQL 17.11 **und** MariaDB 11.4.13 · Behat 11
 | P-34 Backup/Restore, Privacy | ✔ | `backup/moodle2` (Konfiguration, Scope, Gruppen, Regeln, Fragen) | `backup_restore_test`, `debug_export_test` |
 | P-35 Tests je Zustand, Regel, Persona, Dialogtyp, Subplugin, Recht | ◐ | siehe Testorte | Lücke wie L-15 |
 | P-36 Negativtests | ✔ | | `access_security_test`, `state_model_test`, `rule_evaluator_test` |
-| P-37 Matrix Moodle 5.3, PostgreSQL/MariaDB, CI | ◐ | lokal PG 17 und MariaDB 11.4, Chrome 153 | Lücke: kein GitHub-CI-Lauf |
+| P-37 Matrix Moodle, PostgreSQL/MariaDB, CI | ◐ | lokal Moodle 4.5–5.3 auf PG 17, MariaDB 11.4 mit 4.5 und 5.3, Chrome 153; PHP 8.1-Kompatibilität statisch geprüft (PHPCompatibility) | Lücke: kein GitHub-CI-Lauf, PHP 8.1/8.2 nicht zur Laufzeit |
 | P-38 Barrierefreiheit | ✔ | native Controls, Labels, Fokus, aria-live, reduzierte Bewegung | Jest (axe), Behat mit axe (WCAG 1.3.1, 1.4.1, 4.1.2) |
 | P-39 Performance-Budgets | ✔ | Budgets siehe unten, `tools/bench.php` | Messung unten, `cache_concurrency_test` |
 | P-40 Keine Lehrenden-Einsicht | ✔ | | `external_test` |

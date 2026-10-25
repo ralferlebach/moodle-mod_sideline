@@ -33,7 +33,6 @@ function sideline_supports($feature) {
         case FEATURE_MOD_INTRO:
         case FEATURE_BACKUP_MOODLE2:
         case FEATURE_SHOW_DESCRIPTION:
-        case FEATURE_CAN_DISPLAY:
             return true;
         case FEATURE_MOD_PURPOSE:
             return MOD_PURPOSE_COMMUNICATION;

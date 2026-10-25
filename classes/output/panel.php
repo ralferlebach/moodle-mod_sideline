@@ -22,6 +22,10 @@ namespace mod_sideline\output;
  * The panel receives no Moodle objects and no learner data, only the course module id, the
  * animation switch and the localised UI strings (P2-14: no hard-coded strings in the UI).
  *
+ * Moodle 5.3 and later render the React panel (js/esm). Moodle 4.5 to 5.2 have no complete React
+ * pipeline (5.2 lacks the ESM ajax module), so they get the equivalent AMD panel (amd/src/panel.js)
+ * with the same behaviour, markup roles and web services.
+ *
  * @package    mod_sideline
  * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -45,12 +49,27 @@ class panel {
      * @return string
      */
     public static function render(int $cmid, bool $typing, bool $inline): string {
-        return \html_writer::react_component('@moodle/lms/mod_sideline/CommentaryPanel', [
-            'cmid' => $cmid,
-            'typing' => $typing,
-            'inline' => $inline,
-            'strings' => self::strings(),
+        global $PAGE;
+
+        $props = ['cmid' => $cmid, 'typing' => $typing, 'inline' => $inline, 'strings' => self::strings()];
+        if (self::uses_react()) {
+            return \html_writer::react_component('@moodle/lms/mod_sideline/CommentaryPanel', $props);
+        }
+        $id = \html_writer::random_id('mod_sideline_panel_');
+        $PAGE->requires->js_call_amd('mod_sideline/panel', 'init', [$id]);
+        return \html_writer::div('', 'mod_sideline-amdpanel', [
+            'id' => $id,
+            'data-props' => json_encode($props, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
         ]);
+    }
+
+    /**
+     * Whether this Moodle renders React components (5.3 and later).
+     *
+     * @return bool
+     */
+    public static function uses_react(): bool {
+        return method_exists(\html_writer::class, 'react_component');
     }
 
     /**

@@ -47,11 +47,25 @@ final class inline_display_test extends \advanced_testcase {
         $cmb = $this->cm($course, (int) $b->cmid);
         $this->assertNull($cma->url, 'Inline instances have no link to a separate page');
         $html = $cma->get_formatted_content();
-        $this->assertStringContainsString('data-react-component="@moodle/lms/mod_sideline/CommentaryPanel"', $html);
+        if (\mod_sideline\output\panel::uses_react()) {
+            $this->assertStringContainsString('data-react-component="@moodle/lms/mod_sideline/CommentaryPanel"', $html);
+        } else {
+            // Moodle 4.5 to 5.2: the AMD panel with the same props.
+            $this->assertStringContainsString('mod_sideline-amdpanel', $html);
+        }
         $this->assertStringContainsString('&quot;cmid&quot;:' . $a->cmid . ',', $html);
         $this->assertStringContainsString('&quot;cmid&quot;:' . $b->cmid . ',', $cmb->get_formatted_content());
         // Nothing personal is in the page HTML: the panel loads it itself after the access checks.
         $this->assertStringNotContainsString('blocks', $html);
+    }
+
+    /**
+     * The mount marker of the panel in this Moodle version.
+     *
+     * @return string
+     */
+    private static function marker(): string {
+        return \mod_sideline\output\panel::uses_react() ? 'data-react-component' : 'mod_sideline-amdpanel';
     }
 
     public function test_page_mode_guests_and_hidden_instances_get_no_inline_panel(): void {
@@ -66,17 +80,17 @@ final class inline_display_test extends \advanced_testcase {
         $this->setUser($student);
         $this->assertNotNull($this->cm($course, (int) $page->cmid)->url);
         $this->assertStringNotContainsString(
-            'data-react-component',
+            self::marker(),
             $this->cm($course, (int) $page->cmid)->get_formatted_content(),
         );
         $this->assertStringNotContainsString(
-            'data-react-component',
+            self::marker(),
             $this->cm($course, (int) $hidden->cmid)->get_formatted_content(),
         );
 
         $this->setGuestUser();
         $this->assertStringNotContainsString(
-            'data-react-component',
+            self::marker(),
             $this->cm($course, (int) $inline->cmid)->get_formatted_content(),
         );
     }

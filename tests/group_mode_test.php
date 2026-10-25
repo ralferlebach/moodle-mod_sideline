@@ -30,6 +30,8 @@ require_once(__DIR__ . '/fixtures/fake_text_generator.php');
  * @package    mod_sideline
  * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers \mod_sideline\local\group\group_service
+ * @covers \mod_sideline\local\group\sharing_manager
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(group_service::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(sharing_manager::class)]

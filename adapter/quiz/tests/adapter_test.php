@@ -22,6 +22,7 @@ namespace slcmod_quiz;
  * @package    slcmod_quiz
  * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers \slcmod_quiz\adapter
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(adapter::class)]
 final class adapter_test extends \advanced_testcase {

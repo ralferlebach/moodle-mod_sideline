@@ -36,6 +36,8 @@ require_once(__DIR__ . '/fixtures/fake_text_generator.php');
  * @package    mod_sideline
  * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers \mod_sideline\local\group\group_service
+ * @covers \mod_sideline\local\instance_config
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\group\group_service::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\instance_config::class)]
@@ -146,7 +148,12 @@ final class review_findings_test extends \advanced_testcase {
             'availability' => json_encode(['op' => '&', 'showc' => [true], 'c' => [['type' => 'date', 'd' => '>=',
             't' => time() + DAYSECS]]])]);
         $section = get_fast_modinfo($course)->get_section_info(1);
-        \core_courseformat\formatactions::section($course->id)->set_visibility($section, false);
+        if (method_exists(\core_courseformat\local\sectionactions::class, 'set_visibility')) {
+            \core_courseformat\formatactions::section($course->id)->set_visibility($section, false);
+        } else {
+            // Moodle 4.5 and 5.0.
+            set_section_visible($course->id, $section->section, 0);
+        }
         $DB->set_field('course_modules', 'visible', 1, ['course' => $course->id]);
         $DB->set_field('course_sections', 'availability', json_encode(['op' => '&', 'showc' => [false],
             'c' => [['type' => 'date', 'd' => '>=', 't' => time() + DAYSECS]]]), ['course' => $course->id, 'section' => 2]);

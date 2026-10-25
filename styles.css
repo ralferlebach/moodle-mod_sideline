@@ -1,0 +1,25 @@
+/* Sideline Learning Coach: touch targets of at least 24 px (WCAG 2.5.8) in Bootstrap 4 and 5. */
+.mod_sideline-panel .form-check {
+    min-height: 1.75rem;
+    padding-left: 2.25rem;
+    margin-bottom: 0.25rem;
+}
+
+.mod_sideline-panel .form-check .form-check-input {
+    width: 1.5rem;
+    height: 1.5rem;
+    margin-top: 0;
+    margin-left: -2.25rem;
+}
+
+.mod_sideline-panel .form-check-label {
+    line-height: 1.5rem;
+}
+
+.mod_sideline-panel input.position-static[type="radio"],
+.mod_sideline-panel fieldset fieldset input[type="radio"] {
+    position: static;
+    width: 1.5rem;
+    height: 1.5rem;
+    margin: 0 0.25rem;
+}

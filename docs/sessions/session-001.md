@@ -18,3 +18,9 @@ unabhängiger Review mit 8 Befunden, alle behoben und getestet.
 - Lücken laut `docs/TRACEABILITY.md`: P-07 (Template-Versionen), P-09 (semantische Prüfung), P-14 (Persona-Vorschau),
   P-24 (Übersetzungsschritt), P-31 (standortweite Interview-Policy), Kurszweige als Quelle.
 - Template-Reste ohne Bezug zu Sideline: `tests/playwright/`, `.github/workflows/load-*.yml`, `.github/workflows/playwright.yml`.
+
+## Nachtrag 25.10.2026: Moodle 4.5 bis 5.3 (0.2.1)
+- Anforderung des Auftraggebers: alle Versionen von 4.5 bis 5.3. Zuvor nur 5.3, weil das Pflichtenheft (P-37) 5.3 als Pflichtziel nannte.
+- Gefundene Unterschiede: React erst ab 5.3 (5.2 ohne ESM-Ajax), `FEATURE_CAN_DISPLAY` erst ab 5.x, `is_action_enabled_in_context` ab 5.1,
+  KI-Provider-Instanzen ab 5.0, `mod_subsection` in 4.5 deaktiviert, PHPUnit 9.6 in 4.5, ältere Kurs-API-Hilfen in 4.5/5.0.
+- Ergebnis: PHPUnit 172/172 auf allen fünf Versionen (PG), MariaDB mit 4.5 und 5.3; Behat 11/11 auf allen fünf Versionen.

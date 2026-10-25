@@ -25,8 +25,9 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'slcmod_quiz';
-$plugin->version   = 2026102500;
-$plugin->requires  = 2026100500;
+$plugin->version   = 2026102502;
+$plugin->requires  = 2024100700;
 $plugin->maturity  = MATURITY_BETA;
-$plugin->release   = '0.2.0';
-$plugin->dependencies = ['mod_sideline' => 2026102500, 'mod_quiz' => 2026100500];
+$plugin->supported = [405, 503];
+$plugin->release   = '0.2.1';
+$plugin->dependencies = ['mod_sideline' => 2026102500, 'mod_quiz' => 2024100700];

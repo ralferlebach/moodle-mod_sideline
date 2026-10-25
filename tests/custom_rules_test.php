@@ -34,6 +34,10 @@ require_once(__DIR__ . '/fixtures/fake_text_generator.php');
  * @package    mod_sideline
  * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers \mod_sideline\local\rules\rule_schema
+ * @covers \mod_sideline\local\rules\rule_store
+ * @covers \mod_sideline\local\rules\rule_preview
+ * @covers \mod_sideline\local\transfer\config_transfer
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(rule_schema::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(rule_store::class)]
@@ -80,6 +84,11 @@ final class custom_rules_test extends \advanced_testcase {
         ];
     }
 
+    /**
+     * Test with data provider.
+     *
+     * @dataProvider invalid_provider
+     */
     #[\PHPUnit\Framework\Attributes\DataProvider('invalid_provider')]
     public function test_invalid_definitions_are_rejected(array $overrides): void {
         $this->resetAfterTest();

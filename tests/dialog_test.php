@@ -37,6 +37,10 @@ require_once($CFG->dirroot . '/webservice/tests/helpers.php');
  * @package    mod_sideline
  * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers \mod_sideline\local\dialog\question_type
+ * @covers \mod_sideline\local\dialog\dialog_manager
+ * @covers \mod_sideline\external\answer_question
+ * @covers \mod_sideline\external\get_my_answers
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(question_type::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(dialog_manager::class)]
@@ -121,6 +125,11 @@ final class dialog_test extends \advanced_testcase {
         ];
     }
 
+    /**
+     * Test with data provider.
+     *
+     * @dataProvider config_provider
+     */
     #[\PHPUnit\Framework\Attributes\DataProvider('config_provider')]
     public function test_question_configurations_are_validated(string $type, array $config, bool $valid): void {
         [, $errors] = question_type::normalise_config($type, $config);

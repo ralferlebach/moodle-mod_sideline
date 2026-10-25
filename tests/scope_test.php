@@ -24,6 +24,8 @@ use mod_sideline\local\instance_config;
  * @package    mod_sideline
  * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers \mod_sideline\local\service\scope_resolver
+ * @covers \mod_sideline\local\instance_config
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(scope_resolver::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(instance_config::class)]
@@ -42,6 +44,8 @@ final class scope_test extends \advanced_testcase {
     public function test_section_scope_descends_into_nested_subsections(): void {
         global $DB;
         $this->resetAfterTest();
+        // Moodle 4.5 ships mod_subsection disabled.
+        \core\plugininfo\mod::enable_plugin('subsection', 1);
         $gen = $this->getDataGenerator();
         $course = $gen->create_course(['numsections' => 2], ['createsections' => true]);
         $student = $gen->create_and_enrol($course, 'student');

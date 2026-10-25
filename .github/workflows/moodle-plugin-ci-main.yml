@@ -3,7 +3,7 @@
 #
 # Runs ONLY on push / PR to main; provides the "CI complete" status check for
 # branch protection. Full SEQUENTIAL pipeline per matrix cell across the
-# supported Moodle 5.3 x PHP x DB matrix. PHP-only plugin: no grunt /
+# supported Moodle 4.5 to 5.3 x PHP x DB matrix. PHP-only plugin: no grunt /
 # mustache. The fast parallel pipeline lives in moodle-plugin-ci-dev.yml.
 ##############################################################################
 
@@ -46,6 +46,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - { moodle: MOODLE_405_STABLE, php: '8.1', database: pgsql }
+          - { moodle: MOODLE_405_STABLE, php: '8.3', database: mariadb }
+          - { moodle: MOODLE_500_STABLE, php: '8.2', database: pgsql }
+          - { moodle: MOODLE_500_STABLE, php: '8.3', database: mariadb }
+          - { moodle: MOODLE_501_STABLE, php: '8.3', database: pgsql }
+          - { moodle: MOODLE_502_STABLE, php: '8.3', database: mariadb }
           - { moodle: MOODLE_503_STABLE, php: '8.3', database: pgsql }
           - { moodle: MOODLE_503_STABLE, php: '8.3', database: mariadb }
     steps:

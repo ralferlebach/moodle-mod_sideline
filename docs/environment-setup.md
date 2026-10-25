@@ -9,7 +9,7 @@ Moodle 5.3, PHP 8.3, PostgreSQL 17, PHPUnit, Code-Style (phpcs/moodle-cs).
 > SPIEGEL = `/home/claude/moodle/public/mod/sideline` (Wegwerf-Kopie im Moodle-Baum, gegen die
 > getestet wird). Nie im Spiegel entwickeln – `tools/mirror.sh` überschreibt ihn bei jedem Lauf.
 
-> **Verifikationsstand (25.10.2026, Version 0.2.0):** Alle Abschnitte wurden im Container ausgeführt.
+> **Verifikationsstand (25.10.2026, Version 0.2.1):** Alle Abschnitte wurden im Container ausgeführt, die Versionsmatrix 4.5–5.3 in Abschnitt 8d.
 > PHPUnit 172/172 auf PostgreSQL 17.11 und MariaDB 11.4.13, Behat 11/11 (davon 4 in Headless-Chrome 153),
 > Jest 20/20 aus dem Moodle-Root, `grunt esm`-äquivalenter Build mit Moodles eigenem esbuild-Skript,
 > phpcs 0 Fehler/0 Warnungen, Upgrade 0.1.0 → 0.2.0 gegen eine echte 0.1.0-Datenbank.
@@ -252,6 +252,58 @@ php public/mod/sideline/tools/bench.php --users=200 --activities=30 --requests=1
 ```
 
 Ergebnisse und Budgets: `docs/TRACEABILITY.md`, Abschnitt Performance.
+
+## 8d. Versionsmatrix Moodle 4.5 bis 5.3
+
+Weitere Moodle-Bäume neben `/home/claude/moodle` (5.3):
+
+| Baum | Branch | Layout | PHPUnit | DB (PG) | wwwroot / Behat |
+|---|---|---|---|---|---|
+| `/home/claude/moodle405` | MOODLE_405_STABLE | klassisch (`mod/sideline`) | 9.6 | `moodle405` | 8105 / 8205 |
+| `/home/claude/moodle500` | MOODLE_500_STABLE | klassisch | 11 | `moodle500` | 8110 / 8210 |
+| `/home/claude/moodle501` | MOODLE_501_STABLE | `public/` | 11 | `moodle501` | 8111 / 8211 |
+| `/home/claude/moodle502` | MOODLE_502_STABLE | `public/` | 11 | `moodle502` | 8112 / 8212 |
+
+```bash
+git clone --depth 1 -b MOODLE_405_STABLE https://github.com/moodle/moodle.git /home/claude/moodle405
+cd /home/claude/moodle405 && composer install --no-interaction --prefer-dist
+# Composer holt die Pakete hier als Git-Klone: .git-Ordner in vendor löschen spart mehrere GB.
+find vendor -mindepth 2 -maxdepth 3 -type d -name .git -prune -exec rm -rf {} +
+tools/mkconfig.sh 405          # config.php, Datenroots, Datenbank
+/home/claude/work/moodle-mod_sideline/tools/mirror.sh /home/claude/moodle405   # erkennt das Layout selbst
+php admin/cli/install_database.php --agree-license --adminpass='Admin-123!' --fullname=M405 --shortname=m405
+php admin/tool/phpunit/cli/init.php            # 5.1+: public/admin/tool/phpunit/cli/init.php
+vendor/bin/phpunit --testsuite mod_sideline_testsuite
+```
+
+Behat je Version: eigener PHP-Webserver auf dem Behat-Port (`php -S 127.0.0.1:8205 -t /home/claude/moodle405`,
+ab 5.1 `-t …/public`), ChromeDriver wie in Abschnitt 8.
+
+**Frontend je Version:** Moodle 5.3 rendert das React-Panel (`js/esm`). Moodle 4.5 bis 5.2 bekommen das AMD-Panel
+(`amd/src/panel.js`), weil React erst in 5.3 vollständig ist. Build wie `grunt amd` (Rollup, Babel, Terser mit Moodles Optionen):
+
+```bash
+mkdir -p /tmp/amdbuild && cd /tmp/amdbuild && npm init -y
+npm install @babel/core@7.17.5 @babel/preset-env@7.16.11 babel-plugin-system-import-transformer@4 \
+    babel-plugin-transform-es2015-modules-amd-lazy@2.0.1 rollup@2 rollup-plugin-terser@7 glob@7 @xmldom/xmldom xpath@0.0.32 \
+    eslint@8 eslint-plugin-jsdoc@48 eslint-plugin-promise@6.0.0 @babel/eslint-parser@7.17.0 @babel/eslint-plugin@7.17
+# build.js: siehe tools/amd-build.js (nutzt .grunt/babel-plugin-add-module-to-define.js des Moodle-Baums)
+cd /home/claude/moodle405 && NODE_PATH=/tmp/amdbuild/node_modules node /home/claude/work/moodle-mod_sideline/tools/amd-build.js /home/claude/moodle405 /home/claude/moodle405/mod/sideline
+cp mod/sideline/amd/build/* /home/claude/work/moodle-mod_sideline/amd/build/
+# ESLint mit Moodles Regeln
+ln -sfn /tmp/amdbuild/node_modules node_modules && ./node_modules/.bin/eslint mod/sideline/amd/src/panel.js
+# Jest für das AMD-Panel
+cd /tmp/fe && npm install babel-jest@30 @babel/core @babel/preset-env
+NODE_PATH=/tmp/fe/node_modules npx jest --config /home/claude/work/moodle-mod_sideline/tests/js/jest.config.js
+```
+
+**PHP 8.1** (Mindestversion von Moodle 4.5) steht im Container nicht als Laufzeit zur Verfügung. Statische Prüfung:
+
+```bash
+cd /tmp/moodlecs && composer require --dev "phpcompatibility/php-compatibility:^10.0@dev"
+# installed_paths um vendor/phpcompatibility/php-compatibility/PHPCompatibility ergänzen
+/tmp/moodlecs/vendor/bin/phpcs --standard=PHPCompatibility --runtime-set testVersion 8.1- --extensions=php .
+```
 
 ## 9. Bekannte Abweichungen zum Plugin-Template
 

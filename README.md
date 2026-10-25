@@ -10,7 +10,9 @@ Status: **0.2.0 beta** – siehe `docs/CHANGELOG.md`, Nachweise in `docs/TRACEAB
 Anforderungen
 -------------
 
-* Moodle 5.3+ (`public/`-Layout), PHP ≥ 8.3, PostgreSQL 17 oder MariaDB 11.4
+* Moodle 4.5, 5.0, 5.1, 5.2 und 5.3 (klassisches und `public/`-Layout)
+* PHP gemäß Moodle-Version (ab 8.1 für Moodle 4.5), PostgreSQL oder MariaDB in den von der Moodle-Version verlangten Versionen
+* Oberfläche: React-Panel ab Moodle 5.3, gleichwertiges AMD-Panel für Moodle 4.5 bis 5.2
 * Optional: ein aktivierter KI-Provider im Moodle-AI-Subsystem (Aktion „Text generieren“)
 
 Installation
