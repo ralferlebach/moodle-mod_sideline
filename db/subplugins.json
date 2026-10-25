@@ -1,0 +1,8 @@
+{
+    "subplugintypes": {
+        "slcmod": "adapter"
+    },
+    "plugintypes": {
+        "slcmod": "mod/sideline/adapter"
+    }
+}

@@ -40,7 +40,7 @@ files, a null privacy provider and a first Behat scenario. Enough to install and
 Getting started
 ---------------
 
-    git clone https://github.com/{{GITHUBUSER}}/moodle-plugintemplate.git moodle-enrol_attendancegate
+    git clone https://github.com/ralferlebach/moodle-plugintemplate.git moodle-enrol_attendancegate
     cd moodle-enrol_attendancegate
     rm -rf .git && git init
 

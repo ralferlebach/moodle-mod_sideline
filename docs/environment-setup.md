@@ -1,365 +1,262 @@
 # environment-setup.md
- 
-## Setup der Test- & Laufzeitumgebung
- 
-Anleitung, um die Verifikationsumgebung für das ADELE-Ökosystem von Grund auf
-aufzusetzen: Code-Style (phpcs/moodle-cs), Moodle, PHP, PostgreSQL, PHPUnit,
-Behat. Geschrieben für die Arbeit im Container.
- 
-> **Konvention:** QUELLE = `/home/claude/work/moodle-<plugin>_adele-development`
-> (Arbeitskopien, werden ausgeliefert). SPIEGEL = `/home/claude/moodle/enrol/adele`,
-> `/home/claude/moodle/local/adele`, `/home/claude/moodle/mod/adele`
-> (Wegwerf-Kopien im Moodle-Baum, gegen die getestet wird). Nie im Spiegel
-> entwickeln – er wird bei jedem Testlauf überschrieben.
- 
-> **Verifikationsstand dieses Dokuments:** §0–§4 und §9 sind am 2026-08-28
-> Schritt für Schritt im Container ausgeführt worden; die angegebenen Ausgaben
-> sind die tatsächlichen. §5–§8 sind aus dem `local_catquiz`-Setup übertragen
-> und für ADELE angepasst, aber **hier noch nicht ausgeführt**. Wer sie zum
-> ersten Mal nutzt, protokolliert Abweichungen und schreibt dieses Dokument fort.
- 
+
+## Setup der Test- & Laufzeitumgebung für mod_sideline
+
+Anleitung, um die Verifikationsumgebung für `mod_sideline` im Container von Grund auf aufzusetzen:
+Moodle 5.3, PHP 8.3, PostgreSQL 17, PHPUnit, Code-Style (phpcs/moodle-cs).
+
+> **Konvention:** QUELLE = `/home/claude/work/moodle-mod_sideline` (Arbeitskopie, wird ausgeliefert).
+> SPIEGEL = `/home/claude/moodle/public/mod/sideline` (Wegwerf-Kopie im Moodle-Baum, gegen die
+> getestet wird). Nie im Spiegel entwickeln – `tools/mirror.sh` überschreibt ihn bei jedem Lauf.
+
+> **Verifikationsstand (25.10.2026, Version 0.2.0):** Alle Abschnitte wurden im Container ausgeführt.
+> PHPUnit 172/172 auf PostgreSQL 17.11 und MariaDB 11.4.13, Behat 11/11 (davon 4 in Headless-Chrome 153),
+> Jest 20/20 aus dem Moodle-Root, `grunt esm`-äquivalenter Build mit Moodles eigenem esbuild-Skript,
+> phpcs 0 Fehler/0 Warnungen, Upgrade 0.1.0 → 0.2.0 gegen eine echte 0.1.0-Datenbank.
+> Nicht ausgeführt: GitHub-CI, `local_moodlecheck` (PHPDoc-Prüfer; Installation aus GitHub im Container nicht erlaubt).
+
 ---
- 
+
 ## 0. Zielzustand
- 
-### Verifiziert (Session 005, 2026-08-28)
- 
+
 | Komponente | Wert |
 |---|---|
-| PHP | 8.3.6 (CLI, NTS) |
-| Composer | 2.7.1 |
-| phpcs / moodle-cs | `/tmp/moodlecs`, `moodlehq/moodle-cs ^3.7` (zieht php_codesniffer 3.13.6, phpcsextra 1.5.1) |
-| Arbeitskopien | `/home/claude/work/moodle-{enrol,local,mod}_adele-development` |
-| Nullmessung | alle drei Plugins `phpcs --standard=moodle` Exit 0, ohne Sniff-Ausschlüsse |
- 
-### Vorgesehen, hier noch nicht aufgebaut
- 
-| Komponente | Wert |
-|---|---|
-| Moodle | 4.5.x, Branch `MOODLE_405_STABLE` |
-| DB | PostgreSQL 16.x, `dbname=moodle`, `dbuser=moodle`, `prefix=mdl_` |
-| PHPUnit | 9.6.x (aus Moodle-Core-Composer) |
+| Moodle | 5.3, Branch `MOODLE_503_STABLE` (Version 2026100500.06), Webroot `public/` |
+| PHP | ≥ 8.3.0 (verifiziert mit 8.3.x) |
+| DB | PostgreSQL **17** (Moodle 5.3 verlangt PG 17 / MariaDB 11.4), `dbname=moodle`, `prefix=mdl_` |
+| PHPUnit | 11.5 (aus dem Core-Composer; Attribute `#[CoversClass]`, `#[DataProvider]`) |
 | Moodle-Pfad | `/home/claude/moodle` |
-| dataroot | `/home/claude/moodledata` |
-| phpunit_dataroot | `/home/claude/moodledata_phpu`, `phpunit_prefix=phpu_` |
- 
-Moodle **4.5** ist die Untergrenze, nicht 4.1: `enrol_adele` und `local_adele`
-verlangen zwar nur `2022112800`, `mod_adele` aber `2024100700`. Das gesamte
-Ökosystem lässt sich also erst ab 4.5 vollständig installieren, und die CI-Matrix
-prüft 4.5 und 5.0.
- 
----
- 
+| dataroot | `/home/claude/moodledata`, `phpunit_dataroot=/home/claude/moodledata_phpu`, `phpunit_prefix=phpu_` |
+| phpcs | `/tmp/moodlecs`, `moodlehq/moodle-cs ^3.7` |
+
+Plugin-Pfad in 5.3: **`public/mod/sideline`** (nicht mehr `mod/sideline`).
+
 ## 1. Systempakete
- 
+
 ```bash
 apt-get update -qq
-apt-get install -y -qq php8.3-cli php8.3-xml php8.3-mbstring php8.3-curl \
-    php8.3-zip composer
-php -v | head -1        # erwartet: PHP 8.3.x (cli)
-composer --version      # erwartet: Composer version 2.7.x
+apt-get install -y -qq php8.3-cli php8.3-xml php8.3-mbstring php8.3-curl php8.3-zip \
+    php8.3-gd php8.3-intl php8.3-pgsql php8.3-soap php8.3-xmlrpc composer locales
 ```
- 
-Die vier Erweiterungen sind nicht optional: `phpcs` braucht `xml` und
-`mbstring`, Composer braucht `curl` und `zip`.
- 
-Für den vollen Moodle-Betrieb (§6 ff.) zusätzlich:
- 
+
+**Stolperstein Locale:** Der PHPUnit-Init braucht `en_AU.UTF-8`:
+
 ```bash
-apt-get install -y php8.3-pgsql php8.3-gd php8.3-intl php8.3-soap \
-    postgresql postgresql-client git unzip
+locale-gen en_AU.UTF-8 && update-locale
 ```
- 
-Moodle verlangt `max_input_vars >= 5000`. Statt die php.ini zu ändern, wird das
-Flag bei den CLI-Aufrufen mitgegeben (siehe §7).
- 
----
- 
-## 2. Code-Style: phpcs / moodle-cs
- 
+
+**Stolperstein max_input_vars:** Moodle verlangt ≥ 5000. Das `-d`-Flag erreicht den Init-Subprozess
+nicht, daher dauerhaft setzen:
+
+```bash
+echo "max_input_vars=6000" > /etc/php/8.3/cli/conf.d/99-moodle.ini
+```
+
+## 2. PostgreSQL 17
+
+Die Distributionsversion (16) reicht nicht („version 17 is required“). PGDG-Repository einbinden:
+
+```bash
+apt-get install -y -qq postgresql-common
+/usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+apt-get install -y -qq postgresql-17
+```
+
+Der Cluster muss auf Port 5432 laufen (ggf. `port` in `postgresql.conf` anpassen, falls ein 16er-Cluster
+den Port belegt). Rolle und Datenbank:
+
+```bash
+su postgres -c "psql -c \"CREATE USER moodle WITH PASSWORD 'moodle';\""
+su postgres -c "psql -c \"CREATE DATABASE moodle OWNER moodle ENCODING 'UTF8';\""
+```
+
+`tools/mirror.sh` startet den Cluster, falls er nicht online ist.
+
+## 3. Moodle 5.3
+
+```bash
+git clone --depth 1 -b MOODLE_503_STABLE https://github.com/moodle/moodle.git /home/claude/moodle
+cd /home/claude/moodle && composer install --no-interaction
+mkdir -p /home/claude/moodledata /home/claude/moodledata_phpu
+php admin/cli/install.php --lang=en --wwwroot=http://localhost:8080 \
+  --dataroot=/home/claude/moodledata --dbtype=pgsql --dbhost=localhost --dbname=moodle \
+  --dbuser=moodle --dbpass=moodle --fullname=Dev --shortname=dev \
+  --adminuser=admin --adminpass='Admin-123!' --agree-license --non-interactive
+```
+
+In `config.php` ergänzen (vor `require_once(__DIR__ . '/lib/setup.php')`):
+
+```php
+$CFG->phpunit_prefix = 'phpu_';
+$CFG->phpunit_dataroot = '/home/claude/moodledata_phpu';
+```
+
+## 4. Plugin einspielen (Spiegel)
+
+```bash
+/home/claude/work/moodle-mod_sideline/tools/mirror.sh
+cd /home/claude/moodle && php admin/cli/upgrade.php --non-interactive
+```
+
+## 5. PHPUnit
+
+```bash
+cd /home/claude/moodle
+php public/admin/tool/phpunit/cli/init.php
+vendor/bin/phpunit --testsuite mod_sideline_testsuite
+```
+
+Erwartet: `OK (169 tests, …)` für mod_sideline, dazu `slcmod_assign_testsuite` (2) und `slcmod_quiz_testsuite` (1).
+
+Nach jeder Codeänderung: `tools/mirror.sh`, danach `init.php` erneut (baut die Testsuite-Konfiguration
+neu), dann phpunit.
+
+**Stolpersteine beim Init:**
+
+- *„Can not use database for testing“*: Ein abgebrochener Init hinterlässt `phpu_`-Tabellen. Alle Tabellen
+  mit Präfix `phpu_` per SQL droppen und neu initialisieren.
+- *„dataroot not empty“*: Im phpunit-dataroot liegt eine versteckte `.htaccess`. Leeren mit
+  `find /home/claude/moodledata_phpu -mindepth 1 -delete`.
+
+## 6. Code-Style (phpcs)
+
 ```bash
 mkdir -p /tmp/moodlecs && cd /tmp/moodlecs
 composer require --dev --no-interaction "moodlehq/moodle-cs:^3.7"
-ls vendor/bin        # erwartet: phpcbf  phpcs
-```
- 
-**Achtung, hier weicht der Container vom Normalfall ab.** `moodle-cs` bringt
-`dealerdirect/phpcodesniffer-composer-installer` mit, der die Standards
-normalerweise selbst registriert. In diesem Container passiert das **nicht** –
-auch dann nicht, wenn `allow-plugins` in der `composer.json` gesetzt ist
-(beides am 2026-08-28 geprüft). `phpcs -i` zeigt dann nur die eingebauten
-Standards, und jeder Lauf bricht ab mit:
- 
-```
-ERROR: Referenced sniff "Universal.UseStatements.LowercaseFunctionConst" does not exist.
-```
- 
-Diese Meldung ist **kein Codeproblem**. Sie bedeutet, dass die Pfade fehlen.
-Nachregistrieren:
- 
-```bash
-cd /tmp/moodlecs
 P="$(pwd)/vendor/moodlehq/moodle-cs/moodle"
-P="$P,$(pwd)/vendor/phpcsstandards/phpcsextra/Universal"
-P="$P,$(pwd)/vendor/phpcsstandards/phpcsextra/Modernize"
-P="$P,$(pwd)/vendor/phpcsstandards/phpcsextra/NormalizedArrays"
+for d in Universal Modernize NormalizedArrays; do P="$P,$(pwd)/vendor/phpcsstandards/phpcsextra/$d"; done
 ./vendor/bin/phpcs --config-set installed_paths "$P"
-./vendor/bin/phpcs -i
+
+cd /home/claude/work/moodle-mod_sideline
+/tmp/moodlecs/vendor/bin/phpcs --standard=moodle --extensions=php .
+/tmp/moodlecs/vendor/bin/phpcbf --standard=moodle --extensions=php .   # Auto-Fix
 ```
- 
-Erwartete Ausgabe:
- 
-```
-The installed coding standards are MySource, PEAR, PSR1, PSR2, PSR12,
-Squiz, Zend, moodle, Universal, Modernize and NormalizedArrays
-```
- 
-Fehlt `moodle`, ist das `composer require` fehlgeschlagen. Fehlen `Universal`,
-`Modernize` oder `NormalizedArrays`, ist die Registrierung fehlgeschlagen.
- 
-Prüfen (Exit 0 = sauber). **Ohne Sniff-Ausschlüsse** – anders als bei
-`local_catquiz` ist der ADELE-Ausgangsstand sauber und soll es bleiben:
- 
+
+Stand: 0 Fehler, 0 Warnungen (die CI läuft mit `--max-warnings 0`).
+
+## 7. Frontend (React/TypeScript/ESM)
+
+Moodle 5.3 baut ESM-Quellen unter `js/esm/src` mit `grunt esm` (esbuild). Im Container scheitert
+`npm install` im Moodle-Root an einer GitHub-Tarball-Abhängigkeit (shifter, 403). Umgehung, verifiziert:
+
 ```bash
-/tmp/moodlecs/vendor/bin/phpcs --standard=moodle --severity=1 --extensions=php \
-    /home/claude/work/moodle-enrol_adele-development
-# Auto-Fix, was maschinell fixbar ist:
-/tmp/moodlecs/vendor/bin/phpcbf --standard=moodle --extensions=php .
+# Werkzeugkette separat installieren und als node_modules des Moodle-Roots verlinken.
+mkdir -p /tmp/fe && cd /tmp/fe && npm init -y
+npm install react@19 react-dom@19 typescript@5 @types/react@19 @types/react-dom@19 jest@30 \
+    jest-environment-jsdom@30 ts-jest@29 @testing-library/react@16 @testing-library/dom \
+    @testing-library/jest-dom@6 jest-axe@10 esbuild@0.25 glob@10 chalk@4 @xmldom/xmldom xpath
+ln -sfn /tmp/fe/node_modules /home/claude/moodle/node_modules
+
+# Moodles eigener ESM-Build (das, was grunt esm aufruft).
+cat > /tmp/buildesm.mjs <<'X'
+process.chdir('/home/claude/moodle');
+const {generateAliases} = await import('/home/claude/moodle/.esbuild/generate-aliases.mjs');
+const {buildPluginComponents} = await import('/home/claude/moodle/.esbuild/plugin/plugincomponents.mjs');
+generateAliases();
+await buildPluginComponents();
+X
+node /tmp/buildesm.mjs
+# Das Bundle gehört zum Plugin: zurück in die Arbeitskopie kopieren.
+rm -rf /home/claude/work/moodle-mod_sideline/js/esm/build
+cp -r /home/claude/moodle/public/mod/sideline/js/esm/build /home/claude/work/moodle-mod_sideline/js/esm/
+
+# Jest aus dem Moodle-Root (nutzt jest.config.js des Cores).
+cd /home/claude/moodle && npx jest public/mod/sideline/js/esm/tests
 ```
- 
----
- 
-## 3. Arbeitsstände holen
- 
+
+Erwartet: `114 components built`, `Tests: 20 passed`. Mit vollem Netzzugang reicht `npm install && npx grunt esm`.
+Wichtig: erst `tools/mirror.sh`, dann bauen, sonst entsteht das Bundle aus alten Quellen.
+
+## 8. Behat (mit Headless-Chrome)
+
+Chromium liegt unter `/opt/pw-browsers/chromium-1243/chrome-linux64/chrome` (Version 153). Der vorinstallierte
+ChromeDriver ist 147 und passt nicht; passend herunterladen:
+
 ```bash
-mkdir -p /home/claude/work && cd /home/claude/work
-for p in enrol mod local; do
-  curl -sSL -o $p.zip \
-    "https://github.com/ralferlebach/moodle-${p}_adele/archive/refs/heads/development.zip" &
-done
-wait
-for p in enrol mod local; do unzip -q -o $p.zip; done
+mkdir -p /tmp/cd && cd /tmp/cd && npx -y @puppeteer/browsers install chromedriver@153.0.8010.12
 ```
- 
-**Das Archiv ist unvollständig, und zwar absichtlich.** Alle drei Repositories
-tragen ein `.gitattributes` mit `export-ignore` für `.github/`, `docs/`,
-`tools/`, `Makefile`, `CHANGELOG.md`, `.gitignore`, `.phpcsignore` und
-`.phpcs.xml`. `git archive` — und damit auch der GitHub-Download — lässt diese
-Pfade weg; im Repository sind sie vorhanden. Aus dem Fehlen im entpackten Archiv
-also **nie** auf ein Fehlen im Repo schließen. Wer an CI, Makefile oder
-Dokumentation arbeitet, braucht einen echten Clone oder einen Upload.
- 
----
- 
-## 4. Nullmessung
- 
-```bash
-cd /home/claude/work
-for d in moodle-enrol_adele-development moodle-mod_adele-development; do
-  echo "=== $d ==="
-  /tmp/moodlecs/vendor/bin/phpcs --standard=moodle --severity=1 --extensions=php \
-      --no-cache -q --report=summary $d
-done
-/tmp/moodlecs/vendor/bin/phpcs --standard=moodle --severity=1 --extensions=php \
-    --no-cache -q --report=summary --ignore=*/node_modules/*,*/vendor/* \
-    moodle-local_adele-development
-```
- 
-Erwartung: **völlig leere Ausgabe** für alle drei. Bei `--report=summary` ist das
-die Darstellung von 0 Fehlern und 0 Warnungen. Jede Ausgabe hier ist eine
-Regression gegenüber Session 004 und wird untersucht, bevor irgendetwas anderes
-passiert.
- 
-Dazu die reine Syntaxprüfung:
- 
-```bash
-cd /home/claude/work
-fail=0
-for f in $(find moodle-*_adele-development -name '*.php' -not -path '*/node_modules/*'); do
-  php -l "$f" >/dev/null 2>&1 || { echo "SYNTAXFEHLER: $f"; fail=1; }
-done
-[ $fail -eq 0 ] && echo "alle PHP-Dateien syntaktisch OK"
-```
- 
----
- 
-## 5. PostgreSQL: Start, Rolle, Datenbank
- 
-```bash
-service postgresql start        # bzw. pg_ctlcluster 16 main start
-sudo -u postgres psql -c "CREATE ROLE moodle LOGIN PASSWORD 'moodle';"
-sudo -u postgres psql -c "CREATE DATABASE moodle OWNER moodle;"
-```
- 
-Der DB-Server läuft nach einem Container-Neustart nicht automatisch – vor
-Testläufen immer `service postgresql start` voranstellen.
- 
----
- 
-## 6. Moodle beziehen und konfigurieren
- 
-```bash
-cd /home/claude
-git clone --branch MOODLE_405_STABLE --depth 1 \
-    https://github.com/moodle/moodle.git moodle
-mkdir -p /home/claude/moodledata /home/claude/moodledata_phpu
-```
- 
-`/home/claude/moodle/config.php` (Minimalkonfiguration, PostgreSQL, inkl. PHPUnit):
- 
+
+`config.php` ergänzen:
+
 ```php
-<?php
-unset($CFG); global $CFG; $CFG = new stdClass();
-$CFG->dbtype='pgsql'; $CFG->dblibrary='native';
-$CFG->dbhost='localhost'; $CFG->dbname='moodle';
-$CFG->dbuser='moodle'; $CFG->dbpass='moodle'; $CFG->prefix='mdl_';
-$CFG->dboptions=['dbpersist'=>0,'dbport'=>5432,'dbsocket'=>''];
-$CFG->wwwroot='http://localhost';
-$CFG->dataroot='/home/claude/moodledata';
-$CFG->admin='admin';
-$CFG->directorypermissions=0777;
- 
-// PHPUnit.
-$CFG->phpunit_prefix='phpu_';
-$CFG->phpunit_dataroot='/home/claude/moodledata_phpu';
- 
-require_once(__DIR__.'/lib/setup.php');
+$CFG->behat_wwwroot  = 'http://127.0.0.1:8090';
+$CFG->behat_dataroot = '/home/claude/moodledata_bht';
+$CFG->behat_prefix   = 'bht_';
+$CFG->behat_profiles = ['default' => [
+    'browser' => 'chrome',
+    'wd_host' => 'http://127.0.0.1:9515',
+    'capabilities' => ['extra_capabilities' => ['goog:chromeOptions' => [
+        'binary' => '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome',
+        'args' => ['--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--window-size=1600,1200'],
+    ]]],
+]];
 ```
- 
-Normal-Installation der DB-Tabellen (für Behat/Integration nötig; PHPUnit nutzt
-eine eigene Test-DB, siehe §7):
- 
+
 ```bash
-cd /home/claude/moodle
-php -d max_input_vars=5000 admin/cli/install_database.php \
-    --agree-license --fullname="ADELE Dev" --shortname="adeledev" \
-    --adminpass="Admin123!" --adminemail="admin@example.com"
+mkdir -p /home/claude/moodledata_bht
+php public/admin/tool/behat/cli/init.php
+php -S 127.0.0.1:8090 -t /home/claude/moodle/public &          # Webserver
+/tmp/cd/chromedriver/linux-153.0.8010.12/chromedriver-linux64/chromedriver --port=9515 &
+vendor/bin/behat --config /home/claude/moodledata_bht/behatrun/behat/behat.yml --tags @mod_sideline
 ```
- 
----
- 
-## 7. Plugins spiegeln und PHPUnit
- 
-Die Installationsreihenfolge folgt der Abhängigkeitsrichtung:
-`local_adele` zuerst, dann `enrol_adele` und `mod_adele`.
- 
+
+Erwartet: `11 scenarios (11 passed)`. Nach Codeänderungen: `tools/mirror.sh`, ggf. ESM neu bauen, dann
+`php public/admin/tool/behat/cli/util.php --enable`. Szenarien mit axe-Prüfung brauchen das Tag `@accessibility`.
+
+## 8a. MariaDB 11.4 (zweite Datenbank)
+
+Die Distribution hat nur MariaDB 10.11; Moodle 5.3 verlangt 11.4. Das Binärarchiv von archive.mariadb.org ist erreichbar:
+
 ```bash
-cd /home/claude/moodle
-rm -rf local/adele  && cp -a /home/claude/work/moodle-local_adele-development  local/adele
-rm -rf enrol/adele  && cp -a /home/claude/work/moodle-enrol_adele-development  enrol/adele
-rm -rf mod/adele    && cp -a /home/claude/work/moodle-mod_adele-development    mod/adele
-php -d max_input_vars=5000 admin/cli/upgrade.php --non-interactive
+curl -O https://archive.mariadb.org/mariadb-11.4.13/bintar-linux-systemd-x86_64/mariadb-11.4.13-linux-systemd-x86_64.tar.gz
+tar xzf mariadb-11.4.13-linux-systemd-x86_64.tar.gz -C /opt && ln -sfn /opt/mariadb-11.4.13-linux-systemd-x86_64 /opt/mariadb
+apt-get install -y php8.3-mysql
+/opt/mariadb/scripts/mariadb-install-db --basedir=/opt/mariadb --datadir=/home/claude/mariadb-data --user=root
+/opt/mariadb/bin/mariadbd --basedir=/opt/mariadb --datadir=/home/claude/mariadb-data --user=root --port=3307 \
+    --socket=/tmp/mariadb.sock --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci &
+/opt/mariadb/bin/mariadb -uroot --socket=/tmp/mariadb.sock -e "CREATE DATABASE moodle DEFAULT CHARACTER SET utf8mb4 \
+    COLLATE utf8mb4_unicode_ci; CREATE USER 'moodle'@'127.0.0.1' IDENTIFIED BY 'moodle'; GRANT ALL ON moodle.* TO 'moodle'@'127.0.0.1';"
 ```
- 
-Nach jedem Neu-Spiegeln die PHPUnit-Testumgebung reinitialisieren
-(Klassen- und Datenprovider-Registrierung):
- 
+
+`config.php` schaltet per Umgebungsvariable um (eigener dataroot und phpunit_dataroot):
+
+```php
+if (getenv('MOODLE_DB') === 'mariadb') {
+    $CFG->dbtype = 'mariadb';
+    $CFG->dbhost = '127.0.0.1';
+    $CFG->dboptions = ['dbpersist' => 0, 'dbport' => 3307, 'dbsocket' => '', 'dbcollation' => 'utf8mb4_unicode_ci'];
+}
+```
+
 ```bash
-cd /home/claude/moodle
-php -d max_input_vars=5000 admin/tool/phpunit/cli/init.php --no-composer-self-update
-vendor/bin/phpunit enrol/adele/tests/reconciler_test.php
-vendor/bin/phpunit --filter test_host_course_removal_rules \
-    enrol/adele/tests/reconciler_test.php
+MOODLE_DB=mariadb php public/admin/tool/phpunit/cli/init.php
+MOODLE_DB=mariadb vendor/bin/phpunit --testsuite mod_sideline_testsuite
 ```
- 
-**`enrol_adele` muss aktiviert sein.** Enrol-Plugins sind nach der Installation
-nicht automatisch aktiv; `db/install.php` erledigt das. Ist es aus irgendeinem
-Grund nicht geschehen, liefert `reconciler::is_active()` `false` und **jeder**
-Reconcile-Test wird grün, ohne irgendetwas geprüft zu haben – ein stiller
-Fehlschlag ohne Fehlermeldung. Bei unerwartet grünen Tests zuerst
-`enrol_is_enabled('adele')` prüfen.
- 
----
- 
-## 8. Behat, Lint und moodle-plugin-ci
- 
-Behat braucht zusätzlich einen Browser-Treiber und die `behat_*`-Konfiguration.
-Im reinen CLI-Container ist ein lokaler Behat-Lauf in der Regel nicht
-praktikabel – dort wird Behat über `moodle-plugin-ci` in der CI ausgeführt.
- 
+
+## 8b. Upgrade-Test 0.1.0 → 0.2.0
+
+Vor dem Anheben der Version wurde eine Dev-Site mit 0.1.0-Daten (Instanz, Einwilligung, Protokoll, Cache) als
+`pg_dump -Fc` gesichert (`/home/claude/moodle_010_snapshot.dump`). Wiederholbar:
+
 ```bash
-cd /home/claude
-composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4
-export PATH="$PATH:/home/claude/ci/bin:/home/claude/ci/vendor/bin"
- 
-cd /home/claude/moodle
-moodle-plugin-ci phplint  enrol/adele
-moodle-plugin-ci phpcs    enrol/adele
-moodle-plugin-ci mustache enrol/adele
-moodle-plugin-ci grunt    local/adele      # Vue3/AMD-Build-Konsistenz
-moodle-plugin-ci phpunit  enrol/adele
-moodle-plugin-ci behat    enrol/adele      # nur mit Browser-Treiber
+su postgres -c "dropdb moodle && createdb -O moodle -E UTF8 moodle"
+su postgres -c "pg_restore -d moodle --no-owner --role=moodle /home/claude/moodle_010_snapshot.dump"
+php admin/cli/upgrade.php --non-interactive
+php admin/cli/check_database_schema.php     # keine Abweichungen für sideline
 ```
- 
-Grunt muss aus dem **Moodle-Wurzelverzeichnis** laufen; das erzeugte
-`amd/build/` wird committet und darf nie in `.gitignore` stehen.
- 
----
- 
-## 9. Issues abrufen
- 
-Die unauthentifizierte GitHub-REST-API erlaubt **60 Anfragen pro Stunde und
-IP-Adresse**. Sieben Issues plus Kommentare erschöpfen das Kontingent
-zuverlässig. Deshalb mit Wiederholung arbeiten:
- 
+
+## 8c. Messungen
+
 ```bash
-mkdir -p /home/claude/work/issues && cd /home/claude/work
-for i in 2 3 4 5 6 7 8; do
-  for try in 1 2 3 4 5 6; do
-    curl -sS -H "Accept: application/vnd.github+json" \
-      "https://api.github.com/repos/Wunderbyte-GmbH/moodle-enrol_adele/issues/$i" \
-      -o issues/$i.json
-    python3 -c "
-import json,sys
-sys.exit(0 if json.load(open('issues/$i.json')).get('title') else 1)" && break
-    sleep 4
-  done
-done
+php public/mod/sideline/tools/bench.php --users=200 --activities=30 --requests=1000 --workers=8 --cleanup
 ```
- 
-Kommentare liegen unter `.../issues/$i/comments` und sind **nicht optional**: in
-diesem Projekt stehen dort mehrfach Richtungsentscheidungen des Auftraggebers,
-die dem ursprünglichen Lösungsvorschlag im Issue-Text widersprechen (Beispiel:
-Issue #3, wo die Ad-hoc-Task-Lösung den Archivierungsvorschlag ersetzt).
- 
-Fällt die API dauerhaft aus, ist `web_fetch` auf
-`https://github.com/Wunderbyte-GmbH/moodle-enrol_adele/issues/N` der Ausweg –
-funktioniert, liefert aber viel Seitenbeiwerk mit.
- 
----
- 
-## 10. Der kanonische Spiegel-und-Prüf-Ablauf
- 
-```bash
-cd /home/claude/moodle
-service postgresql start; sleep 2
-rm -rf local/adele && cp -a /home/claude/work/moodle-local_adele-development local/adele
-rm -rf enrol/adele && cp -a /home/claude/work/moodle-enrol_adele-development enrol/adele
-rm -rf mod/adele   && cp -a /home/claude/work/moodle-mod_adele-development   mod/adele
-php -d max_input_vars=5000 admin/tool/phpunit/cli/init.php --no-composer-self-update
-vendor/bin/phpunit enrol/adele/tests/<test>.php
-```
- 
----
- 
-## 11. Typische Stolpersteine
- 
-- **`Referenced sniff "Universal..." does not exist`** → §2, `installed_paths`
-  fehlt. Kein Codeproblem.
-- **DB down**: `service postgresql start` vergessen → Verbindungsfehler.
-- **PHPUnit nicht reinitialisiert** nach `cp -a` → „No tests executed" oder
-  veraltete Datenprovider.
-- **`max_input_vars` fehlt** → PHPUnit-Init bricht mit Moodle-Umgebungscheck ab.
-- **`enrol_adele` nicht aktiviert** → alle Reconcile-Tests grün, ohne etwas zu
-  prüfen. Der gefährlichste Fehlerfall in diesem Projekt, weil er wie Erfolg
-  aussieht.
-- **Installationsreihenfolge**: `mod_adele` vor `local_adele` einspielen scheitert
-  an der deklarierten Abhängigkeit.
-- **`export-ignore` verschweigt halbe Repos.** `.github/`, `docs/`, `tools/`,
-  `Makefile` und `CHANGELOG.md` fehlen in jedem GitHub-Archiv-Download. Nie
-  annehmen, ihre Abwesenheit im entpackten Baum bedeute Abwesenheit im Repo.
-- **Docblock-Falle**: neue Methode vor einer privaten Methode eingefügt →
-  verwaister Docblock → phpcs „Missing docblock". Nach Einfügungen phpcs laufen.
-- **Zone.Identifier-Dateien** wandern bei rohen Ordner-Exporten von Windows mit
-  und stören `find`-basierte Läufe. Sie stammen aus dem Export, nicht aus dem
-  Repo; mit `find . -iname '*Zone.Identifier*' -delete` wegräumen.
+
+Ergebnisse und Budgets: `docs/TRACEABILITY.md`, Abschnitt Performance.
+
+## 9. Bekannte Abweichungen zum Plugin-Template
+
+- CI-Matrix des Templates (PG16, MariaDB 10.11, PHP 8.1, Moodle 4.5/5.0) ist veraltet → Moodle 5.3,
+  PG17, MariaDB 11.4, PHP 8.3.
+- `make react` (esbuild nach `js/build/`) passte nicht zu Moodle 5.3 → ist auf `grunt esm` umgestellt.
+- `core_ai\manager::user_policy_accepted()` ist ein **Schreib**-Aufruf; zum Lesen
+  `get_user_policy_status()` verwenden.

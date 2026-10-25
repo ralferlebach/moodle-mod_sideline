@@ -15,13 +15,13 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * CLI seed for the {{COMPONENT}} Playwright tests.
+ * CLI seed for the mod_sideline Playwright tests.
  *
- * Creates a course with an anonymous-temporary {{PLUGINTITLE}} instance and prints the base URL, course
+ * Creates a course with an anonymous-temporary Sideline Learning Coach instance and prints the base URL, course
  * id and course name as shell "export" lines so the CI runner can source them.
  *
- * @package    {{COMPONENT}}
- * @copyright  2026 {{AUTHOR}}
+ * @package    mod_sideline
+ * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
@@ -42,21 +42,21 @@ $course = create_course((object) [
     'visible' => 1,
 ]);
 
-set_config('allowwidening', 1, '{{COMPONENT}}');
-$plugin = enrol_get_plugin('{{PLUGINNAME}}');
+set_config('allowwidening', 1, 'mod_sideline');
+$plugin = enrol_get_plugin('sideline');
 $enrolid = $plugin->add_instance($course, ['status' => ENROL_INSTANCE_ENABLED]);
-\{{COMPONENT}}\local\instance_config::save($enrolid, [
+\mod_sideline\local\instance_config::save($enrolid, [
     'allowtemporary' => 1,
     'allowquick' => 1,
     'maxparticipants' => 0,
 ]);
 
 // The browser journey cannot read verification email, so persistence is immediate on this test
-// site, and the {{PLUGINTITLE}} auth method must be enabled so converted accounts can log in again.
-set_config('requireemailverification', 0, '{{COMPONENT}}');
+// site, and the Sideline Learning Coach auth method must be enabled so converted accounts can log in again.
+set_config('requireemailverification', 0, 'mod_sideline');
 $enabledauths = get_enabled_auth_plugins();
-if (!in_array('{{PLUGINNAME}}', $enabledauths, true)) {
-    $enabledauths[] = '{{PLUGINNAME}}';
+if (!in_array('sideline', $enabledauths, true)) {
+    $enabledauths[] = 'sideline';
     set_config('auth', implode(',', $enabledauths));
 }
 

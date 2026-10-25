@@ -1,7 +1,7 @@
-# {{COMPONENT}} — Playwright browser tests
+# mod_sideline — Playwright browser tests
 
 Smoke-level end-to-end tests that run against a **live Moodle site** (they cannot run in the
-static moodle-plugin-ci pipeline). They log in as an administrator and assert that the {{PLUGINTITLE}}
+static moodle-plugin-ci pipeline). They log in as an administrator and assert that the Sideline Learning Coach
 enrolment method is installed and rendered.
 
 ## Run locally

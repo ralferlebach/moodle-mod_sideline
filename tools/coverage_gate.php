@@ -23,8 +23,8 @@
  *
  * Usage: php tools/coverage_gate.php <clover.xml> <floor-percent>
  *
- * @package    {{COMPONENT}}
- * @copyright  2026 {{AUTHOR}}
+ * @package    mod_sideline
+ * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
@@ -70,8 +70,8 @@ if ($component === null) {
     exit(1);
 }
 // A single plugin needs no lookup table: its install path is fixed at template initialisation.
-$needle = '/{{PLUGINPATH}}/';
-if ($component !== '{{COMPONENT}}') {
+$needle = '/mod/sideline/';
+if ($component !== 'mod_sideline') {
     fwrite(STDERR, "Unerwartete Komponente: $component\n");
     exit(1);
 }

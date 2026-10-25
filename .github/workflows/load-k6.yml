@@ -1,7 +1,7 @@
 name: Load test (k6)
 
 # Read-endpoint load test (AP6) - k6 twin of load-jmeter.yml. Manual only.
-#   selfcontained (default): build a fresh Moodle + {{PLUGINTITLE}} siblings, seed and load-test here.
+#   selfcontained (default): build a fresh Moodle + Sideline Learning Coach siblings, seed and load-test here.
 #   external: point at a Moodle you already run and seeded (enter base_url + courseid).
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ on:
         description: '[external mode] Base URL of your seeded Moodle'
         required: false
       courseid:
-        description: '[external mode] Course id of a {{PLUGINTITLE}} course offering anonymous entry'
+        description: '[external mode] Course id of a Sideline Learning Coach course offering anonymous entry'
         required: false
       vus:
         description: Concurrent virtual users
@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        image: postgres:17
         env:
           POSTGRES_USER: moodle
           POSTGRES_PASSWORD: moodle
@@ -65,17 +65,17 @@ jobs:
         run: |
           git clone --depth 1 --branch "$MOODLE_BRANCH" \
             https://github.com/moodle/moodle.git moodle
-          mkdir -p moodle/enrol && cp -a plugin moodle/{{PLUGINPATH}}
-          rm -rf moodle/{{PLUGINPATH}}/.git
-          # {{COMPONENT}} has hard version.php dependencies on the sister plugins, so the site
+          mkdir -p moodle/enrol && cp -a plugin moodle/mod/sideline
+          rm -rf moodle/mod/sideline/.git
+          # mod_sideline has hard version.php dependencies on the sister plugins, so the site
           # cannot install with enrol alone. Pin SIBLING_REF to the matching release tag/SHA for a
           # reproducible RC build (defaults to main).
           SIBLING_REF="${SIBLING_REF:-main}"
-          for pair in "auth:{{PLUGINPATH}}" "mod:{{PLUGINPATH}}" "tool:{{PLUGINPATH}}"; do
+          for pair in "auth:mod/sideline" "mod:mod/sideline" "tool:mod/sideline"; do
             sib="${pair%%:*}"; dest="${pair##*:}"
             git clone --depth 1 --branch "$SIBLING_REF" \
-              "https://github.com/{{GITHUBUSER}}/moodle-${sib}_{{PLUGINNAME}}.git" "/tmp/sib_${sib}" \
-              || git clone --depth 1 "https://github.com/{{GITHUBUSER}}/moodle-${sib}_{{PLUGINNAME}}.git" "/tmp/sib_${sib}"
+              "https://github.com/ralferlebach/moodle-${sib}_sideline.git" "/tmp/sib_${sib}" \
+              || git clone --depth 1 "https://github.com/ralferlebach/moodle-${sib}_sideline.git" "/tmp/sib_${sib}"
             mkdir -p "$(dirname "moodle/${dest}")"
             cp -a "/tmp/sib_${sib}" "moodle/${dest}"
             rm -rf "moodle/${dest}/.git"
@@ -94,7 +94,7 @@ jobs:
           # Every step that needs HTTP starts and awaits its own server.
           # seed_large.php prints "export KEY='value'" lines (BASE_URL, COURSEID, INSTANCEID);
           # expose the ones the load plan needs as step outputs.
-          php {{PLUGINPATH}}/tests/load/seed_large.php > /tmp/seed.env
+          php mod/sideline/tests/load/seed_large.php > /tmp/seed.env
           get() { sed -n "s/^export $1='\(.*\)'$/\1/p" /tmp/seed.env; }
           {
             echo "base_url=$(get BASE_URL)"
@@ -148,14 +148,14 @@ jobs:
             -e VUS='${{ github.event.inputs.vus }}' \
             -e DURATION='${{ github.event.inputs.duration }}s' \
             --summary-export=k6-summary.json \
-            plugin/tests/load/{{PLUGINNAME}}-read-endpoints.js
+            plugin/tests/load/sideline-read-endpoints.js
       - name: Seed a capacity fixture and run the capacity race
         run: |
           # A read-load run cannot show whether the capacity limit actually holds under real
           # concurrency; only genuinely parallel writes can. The fixture leaves exactly FREE_SEATS
           # open, so the expected outcome is unambiguous.
           cd moodle
-          FREE_SEATS=1 CAPACITY=20 php {{PLUGINPATH}}/tests/load/seed_capacity.php > /tmp/cap.env
+          FREE_SEATS=1 CAPACITY=20 php mod/sideline/tests/load/seed_capacity.php > /tmp/cap.env
           cd ..
           get() { sed -n "s/^export $1='\(.*\)'$/\1/p" /tmp/cap.env; }
           PHP_CLI_SERVER_WORKERS=8 php -S 127.0.0.1:8000 -t moodle >/tmp/moodle-server.log 2>&1 &
@@ -177,7 +177,7 @@ jobs:
             -e FREE_SEATS="$(get FREE_SEATS)" \
             -e VUS=30 \
             --summary-export=k6-capacity-summary.json \
-            plugin/tests/load/{{PLUGINNAME}}-capacity-race.js
+            plugin/tests/load/sideline-capacity-race.js
 
       - name: Show Moodle server log on failure
         if: failure() && github.event.inputs.mode == 'selfcontained'

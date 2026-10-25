@@ -15,14 +15,14 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * CLI seed for the {{COMPONENT}} JMeter load test.
+ * CLI seed for the mod_sideline JMeter load test.
  *
- * Creates a visible course with a {{PLUGINTITLE}} enrolment instance (open, high capacity) and prints
+ * Creates a visible course with a Sideline Learning Coach enrolment instance (open, high capacity) and prints
  * the base URL and course id as shell "export" lines for the JMeter plan. Idempotent enough for
  * repeated CI runs (it always creates a fresh course).
  *
- * @package    {{COMPONENT}}
- * @copyright  2026 {{AUTHOR}}
+ * @package    mod_sideline
+ * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
@@ -32,13 +32,13 @@ require_once($CFG->dirroot . '/course/lib.php');
 
 $now = time();
 $course = create_course((object) [
-    'fullname' => '{{PLUGINTITLE}} load ' . $now,
+    'fullname' => 'Sideline Learning Coach load ' . $now,
     'shortname' => 'flexload' . $now,
     'category' => 1,
     'visible' => 1,
 ]);
 
-$plugin = enrol_get_plugin('{{PLUGINNAME}}');
+$plugin = enrol_get_plugin('sideline');
 $instanceid = $plugin->add_instance($course, [
     'status' => ENROL_INSTANCE_ENABLED,
     'customint1' => 0,

@@ -17,19 +17,19 @@
 /**
  * Plugin version and metadata.
  *
- * @package    {{COMPONENT}}
- * @copyright  {{YEAR}} {{AUTHOR}}
+ * @package    mod_sideline
+ * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->component = '{{COMPONENT}}';
-$plugin->version   = {{VERSION}};
 $plugin->requires  = 2024100700; // Moodle 4.5.
-$plugin->supported = [405, 502];
-$plugin->maturity  = MATURITY_ALPHA;
-$plugin->release   = '0.1.0';
+$plugin->component = 'mod_sideline';
+$plugin->version   = 2026102501;
+$plugin->supported = [503, 503];
+$plugin->maturity  = MATURITY_BETA;
+$plugin->release   = '0.2.0';
 
 // Declare the MINIMUM version of each dependency that provides the API in use - never the current
 // build number. An exact pin breaks installation as soon as a sibling lags by a single release,

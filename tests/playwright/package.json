@@ -1,8 +1,8 @@
 {
-  "name": "{{COMPONENT}}-playwright",
+  "name": "mod_sideline-playwright",
   "version": "1.0.0",
   "private": true,
-  "description": "Browser smoke tests for {{COMPONENT}} against a live Moodle site.",
+  "description": "Browser smoke tests for mod_sideline against a live Moodle site.",
   "scripts": {
     "test": "playwright test",
     "install-browsers": "playwright install --with-deps chromium",

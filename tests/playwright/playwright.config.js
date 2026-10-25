@@ -14,10 +14,10 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Playwright configuration for the {{COMPONENT}} browser tests.
+ * Playwright configuration for the mod_sideline browser tests.
  *
- * @module     {{COMPONENT}}/playwright.config
- * @copyright  2026 {{AUTHOR}}
+ * @module     mod_sideline/playwright.config
+ * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 

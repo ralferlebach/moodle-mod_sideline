@@ -15,24 +15,75 @@
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
- * Capability definitions for {{COMPONENT}}.
+ * Capability definitions for mod_sideline.
  *
- * @package    {{COMPONENT}}
- * @copyright  {{YEAR}} {{AUTHOR}}
+ * Deliberately absent: any capability that lets teachers read individual commentary, answers or
+ * learner state (L-16, P-40). "manage" lets teachers configure questions, rules and transfers,
+ * never read answers. The administrator debug export is restricted to site administrators and
+ * has no capability that could be granted to a course role. Moodle's own grading rights stay untouched.
+ *
+ * @package    mod_sideline
+ * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 defined('MOODLE_INTERNAL') || die();
 
-// Grant capabilities to archetypes deliberately and check them in the context the action belongs
-// to. A course-level decision asked in the system context silently ignores role switching,
-// because Moodle suspends the administrator bypass only for the context being switched.
 $capabilities = [
-    '{{PLUGINTYPE}}/{{PLUGINNAME}}:view' => [
-        'captype' => 'read',
+    'mod/sideline:addinstance' => [
+        'riskbitmask' => RISK_XSS,
+        'captype' => 'write',
         'contextlevel' => CONTEXT_COURSE,
         'archetypes' => [
             'editingteacher' => CAP_ALLOW,
+            'manager' => CAP_ALLOW,
+        ],
+        'clonepermissionsfrom' => 'moodle/course:manageactivities',
+    ],
+    'mod/sideline:view' => [
+        'captype' => 'read',
+        'contextlevel' => CONTEXT_MODULE,
+        'archetypes' => [
+            'student' => CAP_ALLOW,
+            'teacher' => CAP_ALLOW,
+            'editingteacher' => CAP_ALLOW,
+            'manager' => CAP_ALLOW,
+        ],
+    ],
+    'mod/sideline:manage' => [
+        'riskbitmask' => RISK_XSS,
+        'captype' => 'write',
+        'contextlevel' => CONTEXT_MODULE,
+        'archetypes' => [
+            'editingteacher' => CAP_ALLOW,
+            'manager' => CAP_ALLOW,
+        ],
+        'clonepermissionsfrom' => 'moodle/course:manageactivities',
+    ],
+    'mod/sideline:useai' => [
+        'riskbitmask' => RISK_PERSONAL,
+        'captype' => 'read',
+        'contextlevel' => CONTEXT_MODULE,
+        'archetypes' => [
+            'student' => CAP_ALLOW,
+            'teacher' => CAP_ALLOW,
+            'editingteacher' => CAP_ALLOW,
+            'manager' => CAP_ALLOW,
+        ],
+    ],
+    'mod/sideline:receivegroupstatements' => [
+        'riskbitmask' => RISK_PERSONAL,
+        'captype' => 'read',
+        'contextlevel' => CONTEXT_MODULE,
+        'archetypes' => [
+            'student' => CAP_ALLOW,
+        ],
+    ],
+    'mod/sideline:managepersonas' => [
+        'riskbitmask' => RISK_CONFIG,
+        'captype' => 'write',
+        'contextlevel' => CONTEXT_SYSTEM,
+        'archetypes' => [
             'manager' => CAP_ALLOW,
         ],
     ],

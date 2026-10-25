@@ -1,0 +1,324 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<XMLDB PATH="mod/sideline/db" VERSION="20261025" COMMENT="XMLDB file for Moodle mod_sideline"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd"
+>
+  <TABLES>
+    <TABLE NAME="sideline" COMMENT="One Sideline Learning Coach activity instance">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="course" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="name" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="intro" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="introformat" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="scopetype" TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="course" SEQUENCE="false" COMMENT="course, section or activities"/>
+        <FIELD NAME="scopesection" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Section number when scopetype is section"/>
+        <FIELD NAME="persona" TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="mentor" SEQUENCE="false" COMMENT="Default persona key from the persona registry"/>
+        <FIELD NAME="aienabled" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="typing" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="1" SEQUENCE="false" COMMENT="Simulated typing animation"/>
+        <FIELD NAME="consentrequired" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="consentversion" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="1" SEQUENCE="false"/>
+        <FIELD NAME="configversion" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="1" SEQUENCE="false" COMMENT="Bumped on every change that affects generated text"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="display" TYPE="char" LENGTH="10" NOTNULL="true" DEFAULT="inline" SEQUENCE="false" COMMENT="inline on the course page or page (own view page)"/>
+        <FIELD NAME="scopesubsections" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="1" SEQUENCE="false" COMMENT="Section scope includes nested subsections"/>
+        <FIELD NAME="personas" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Comma separated persona keys offered in this instance; empty means only the default"/>
+        <FIELD NAME="personachoice" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Learners may choose among the offered personas"/>
+        <FIELD NAME="dialogenabled" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="dialogcooldown" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="86400" SEQUENCE="false" COMMENT="Seconds between two questions for one learner"/>
+        <FIELD NAME="sharingmode" TYPE="char" LENGTH="10" NOTNULL="true" DEFAULT="individual" SEQUENCE="false" COMMENT="individual, closed or open"/>
+        <FIELD NAME="grouppublish" TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="general" SEQUENCE="false" COMMENT="Highest publication level: named, named_with_group, group_only or general"/>
+        <FIELD NAME="groupminsize" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="3" SEQUENCE="false" COMMENT="Smallest anonymous aggregate that may be published"/>
+        <FIELD NAME="groupversion" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="1" SEQUENCE="false" COMMENT="Version of the group sharing information"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="course" TYPE="foreign" FIELDS="course" REFTABLE="course" REFFIELDS="id"/>
+      </KEYS>
+    </TABLE>
+    <TABLE NAME="sideline_scope" COMMENT="Explicitly selected activities of a Sideline instance (scopetype activities)">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="sidelineid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="cmid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="sidelineid" TYPE="foreign" FIELDS="sidelineid" REFTABLE="sideline" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="sidelineid_cmid" UNIQUE="true" FIELDS="sidelineid, cmid"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="sideline_cache" COMMENT="Generated commentary per user and instance. Never shared between users.">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="sidelineid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="fingerprint" TYPE="char" LENGTH="64" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="source" TYPE="char" LENGTH="12" NOTNULL="true" DEFAULT="template" SEQUENCE="false" COMMENT="ai, template or generic"/>
+        <FIELD NAME="commentary" TYPE="text" NOTNULL="true" SEQUENCE="false" COMMENT="JSON encoded commentary"/>
+        <FIELD NAME="dirty" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="nexttransition" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="0 means no time based transition known"/>
+        <FIELD NAME="stamp" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Incremented on every invalidation; writes are conditional on it"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="sidelineid" TYPE="foreign" FIELDS="sidelineid" REFTABLE="sideline" REFFIELDS="id"/>
+        <KEY NAME="userid" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="sidelineid_userid" UNIQUE="true" FIELDS="sidelineid, userid"/>
+        <INDEX NAME="nexttransition" UNIQUE="false" FIELDS="nexttransition"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="sideline_consent" COMMENT="Current consent decision per user and instance">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="sidelineid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="status" TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="not_requested" SEQUENCE="false" COMMENT="not_requested, accepted, declined, withdrawn, reconsent_required"/>
+        <FIELD NAME="infoversion" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="sidelineid" TYPE="foreign" FIELDS="sidelineid" REFTABLE="sideline" REFFIELDS="id"/>
+        <KEY NAME="userid" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="sidelineid_userid" UNIQUE="true" FIELDS="sidelineid, userid"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="sideline_consent_log" COMMENT="Append-only log of consent decisions">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="sidelineid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="status" TYPE="char" LENGTH="20" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="kind" TYPE="char" LENGTH="10" NOTNULL="true" DEFAULT="analysis" SEQUENCE="false" COMMENT="analysis, publish or named"/>
+        <FIELD NAME="infoversion" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="contextid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="sidelineid" TYPE="foreign" FIELDS="sidelineid" REFTABLE="sideline" REFFIELDS="id"/>
+        <KEY NAME="userid" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="sidelineid_userid" UNIQUE="false" FIELDS="sidelineid, userid"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="sideline_source" COMMENT="Further courses observed by an instance (course union)">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="sidelineid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="courseid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="sidelineid" TYPE="foreign" FIELDS="sidelineid" REFTABLE="sideline" REFFIELDS="id"/>
+        <KEY NAME="courseid" TYPE="foreign" FIELDS="courseid" REFTABLE="course" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="sidelineid_courseid" UNIQUE="true" FIELDS="sidelineid, courseid"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="sideline_group" COMMENT="Groups and groupings admitted for group mode">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="sidelineid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="groupid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="groupingid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="sidelineid" TYPE="foreign" FIELDS="sidelineid" REFTABLE="sideline" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="sidelineid" UNIQUE="false" FIELDS="sidelineid"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="sideline_persona" COMMENT="Site personas defined by administrators">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="shortname" TYPE="char" LENGTH="40" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="name" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="style" TYPE="text" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="opener" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="version" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="1" SEQUENCE="false"/>
+        <FIELD NAME="status" TYPE="char" LENGTH="10" NOTNULL="true" DEFAULT="draft" SEQUENCE="false"/>
+        <FIELD NAME="usermodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="approvedby" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="usermodified" TYPE="foreign" FIELDS="usermodified" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="shortname" UNIQUE="true" FIELDS="shortname"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="sideline_pref" COMMENT="Persona chosen by a learner in one instance">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="sidelineid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="persona" TYPE="char" LENGTH="40" NOTNULL="true" DEFAULT="" SEQUENCE="false"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="sidelineid" TYPE="foreign" FIELDS="sidelineid" REFTABLE="sideline" REFFIELDS="id"/>
+        <KEY NAME="userid" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="sidelineid_userid" UNIQUE="true" FIELDS="sidelineid, userid"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="sideline_question" COMMENT="Interview questions of an instance">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="sidelineid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="qtype" TYPE="char" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="prompt" TYPE="text" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="config" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="triggerkey" TYPE="char" LENGTH="60" NOTNULL="true" DEFAULT="any" SEQUENCE="false"/>
+        <FIELD NAME="cooldown" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="sortorder" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="enabled" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="1" SEQUENCE="false"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="sidelineid" TYPE="foreign" FIELDS="sidelineid" REFTABLE="sideline" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="sidelineid" UNIQUE="false" FIELDS="sidelineid"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="sideline_answer" COMMENT="Answers of a learner. Never visible to teachers.">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="questionid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="sidelineid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="value" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="skipped" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="questionid" TYPE="foreign" FIELDS="questionid" REFTABLE="sideline_question" REFFIELDS="id"/>
+        <KEY NAME="userid" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="sidelineid_userid" UNIQUE="false" FIELDS="sidelineid, userid"/>
+        <INDEX NAME="questionid_userid" UNIQUE="true" FIELDS="questionid, userid"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="sideline_rule" COMMENT="Custom rules of an instance (validated JSON definition)">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="sidelineid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="rulekey" TYPE="char" LENGTH="60" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="definition" TYPE="text" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="enabled" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="1" SEQUENCE="false"/>
+        <FIELD NAME="sortorder" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="sidelineid" TYPE="foreign" FIELDS="sidelineid" REFTABLE="sideline" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="sidelineid_rulekey" UNIQUE="true" FIELDS="sidelineid, rulekey"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="sideline_rulehit" COMMENT="When a rule was last shown to a learner, for cooldowns and frequency limits">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="sidelineid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="rulekey" TYPE="char" LENGTH="60" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="timeshown" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="sidelineid" TYPE="foreign" FIELDS="sidelineid" REFTABLE="sideline" REFFIELDS="id"/>
+        <KEY NAME="userid" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="sidelineid_userid" UNIQUE="false" FIELDS="sidelineid, userid"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="sideline_publish" COMMENT="Group sharing decisions of a learner">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="sidelineid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="publish" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="named" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="infoversion" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="sidelineid" TYPE="foreign" FIELDS="sidelineid" REFTABLE="sideline" REFFIELDS="id"/>
+        <KEY NAME="userid" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="sidelineid_userid" UNIQUE="true" FIELDS="sidelineid, userid"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="sideline_trace" COMMENT="Decision traces, recorded only while site tracing is enabled">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="sidelineid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="trace" TYPE="text" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="sidelineid" TYPE="foreign" FIELDS="sidelineid" REFTABLE="sideline" REFFIELDS="id"/>
+        <KEY NAME="userid" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="sidelineid_userid" UNIQUE="false" FIELDS="sidelineid, userid"/>
+        <INDEX NAME="timecreated" UNIQUE="false" FIELDS="timecreated"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="sideline_debuglog" COMMENT="Audit log of administrator debug exports">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="adminid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="sidelineid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="purpose" TYPE="text" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="timefrom" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timeto" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="adminid" TYPE="foreign" FIELDS="adminid" REFTABLE="user" REFFIELDS="id"/>
+        <KEY NAME="userid" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="timecreated" UNIQUE="false" FIELDS="timecreated"/>
+      </INDEXES>
+    </TABLE>
+  </TABLES>
+</XMLDB>

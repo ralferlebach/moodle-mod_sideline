@@ -30,8 +30,8 @@
  *
  * NOT shipped with the plugin (excluded in .gitattributes export-ignore).
  *
- * @package    {{COMPONENT}}
- * @copyright  2026 {{AUTHOR}}
+ * @package    mod_sideline
+ * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 

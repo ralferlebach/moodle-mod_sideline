@@ -1,4 +1,4 @@
-# Makefile for {{COMPONENT}}
+# Makefile for mod_sideline
 # Mirrors the moodle-plugin-ci check suite used in GitHub Actions.
 #
 # Targets:
@@ -20,7 +20,7 @@
 #   make fix-phpdoc   — moodlecheck PHPDoc report
 #   make amd          — rebuild AMD minified files
 #   make build        — build BOTH the React bundle (esbuild) and AMD (grunt)
-#   make react        — bundle the React editor (esbuild → js/build/)
+#   make react        — bundle the React editor (Moodle grunt esm)
 #   make lint-react   — TypeScript type-check (tsc --noEmit)
 #   make test-react   — Jest unit tests for the React/TS sources
 #
@@ -35,7 +35,7 @@
 #   make jmeter-setup     — download Apache JMeter
 #
 # Paths are auto-detected from the makefile's own location.
-# The plugin lives at <MOODLE_ROOT>/{{PLUGINPATH}}/ —
+# The plugin lives at <MOODLE_ROOT>/public/mod/sideline/ —
 # levels below the Moodle root — so both PLUGIN_DIR and MOODLE_ROOT are
 # derived automatically and work on any installation.
 # Override on the command line if necessary:
@@ -43,9 +43,9 @@
 
 THIS_DIR      := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 PLUGIN_DIR    ?= $(THIS_DIR)
-MOODLE_ROOT   ?= $(abspath $(PLUGIN_DIR)/../..)
-PLUGIN_NAME   ?= {{COMPONENT}}
-PLUGIN_REL    ?= {{PLUGINPATH}}
+MOODLE_ROOT   ?= $(abspath $(PLUGIN_DIR)/../../..)
+PLUGIN_NAME   ?= mod_sideline
+PLUGIN_REL    ?= public/mod/sideline
 PHP           ?= $(shell which php 2>/dev/null || echo /usr/bin/php)
 PHPCS         ?= phpcs
 PHPCBF        ?= phpcbf
@@ -137,7 +137,7 @@ fix-lint-php:
 lint-phpdoc:
 	@echo ""
 	@echo "=== PHPDoc (local_moodlecheck, excludes tools/) ==="
-	-cd $(MOODLE_ROOT) && $(PHP) local/moodlecheck/cli/moodlecheck.php \
+	-cd $(MOODLE_ROOT) && $(PHP) public/local/moodlecheck/cli/moodlecheck.php \
 		--path=$(PLUGIN_REL) \
 		--exclude=$(PLUGIN_REL)/tools \
 		--format=text 2>&1 | grep -B1 '    Line' | grep -v '^--$$' || true
@@ -195,16 +195,8 @@ amd:
 
 react:
 	@echo ""
-	@echo "=== React bundle (esbuild → js/build/) ==="
-	@if [ -f $(PLUGIN_DIR)/build.mjs ]; then \
-		if [ ! -d $(PLUGIN_DIR)/node_modules ]; then \
-			echo "Installing frontend dev dependencies..."; \
-			cd $(PLUGIN_DIR) && $(NPM) install --no-audit --no-fund; \
-		fi; \
-		cd $(PLUGIN_DIR) && $(NPM) run build; \
-	else \
-		echo "No build.mjs — React bundle skipped."; \
-	fi
+	@echo "=== ESM bundle (Moodle grunt esm) ==="
+	@cd $(MOODLE_ROOT) && npx grunt esm
 
 build: react amd
 	@echo ""
@@ -212,34 +204,13 @@ build: react amd
 
 lint-react:
 	@echo ""
-	@echo "=== TypeScript type-check (tsc --noEmit) ==="
-	@if [ -f $(PLUGIN_DIR)/tsconfig.json ]; then \
-		if [ ! -x $(PLUGIN_DIR)/node_modules/.bin/tsc ]; then \
-			echo "Installing frontend dev dependencies..."; \
-			cd $(PLUGIN_DIR) && $(NPM) install --no-audit --no-fund; \
-		fi; \
-		cd $(PLUGIN_DIR) && ./node_modules/.bin/tsc --noEmit; \
-	else \
-		echo "No tsconfig.json — type-check skipped."; \
-	fi
+	@echo "=== TypeScript type-check (Moodle root tsc --noEmit) ==="
+	@cd $(MOODLE_ROOT) && npx tsc --noEmit -p tsconfig.json
 
 test-react:
 	@echo ""
-	@echo "=== Jest (React/TS unit tests) ==="
-	@if [ -d $(PLUGIN_DIR)/js/tests ]; then \
-		if [ ! -x $(PLUGIN_DIR)/node_modules/.bin/jest ]; then \
-			echo "Installing frontend dev dependencies..."; \
-			cd $(PLUGIN_DIR) && $(NPM) install --no-audit --no-fund; \
-		fi; \
-		if [ "$(NPM_REFRESH)" = "1" ]; then \
-			echo "Refreshing frontend dependencies (NPM_REFRESH=1)..."; \
-			cd $(PLUGIN_DIR) && $(NPM) update --no-fund || true; \
-			cd $(PLUGIN_DIR) && $(NPM) audit fix --force --no-fund || true; \
-		fi; \
-		cd $(PLUGIN_DIR) && ./node_modules/.bin/jest; \
-	else \
-		echo "No js/tests — Jest skipped."; \
-	fi
+	@echo "=== Jest (run from the Moodle root) ==="
+	@cd $(MOODLE_ROOT) && npx jest $(PLUGIN_REL)/js/esm/tests
 
 phpunit:
 	@echo ""
@@ -255,7 +226,7 @@ phpunit:
 			--testdox 2>&1 | head -5); \
 		if printf '%s\n' "$$reinit_check" | grep -q "initialised for different version"; then \
 			echo "PHPUnit environment outdated — reinitialising..."; \
-			cd $(MOODLE_ROOT) && $(PHP) admin/tool/phpunit/cli/init.php; \
+			cd $(MOODLE_ROOT) && $(PHP) public/admin/tool/phpunit/cli/init.php; \
 		fi; \
 		tmpout=$$(mktemp); \
 		cd $(MOODLE_ROOT) && $(PHP) vendor/bin/phpunit \
@@ -268,7 +239,7 @@ phpunit:
 	fi
 
 # --- Browser collaboration tests (Playwright) ------------------------------
-# Need a RUNNING Moodle site with {{COMPONENT}} installed. seed.php creates the
+# Need a RUNNING Moodle site with mod_sideline installed. seed.php creates the
 # course-mode fixture and prints the exports (incl. FLEXACCESS_BASE_URL from the
 # site's wwwroot), so no manual base URL is needed for a local install.
 
@@ -329,12 +300,12 @@ jmeter: clear jmeter-setup
 		echo "  or pass TOKEN/WORKSPACEID/CMID yourself. See tests/load/README.md."; \
 		exit 1; \
 	fi
-	cd $(LOAD_DIR) && $(JMETER) -n -t {{PLUGINNAME}}-read-endpoints.jmx \
+	cd $(LOAD_DIR) && $(JMETER) -n -t sideline-read-endpoints.jmx \
 		-Jbase_url='$(BASE_URL)' -Jtoken='$(TOKEN)' \
 		-Jworkspaceid='$(WORKSPACEID)' -Jcmid='$(CMID)' -Jrevision='$(REVISION)' \
 		-Jthreads='$(THREADS)' -Jrampup='$(RAMPUP)' -Jloops='$(LOOPS)' \
 		-Jmaxduration='$(MAXDURATION)' \
-		-l {{PLUGINNAME}}-load-results.jtl
+		-l sideline-load-results.jtl
 	@echo ""
-	@echo "Results written to $(LOAD_DIR)/{{PLUGINNAME}}-load-results.jtl"
+	@echo "Results written to $(LOAD_DIR)/sideline-load-results.jtl"
 

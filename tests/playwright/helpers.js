@@ -16,7 +16,7 @@
  */
 
 /*
- * Shared helpers for the {{PLUGINTITLE}} browser suites.
+ * Shared helpers for the Sideline Learning Coach browser suites.
  *
  * Each plugin carries its own copy: a Moodle plugin repository has to stand on its own, and a
  * shared package would tie the four repositories together at test level as well.
