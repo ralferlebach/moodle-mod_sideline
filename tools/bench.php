@@ -35,6 +35,10 @@ require(__DIR__ . '/../../../config.php');
 require_once($CFG->libdir . '/clilib.php');
 require_once($CFG->libdir . '/completionlib.php');
 require_once($CFG->libdir . '/testing/generator/lib.php');
+// Moodle 4.5 keeps testing_util in this file; 5.x autoloads it (\core\test\testing_util and an alias).
+if (file_exists($CFG->libdir . '/testing/classes/util.php')) {
+    require_once($CFG->libdir . '/testing/classes/util.php');
+}
 
 [$options] = cli_get_params([
     'users' => 200, 'activities' => 30, 'requests' => 1000, 'workers' => 0, 'worker' => 0, 'courseid' => 0,

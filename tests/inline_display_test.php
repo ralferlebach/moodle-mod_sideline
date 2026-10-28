@@ -22,7 +22,15 @@ namespace mod_sideline;
  * @package    mod_sideline
  * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers \mod_sideline\output\panel
+ * @covers ::sideline_get_coursemodule_info
+ * @covers ::sideline_cm_info_dynamic
+ * @covers ::sideline_cm_info_view
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\output\panel::class)]
+#[\PHPUnit\Framework\Attributes\CoversFunction('sideline_get_coursemodule_info')]
+#[\PHPUnit\Framework\Attributes\CoversFunction('sideline_cm_info_dynamic')]
+#[\PHPUnit\Framework\Attributes\CoversFunction('sideline_cm_info_view')]
 final class inline_display_test extends \advanced_testcase {
     /**
      * The course module as the course page sees it.

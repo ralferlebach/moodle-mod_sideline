@@ -266,14 +266,41 @@ final class commentary_service_test extends \advanced_testcase {
         set_config('aienabled', 1, 'mod_sideline');
         set_config('aihourlycap', 1, 'mod_sideline');
         [$instance, , $context] = $this->sideline(['aienabled' => 1]);
-        $DB->insert_record('sideline_cache', (object) [
-            'sidelineid' => $instance->id, 'userid' => get_admin()->id, 'fingerprint' => 'x', 'source' => 'ai',
-            'commentary' => '{}', 'dirty' => 0, 'nexttransition' => 0, 'timecreated' => time(), 'timemodified' => time(),
+        // One call in the last hour, by any instance: the cap of one is reached.
+        $DB->insert_record('sideline_aiusage', (object) [
+            'sidelineid' => 0, 'purpose' => 'generate', 'success' => 1, 'tokens' => 10, 'timecreated' => time() - 60,
         ]);
         $fake = new fake_text_generator();
         $fake->responder = fake_text_generator::echoing_tokens();
         $this->get($instance, $context, $fake);
         $this->assertSame(0, $fake->calls);
+    }
+
+    public function test_reaching_the_cost_cap_keeps_cached_ai_texts_and_retries_after_an_outage(): void {
+        global $DB;
+        set_config('aienabled', 1, 'mod_sideline');
+        [$instance, , $context] = $this->sideline(['aienabled' => 1]);
+        $fake = new fake_text_generator();
+        $fake->responder = fake_text_generator::echoing_tokens();
+        $this->assertSame('ai', $this->get($instance, $context, $fake)['commentary']['source']);
+
+        // The cap is reached: the cached AI text stays valid and is served, no new call is made.
+        set_config('aihourlycap', 1, 'mod_sideline');
+        $calls = $fake->calls;
+        $this->assertSame('ai', $this->get($instance, $context, $fake)['commentary']['source']);
+        $this->assertSame($calls, $fake->calls);
+
+        // A provider outage: the template is cached only for a short while, then AI is tried again.
+        set_config('aihourlycap', 100, 'mod_sideline');
+        $DB->delete_records('sideline_cache');
+        $fake->responder = static fn() => null;
+        $now = time();
+        $this->assertSame('template', $this->get($instance, $context, $fake, $now)['commentary']['source']);
+        $next = (int) $DB->get_field('sideline_cache', 'nexttransition', ['userid' => $this->student->id]);
+        $this->assertGreaterThan($now, $next);
+        $this->assertLessThanOrEqual($now + commentary_service::AI_RETRY_AFTER, $next);
+        $fake->responder = fake_text_generator::echoing_tokens();
+        $this->assertSame('ai', $this->get($instance, $context, $fake, $next + 1)['commentary']['source']);
     }
 
     public function test_consent_gate_blocks_every_personal_step_until_accepted(): void {

@@ -23,8 +23,10 @@ namespace slcmod_assign;
  * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @covers \slcmod_assign\adapter
+ * @covers \mod_sideline\local\service\state_collector
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(adapter::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\state_collector::class)]
 final class adapter_test extends \advanced_testcase {
     public function test_overrides_extensions_and_submission(): void {
         global $DB;

@@ -36,11 +36,15 @@ require_once(__DIR__ . '/fixtures/fake_text_generator.php');
  * @covers \mod_sideline\local\service\message_composer
  * @covers \mod_sideline\local\service\commentary_service
  * @covers \mod_sideline\external\get_commentary
+ * @covers \mod_sideline\local\cache\commentary_cache
+ * @covers \mod_sideline\local\service\state_collector
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\scope_resolver::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\message_composer::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\commentary_service::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\external\get_commentary::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\cache\commentary_cache::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\state_collector::class)]
 final class access_security_test extends \advanced_testcase {
     /** @var \stdClass Course. */
     private \stdClass $course;

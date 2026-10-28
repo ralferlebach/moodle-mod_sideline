@@ -60,7 +60,11 @@ if ($action === 'edit') {
     foreach (rule_store::definitions((int) $sideline->id, false) as $rule) {
         $triggers[$rule['key']] = $rule['key'];
     }
-    $form = new question_form(null, ['triggers' => $triggers]);
+    $currenttype = '';
+    if ($qid) {
+        $currenttype = (string) $DB->get_field('sideline_question', 'qtype', ['id' => $qid, 'sidelineid' => $sideline->id]);
+    }
+    $form = new question_form(null, ['triggers' => $triggers, 'currenttype' => $currenttype]);
     if ($form->is_cancelled()) {
         redirect($url);
     }
@@ -98,6 +102,10 @@ echo $OUTPUT->notification(get_string('questions_privacy', 'mod_sideline'), 'inf
 if (empty($sideline->dialogenabled)) {
     echo $OUTPUT->notification(get_string('questions_disabled', 'mod_sideline'), 'warning');
 }
+if (!dialog_manager::site_allows_interviews()) {
+    echo $OUTPUT->notification(get_string('questions_sitedisabled', 'mod_sideline'), 'warning');
+}
+$allowedtypes = dialog_manager::allowed_types();
 $table = new html_table();
 $table->head = [get_string('qprompt', 'mod_sideline'), get_string('qtype', 'mod_sideline'),
     get_string('qtrigger', 'mod_sideline'), get_string('enabled', 'mod_sideline'), ''];
@@ -107,7 +115,11 @@ foreach (dialog_manager::questions((int) $sideline->id, false) as $q) {
         new moodle_url($url, ['action' => 'delete', 'qid' => $q->id, 'sesskey' => sesskey()]),
         get_string('delete')
     );
-    $table->data[] = [format_string($q->prompt), get_string('qtype_' . $q->qtype, 'mod_sideline'), s($q->triggerkey),
+    $typename = get_string('qtype_' . $q->qtype, 'mod_sideline');
+    if (!in_array($q->qtype, $allowedtypes, true)) {
+        $typename .= ' (' . get_string('qtype_notallowed', 'mod_sideline') . ')';
+    }
+    $table->data[] = [format_string($q->prompt), $typename, s($q->triggerkey),
         $q->enabled ? get_string('yes') : get_string('no'), $edit . ' · ' . $delete];
 }
 echo html_writer::table($table);

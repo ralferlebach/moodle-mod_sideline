@@ -17,8 +17,8 @@
 /**
  * Coverage scope for this plugin.
  *
- * Limited to the code that carries the behaviour worth measuring: the classes and the plugin's
- * library/callback files. Entry-point scripts are exercised by Behat rather than PHPUnit, so
+ * Limited to the code that carries the behaviour worth measuring: the classes, the backup and
+ * restore steps and the module callbacks in lib.php. Entry-point scripts are exercised by Behat rather than PHPUnit, so
  * including them would depress the figure without saying anything about test quality.
  *
  * @package    mod_sideline
@@ -43,8 +43,11 @@ return new class extends \phpunit_coverage_info {
     /** @var array Directories whose files are included in coverage. */
     protected $includelistfolders = [
         'classes',
+        'backup/moodle2',
     ];
 
     /** @var array Individual files included in coverage. */
-    protected $includelistfiles = [];
+    protected $includelistfiles = [
+        'lib.php',
+    ];
 };

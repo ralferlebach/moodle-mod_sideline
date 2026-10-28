@@ -118,7 +118,7 @@ function sideline_delete_instance($id) {
     foreach (
         ['sideline_cache', 'sideline_consent', 'sideline_consent_log', 'sideline_scope', 'sideline_source',
         'sideline_group', 'sideline_pref', 'sideline_answer', 'sideline_question', 'sideline_rule',
-        'sideline_rulehit', 'sideline_publish', 'sideline_trace'] as $table
+        'sideline_rulehit', 'sideline_publish', 'sideline_trace', 'sideline_sourcecat'] as $table
     ) {
         $DB->delete_records($table, ['sidelineid' => $id]);
     }
@@ -157,6 +157,9 @@ function sideline_save_relations(stdClass $data): void {
     \mod_sideline\local\instance_config::save_scope_activities($data->id, $data->scopecmids ?? []);
     if (isset($data->sourcecourses)) {
         \mod_sideline\local\instance_config::save_sources($data, (array) $data->sourcecourses, (int) $USER->id);
+    }
+    if (isset($data->sourcecategories)) {
+        \mod_sideline\local\instance_config::save_source_categories($data, (array) $data->sourcecategories, (int) $USER->id);
     }
     if (isset($data->groupids) || isset($data->groupingids)) {
         \mod_sideline\local\instance_config::save_groups(

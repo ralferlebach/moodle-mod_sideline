@@ -48,6 +48,15 @@ if ($ADMIN->fulltree) {
         200,
         PARAM_INT
     ));
+    // Fair use and cost limit (ADR-08): tokens per day across the site, 0 means no daily limit.
+    $usage = \mod_sideline\local\ai\ai_usage::summary(time());
+    $page->add(new admin_setting_configtext(
+        'mod_sideline/aidailytokencap',
+        get_string('setting_aidailytokencap', 'mod_sideline'),
+        get_string('setting_aidailytokencap_desc', 'mod_sideline', (object) $usage),
+        0,
+        PARAM_INT
+    ));
     $page->add(new admin_setting_configcheckbox(
         'mod_sideline/crosscourse',
         get_string('setting_crosscourse', 'mod_sideline'),
@@ -70,6 +79,47 @@ if ($ADMIN->fulltree) {
     );
     $duration->set_updatedcallback('mod_sideline_tracing_updated');
     $page->add($duration);
+    // Interview policy for the whole site (P-31): upper bounds for every activity.
+    $page->add(new admin_setting_heading(
+        'mod_sideline/interviewpolicy',
+        get_string('setting_interviewpolicy', 'mod_sideline'),
+        get_string('setting_interviewpolicy_desc', 'mod_sideline')
+    ));
+    $page->add(new admin_setting_configcheckbox(
+        'mod_sideline/interviewsenabled',
+        get_string('setting_interviewsenabled', 'mod_sideline'),
+        get_string('setting_interviewsenabled_desc', 'mod_sideline'),
+        1
+    ));
+    $types = [];
+    foreach (\mod_sideline\local\dialog\question_type::TYPES as $type) {
+        $types[$type] = get_string('qtype_' . $type, 'mod_sideline');
+    }
+    $page->add(new admin_setting_configmulticheckbox(
+        'mod_sideline/interviewtypes',
+        get_string('setting_interviewtypes', 'mod_sideline'),
+        get_string('setting_interviewtypes_desc', 'mod_sideline'),
+        array_fill_keys(array_keys($types), 1),
+        $types
+    ));
+    $page->add(new admin_setting_configduration(
+        'mod_sideline/interviewmingap',
+        get_string('setting_interviewmingap', 'mod_sideline'),
+        get_string('setting_interviewmingap_desc', 'mod_sideline'),
+        DAYSECS
+    ));
+    $page->add(new admin_setting_configtext(
+        'mod_sideline/interviewmaxperweek',
+        get_string('setting_interviewmaxperweek', 'mod_sideline'),
+        get_string('setting_interviewmaxperweek_desc', 'mod_sideline'),
+        3,
+        PARAM_INT
+    ));
+    $page->add(new admin_setting_heading(
+        'mod_sideline/retention',
+        get_string('setting_retention', 'mod_sideline'),
+        ''
+    ));
     foreach (
         ['traceretentiondays' => 14, 'auditretentiondays' => 365, 'consentlogretentiondays' => 0,
         'answerretentiondays' => 365, 'cacheretentiondays' => 90] as $name => $default

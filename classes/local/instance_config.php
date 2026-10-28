@@ -51,6 +51,12 @@ class instance_config {
     /** @var int Upper bound of further courses in a course union. */
     public const MAX_SOURCES = 10;
 
+    /** @var int Upper bound of course branches (categories) of a course union. */
+    public const MAX_SOURCE_CATEGORIES = 5;
+
+    /** @var int Upper bound of courses observed for one learner through course branches (N-02). */
+    public const MAX_BRANCH_COURSES = 20;
+
     /**
      * Bring submitted form data into the shape the table expects.
      *
@@ -166,7 +172,12 @@ class instance_config {
     }
 
     /**
-     * Replace the further courses of a course union. Only courses the editing user may manage are kept.
+     * Replace the further courses of a course union, as far as the editing user is concerned.
+     *
+     * The editor decides only about courses in which they may manage activities: those are added or
+     * removed as submitted. Sources the editor cannot manage are not offered to them in the form and
+     * stay as they are, so a co-teacher saving the settings does not drop a colleague's courses.
+     * Each row records the teacher whose rights authorise it; scope_resolver rechecks them (P-43).
      *
      * @param \stdClass $sideline Instance record (needs id and course).
      * @param int[] $courseids Course ids.
@@ -175,23 +186,35 @@ class instance_config {
     public static function save_sources(\stdClass $sideline, array $courseids, int $editorid): void {
         global $DB;
 
-        $DB->delete_records('sideline_source', ['sidelineid' => $sideline->id]);
         if (!get_config('mod_sideline', 'crosscourse')) {
             return;
         }
-        $count = 0;
+        $manages = static fn(int $courseid): bool => $DB->record_exists('course', ['id' => $courseid])
+            && has_capability('moodle/course:manageactivities', \context_course::instance($courseid), $editorid);
+        $wanted = [];
         foreach (array_unique(array_map('intval', $courseids)) as $courseid) {
-            if ($courseid <= 1 || $courseid === (int) $sideline->course || $count >= self::MAX_SOURCES) {
-                continue;
+            if ($courseid > 1 && $courseid !== (int) $sideline->course && $manages($courseid)) {
+                $wanted[$courseid] = true;
             }
-            if (!$DB->record_exists('course', ['id' => $courseid])) {
-                continue;
+        }
+        $existing = $DB->get_records('sideline_source', ['sidelineid' => $sideline->id], 'id', 'id, courseid');
+        foreach ($existing as $row) {
+            $courseid = (int) $row->courseid;
+            if (isset($wanted[$courseid])) {
+                $DB->set_field('sideline_source', 'usermodified', $editorid, ['id' => $row->id]);
+                unset($wanted[$courseid]);
+            } else if (!$DB->record_exists('course', ['id' => $courseid]) || $manages($courseid)) {
+                // Removed by someone who may decide about it, or the course is gone.
+                $DB->delete_records('sideline_source', ['id' => $row->id]);
             }
-            // The teacher must be allowed to manage activities in every source course (P1-05).
-            if (!has_capability('moodle/course:manageactivities', \context_course::instance($courseid), $editorid)) {
-                continue;
+        }
+        $count = $DB->count_records('sideline_source', ['sidelineid' => $sideline->id]);
+        foreach (array_keys($wanted) as $courseid) {
+            if ($count >= self::MAX_SOURCES) {
+                break;
             }
-            $DB->insert_record('sideline_source', (object) ['sidelineid' => $sideline->id, 'courseid' => $courseid]);
+            $DB->insert_record('sideline_source', (object) ['sidelineid' => $sideline->id, 'courseid' => $courseid,
+                'usermodified' => $editorid]);
             $count++;
         }
     }
@@ -203,12 +226,100 @@ class instance_config {
      * @return int[]
      */
     public static function get_sources(int $sidelineid): array {
+        return array_keys(self::get_source_authorities($sidelineid));
+    }
+
+    /**
+     * Further courses with the teacher whose rights authorise them (0 for sources saved before 0.3.0).
+     *
+     * @param int $sidelineid Instance id.
+     * @return int[] Course id to user id.
+     */
+    public static function get_source_authorities(int $sidelineid): array {
         global $DB;
 
         if (!get_config('mod_sideline', 'crosscourse')) {
             return [];
         }
-        return array_map('intval', $DB->get_fieldset_select('sideline_source', 'courseid', 'sidelineid = ?', [$sidelineid]));
+        $result = [];
+        foreach ($DB->get_records('sideline_source', ['sidelineid' => $sidelineid], 'id', 'id, courseid, usermodified') as $row) {
+            $result[(int) $row->courseid] = (int) $row->usermodified;
+        }
+        return $result;
+    }
+
+    /**
+     * Replace the course branches (categories with all subcategories) of a course union (L-19).
+     *
+     * As for courses: the editor decides about the categories in which they may manage activities;
+     * other branches stay. Each row records the authorising teacher, rechecked on every evaluation.
+     *
+     * @param \stdClass $sideline Instance record (needs id).
+     * @param int[] $categoryids Category ids.
+     * @param int $editorid The user who edits the instance.
+     */
+    public static function save_source_categories(\stdClass $sideline, array $categoryids, int $editorid): void {
+        global $DB;
+
+        if (!get_config('mod_sideline', 'crosscourse')) {
+            return;
+        }
+        $manages = static fn(int $categoryid): bool => $DB->record_exists('course_categories', ['id' => $categoryid])
+            && has_capability('moodle/course:manageactivities', \context_coursecat::instance($categoryid), $editorid);
+        $wanted = [];
+        foreach (array_unique(array_map('intval', $categoryids)) as $categoryid) {
+            if ($categoryid > 0 && $manages($categoryid)) {
+                $wanted[$categoryid] = true;
+            }
+        }
+        foreach ($DB->get_records('sideline_sourcecat', ['sidelineid' => $sideline->id], 'id', 'id, categoryid') as $row) {
+            $categoryid = (int) $row->categoryid;
+            if (isset($wanted[$categoryid])) {
+                $DB->set_field('sideline_sourcecat', 'usermodified', $editorid, ['id' => $row->id]);
+                unset($wanted[$categoryid]);
+            } else if (!$DB->record_exists('course_categories', ['id' => $categoryid]) || $manages($categoryid)) {
+                $DB->delete_records('sideline_sourcecat', ['id' => $row->id]);
+            }
+        }
+        $count = $DB->count_records('sideline_sourcecat', ['sidelineid' => $sideline->id]);
+        foreach (array_keys($wanted) as $categoryid) {
+            if ($count >= self::MAX_SOURCE_CATEGORIES) {
+                break;
+            }
+            $DB->insert_record('sideline_sourcecat', (object) ['sidelineid' => $sideline->id, 'categoryid' => $categoryid,
+                'usermodified' => $editorid]);
+            $count++;
+        }
+    }
+
+    /**
+     * Course branches of a course union.
+     *
+     * @param int $sidelineid Instance id.
+     * @return int[] Category ids.
+     */
+    public static function get_source_categories(int $sidelineid): array {
+        return array_keys(self::get_source_category_authorities($sidelineid));
+    }
+
+    /**
+     * Course branches with the teacher whose rights authorise them.
+     *
+     * @param int $sidelineid Instance id.
+     * @return int[] Category id to user id.
+     */
+    public static function get_source_category_authorities(int $sidelineid): array {
+        global $DB;
+
+        if (!get_config('mod_sideline', 'crosscourse')) {
+            return [];
+        }
+        $result = [];
+        $rows = $DB->get_records('sideline_sourcecat', ['sidelineid' => $sidelineid], 'id', 'id, categoryid, usermodified');
+        foreach ($rows as $row) {
+            $result[(int) $row->categoryid] = (int) $row->usermodified;
+        }
+        return $result;
     }
 
     /**

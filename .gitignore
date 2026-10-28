@@ -42,8 +42,6 @@ behatfaildumps/
 .env.local
 
 # Load-test downloads and run artefacts (harness itself is versioned)
-tests/load/apache-jmeter-*/
+tests/load/.load-env
 tests/load/k6
 tests/load/*.tgz
-tests/load/*.jtl
-tests/load/.load-env

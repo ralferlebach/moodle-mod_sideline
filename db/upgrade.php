@@ -86,5 +86,37 @@ function xmldb_sideline_upgrade($oldversion) {
         upgrade_mod_savepoint(true, 2026102500, 'sideline');
     }
 
+    // 0.2.x to 0.3.0: course branches as sources of a course union (L-19), AI usage for cost control (P-31).
+    if ($oldversion < 2026102802) {
+        // The teacher whose rights authorise a source course, rechecked on every evaluation (P-43).
+        // Existing rows keep 0: they were authorised when saved and are rechecked once a teacher saves again.
+        $table = new xmldb_table('sideline_source');
+        $field = new xmldb_field('usermodified', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0', 'courseid');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+        // A foreign key is created as an index; only add it once.
+        if (!$dbman->index_exists($table, new xmldb_index('usermodified', XMLDB_INDEX_NOTUNIQUE, ['usermodified']))) {
+            $dbman->add_key($table, new xmldb_key('usermodified', XMLDB_KEY_FOREIGN, ['usermodified'], 'user', ['id']));
+        }
+
+        $file = __DIR__ . '/install.xml';
+        foreach (['sideline_sourcecat', 'sideline_aiusage'] as $name) {
+            if (!$dbman->table_exists($name)) {
+                $dbman->install_one_table_from_xmldb_file($file, $name);
+            }
+        }
+        // Development builds of 0.3.0 created sideline_sourcecat without the teacher column.
+        $table = new xmldb_table('sideline_sourcecat');
+        $field = new xmldb_field('usermodified', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0', 'categoryid');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+        if (!$dbman->index_exists($table, new xmldb_index('usermodified', XMLDB_INDEX_NOTUNIQUE, ['usermodified']))) {
+            $dbman->add_key($table, new xmldb_key('usermodified', XMLDB_KEY_FOREIGN, ['usermodified'], 'user', ['id']));
+        }
+        upgrade_mod_savepoint(true, 2026102802, 'sideline');
+    }
+
     return true;
 }

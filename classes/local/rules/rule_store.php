@@ -76,6 +76,13 @@ class rule_store {
         if (!$id && $DB->count_records('sideline_rule', ['sidelineid' => $sideline->id]) >= rule_schema::MAX_RULES) {
             throw new \invalid_parameter_exception(get_string('err_rule_max', 'mod_sideline', rule_schema::MAX_RULES));
         }
+        // Template version per rule (P-07): a new rule starts at 1, a changed wording raises it.
+        $previous = $id ? $DB->get_field('sideline_rule', 'definition', ['id' => $id, 'sidelineid' => $sideline->id]) : false;
+        $previous = $previous ? (array) json_decode($previous, true) : [];
+        $clean['templateversion'] = max(1, (int) ($previous['templateversion'] ?? 1));
+        if ($previous && ($previous['templates'] ?? null) != $clean['templates']) {
+            $clean['templateversion']++;
+        }
         $record = (object) [
             'sidelineid' => $sideline->id,
             'rulekey' => $clean['key'],

@@ -32,9 +32,21 @@ require_once(__DIR__ . '/fixtures/fake_text_generator.php');
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @covers \mod_sideline\local\group\group_service
  * @covers \mod_sideline\local\group\sharing_manager
+ * @covers \mod_sideline\local\service\rule_evaluator
+ * @covers \mod_sideline\local\service\commentary_service
+ * @covers \mod_sideline\local\ai\pseudonymizer
+ * @covers \mod_sideline\local\service\message_composer
+ * @covers \mod_sideline\local\cache\commentary_cache
+ * @covers \mod_sideline\local\instance_config
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(group_service::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(sharing_manager::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\rule_evaluator::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\commentary_service::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\ai\pseudonymizer::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\message_composer::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\cache\commentary_cache::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\instance_config::class)]
 final class group_mode_test extends \advanced_testcase {
     /** @var \stdClass Course. */
     private \stdClass $course;

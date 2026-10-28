@@ -41,11 +41,17 @@ require_once($CFG->dirroot . '/webservice/tests/helpers.php');
  * @covers \mod_sideline\local\dialog\dialog_manager
  * @covers \mod_sideline\external\answer_question
  * @covers \mod_sideline\external\get_my_answers
+ * @covers \mod_sideline\local\service\rule_evaluator
+ * @covers \mod_sideline\local\service\commentary_service
+ * @covers \mod_sideline\local\cache\commentary_cache
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(question_type::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(dialog_manager::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(answer_question::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(get_my_answers::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\rule_evaluator::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\commentary_service::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\cache\commentary_cache::class)]
 final class dialog_test extends \advanced_testcase {
     /** @var \stdClass Course. */
     private \stdClass $course;

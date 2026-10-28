@@ -32,9 +32,11 @@ require_once(__DIR__ . '/fixtures/fake_text_generator.php');
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @covers \mod_sideline\local\cache\commentary_cache
  * @covers \mod_sideline\local\observer
+ * @covers \mod_sideline\local\service\commentary_service
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(commentary_cache::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\observer::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\commentary_service::class)]
 final class cache_concurrency_test extends \advanced_testcase {
     /** @var \stdClass Course. */
     private \stdClass $course;

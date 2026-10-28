@@ -23,8 +23,10 @@ namespace slcmod_quiz;
  * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @covers \slcmod_quiz\adapter
+ * @covers \mod_sideline\local\service\state_collector
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(adapter::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\state_collector::class)]
 final class adapter_test extends \advanced_testcase {
     public function test_attempts_and_overrides(): void {
         global $DB;

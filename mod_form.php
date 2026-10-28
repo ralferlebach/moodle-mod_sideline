@@ -90,6 +90,19 @@ class mod_sideline_mod_form extends moodleform_mod {
                 'requiredcapabilities' => ['moodle/course:manageactivities'],
             ]);
             $mform->addHelpButton('sourcecourses', 'sourcecourses', 'mod_sideline');
+            // Course branches: only categories in which the teacher may manage activities (L-19, P-43).
+            $categories = \core_course_category::make_categories_list('moodle/course:manageactivities');
+            if ($categories) {
+                $mform->addElement(
+                    'autocomplete',
+                    'sourcecategories',
+                    get_string('sourcecategories', 'mod_sideline'),
+                    $categories,
+                    ['multiple' => true]
+                );
+                $mform->setType('sourcecategories', PARAM_INT);
+                $mform->addHelpButton('sourcecategories', 'sourcecategories', 'mod_sideline');
+            }
         }
 
         // Persona.
@@ -174,6 +187,7 @@ class mod_sideline_mod_form extends moodleform_mod {
             $id = (int) $this->current->instance;
             $defaultvalues['scopecmids'] = instance_config::get_scope_activities($id);
             $defaultvalues['sourcecourses'] = instance_config::get_sources($id);
+            $defaultvalues['sourcecategories'] = instance_config::get_source_categories($id);
             [$groups, $groupings] = instance_config::get_groups($id);
             $defaultvalues['groupids'] = $groups;
             $defaultvalues['groupingids'] = $groupings;

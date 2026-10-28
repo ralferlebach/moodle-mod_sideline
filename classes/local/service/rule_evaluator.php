@@ -34,7 +34,7 @@ use mod_sideline\local\rules\rule_schema;
  */
 class rule_evaluator {
     /** @var int Version of the built-in rule set. Bump on every behavioural change. */
-    public const RULES_VERSION = 2;
+    public const RULES_VERSION = 3;
 
     /** @var int Seconds before a deadline in which the deadline rule applies. */
     public const DEADLINE_WINDOW = 3 * DAYSECS;
@@ -297,6 +297,8 @@ class rule_evaluator {
         if ($latest === null) {
             return [];
         }
+        // A completion without a pass is not a pass: the wording may say "passed" only for a pass.
+        $outcome = $latest->pass === activity_state::YES ? 'passed' : 'completed';
         $next = null;
         foreach ($states as $state) {
             if ($state->visible && $state->available === activity_state::YES && $state->completion === activity_state::NO) {
@@ -311,7 +313,7 @@ class rule_evaluator {
                 10,
                 recommendation::ACTION_NONE,
                 $latest->cmid,
-                ['label' => $latest->label]
+                ['label' => $latest->label, 'outcome' => $outcome]
             )];
         }
         return [new recommendation(
@@ -320,7 +322,7 @@ class rule_evaluator {
             1,
             recommendation::ACTION_OPEN,
             $next->cmid,
-            ['label' => $latest->label, 'nextlabel' => $next->label]
+            ['label' => $latest->label, 'nextlabel' => $next->label, 'outcome' => $outcome]
         )];
     }
 
@@ -516,7 +518,7 @@ class rule_evaluator {
             if ($target === false) {
                 continue;
             }
-            $facts = ['templates' => $rule['templates']];
+            $facts = ['templates' => $rule['templates'], 'templateversion' => max(1, (int) ($rule['templateversion'] ?? 1))];
             if ($target) {
                 $facts['label'] = $target->label;
                 if ($target->deadline) {

@@ -95,6 +95,25 @@ class persona_registry {
     }
 
     /**
+     * The style instruction of a built-in persona, or null for other keys.
+     *
+     * @param string $key Persona key.
+     * @return string|null
+     */
+    public static function builtin_style(string $key): ?string {
+        return self::builtins()[$key]['style'] ?? null;
+    }
+
+    /**
+     * Keys of the built-in personas.
+     *
+     * @return string[]
+     */
+    public static function builtin_keys(): array {
+        return array_keys(self::builtins());
+    }
+
+    /**
      * The persona opener used before the main template message.
      *
      * @param string $key Persona key.

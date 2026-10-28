@@ -115,6 +115,10 @@ final class pseudonymizer {
                 $facts['group'] = $token;
                 $required[] = $token;
             }
+            // Whether a success is a pass or a completion: "passed" may only be said when it is true (P-09).
+            if (!empty($rec->facts['outcome'])) {
+                $facts['outcome'] = (string) $rec->facts['outcome'];
+            }
             if (isset($rec->facts['count'])) {
                 $facts['people_count'] = (int) $rec->facts['count'];
                 $this->allowednumbers[] = (int) $rec->facts['count'];

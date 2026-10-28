@@ -61,6 +61,9 @@ class purge_cache extends \core\task\scheduled_task {
 
         $DB->delete_records_select('sideline_rulehit', 'timeshown < ?', [$now - 365 * DAYSECS]);
 
+        // The AI usage ledger is needed for the hourly and daily caps only.
+        \mod_sideline\local\ai\ai_usage::purge($now);
+
         // Interview answers are kept for the configured period after their last change (P-17), 0 keeps them.
         $answerdays = (int) get_config('mod_sideline', 'answerretentiondays');
         if ($answerdays > 0) {

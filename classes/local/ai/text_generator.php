@@ -50,4 +50,11 @@ interface text_generator {
      * @return string|null The generated text, or null on any failure, timeout, rate limit or empty result.
      */
     public function generate(string $prompt, int $userid, int $contextid): ?string;
+
+    /**
+     * Tokens used by the last generate() call, as reported by the provider (ADR-08 cost control).
+     *
+     * @return int|null Prompt plus completion tokens, or null when the provider reported none.
+     */
+    public function last_tokens(): ?int;
 }

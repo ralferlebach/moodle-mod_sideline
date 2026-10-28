@@ -41,7 +41,7 @@ jobs:
           MYSQL_ALLOW_EMPTY_PASSWORD: "true"
         ports:
           - 3306:3306
-        options: --health-cmd="mysqladmin ping" --health-interval 10s --health-timeout 5s --health-retries 3
+        options: --health-cmd="healthcheck.sh --connect --innodb_initialized" --health-interval 10s --health-timeout 5s --health-retries 3
     strategy:
       fail-fast: false
       matrix:
@@ -220,7 +220,6 @@ jobs:
           docs/
           \.github/
           tests/load/
-          tests/playwright/
           \.gitattributes
           \.gitignore
           makefile
@@ -310,7 +309,7 @@ jobs:
           # not run here - that produced a meaningless 0.5% and made the gate useless.
           php plugin/tools/coverage_gate.php "$report" "$COVERAGE_FLOOR"
         env:
-          COVERAGE_FLOOR: '50'
+          COVERAGE_FLOOR: '80'
 
   maturity-gate:
     name: Release gate

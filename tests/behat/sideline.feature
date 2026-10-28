@@ -85,6 +85,42 @@ Feature: Sideline Learning Coach
     And I click on "Approve" "link"
     Then I should see "Approved"
 
+  Scenario: Administrators preview a draft persona with invented data only
+    Given I log in as "admin"
+    And I visit "/mod/sideline/personas.php"
+    And I press "Add persona"
+    And I set the following fields to these values:
+      | Short name                  | lighthouse                                 |
+      | Name                        | Lighthouse keeper                          |
+      | Style instruction (English) | You are a calm lighthouse keeper.          |
+      | Opening phrase (plain text) | Steady light ahead.                        |
+    And I press "Save changes"
+    And I click on "Preview" "link" in the "Lighthouse keeper" "table_row"
+    Then I should see "Preview: Lighthouse keeper"
+    And I should see "Draft"
+    And I should see "Steady light ahead. \"Essay on energy transition\" is due on"
+    And I should see "You are a calm lighthouse keeper."
+    And I should see "[anonuser1]"
+    And I should see "No AI sample"
+    And I should not see "Stu Dent"
+
+  @javascript
+  Scenario: The site interview policy switches every question off
+    Given the following "activities" exist:
+      | activity | name  | course | idnumber | dialogenabled | display |
+      | sideline | Coach | C1     | coach1   | 1             | page    |
+    And the following "mod_sideline > questions" exist:
+      | activity | prompt           | options                           |
+      | coach1   | How is it going? | Fine:none;Overwhelmed:small_steps |
+    And the following config values are set as admin:
+      | interviewsenabled | 0 | mod_sideline |
+    When I am on the "coach1" "Activity" page logged in as "teacher1"
+    And I navigate to "Interview questions" in current page administration
+    Then I should see "Interview questions are switched off for the whole site."
+    When I am on the "coach1" "Activity" page logged in as "student1"
+    Then I should see "Good to see you."
+    And I should not see "A quick question"
+
   Scenario: The debug export requires a stated purpose
     Given I log in as "admin"
     And I visit "/mod/sideline/debug.php"

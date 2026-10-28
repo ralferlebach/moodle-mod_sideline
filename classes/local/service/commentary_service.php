@@ -49,6 +49,9 @@ class commentary_service {
     /** @var string Result status: the learner has to decide on consent first. */
     public const STATUS_CONSENT_REQUIRED = 'consent_required';
 
+    /** @var int When AI was unavailable, the template text is kept this long before AI is tried again. */
+    public const AI_RETRY_AFTER = 15 * MINSECS;
+
     /** @var ai_gateway AI gateway. */
     private ai_gateway $gateway;
 
@@ -115,7 +118,8 @@ class commentary_service {
         $recommendations = $evaluator->select($candidates);
         $nexttransition = $evaluator->next_transition($states, $now);
 
-        $aiallowed = !$simulate && $this->gateway->is_allowed($sideline, $userid, $context, $now);
+        // Without the cost caps: reaching a cap must not make cached AI texts stale. phrase() checks the caps.
+        $aiallowed = !$simulate && $this->gateway->is_allowed($sideline, $userid, $context, $now, $lang, false);
         $fingerprint = $this->fingerprint($sideline, $user, $recommendations, $persona, $lang, $aiallowed);
         $composer = new message_composer();
         $keys = array_map(static fn(recommendation $r): string => $r->key, $recommendations);
@@ -133,6 +137,7 @@ class commentary_service {
                 'persona' => $persona . ' (' . persona_registry::version($persona) . ')',
                 'fingerprint' => $fingerprint,
                 'nexttransition' => $nexttransition,
+                'versions' => self::versions(),
             ];
             return $this->result(
                 $consent,
@@ -175,7 +180,7 @@ class commentary_service {
 
             $commentary = null;
             if ($aiallowed) {
-                $texts = $this->gateway->phrase($recommendations, $user, $context, $persona, $lang, $now);
+                $texts = $this->gateway->phrase($recommendations, $user, $context, $persona, $lang, $now, (int) $sideline->id);
                 if ($texts !== null) {
                     $commentary = $composer->with_texts(
                         $recommendations,
@@ -190,6 +195,13 @@ class commentary_service {
             // Fallback chain: valid AI text, then localised template text, then the generic text (P-08).
             if ($commentary === null || empty($commentary['blocks'])) {
                 $commentary = $composer->compose($recommendations, $cms, $persona, $lang);
+                // A template served only because AI was briefly unavailable (cost cap, provider error) is kept
+                // for a short while, then AI is tried again. A rejected AI text stays replaced until the state changes.
+                $status = $aiallowed ? $this->gateway->last_status() : '';
+                if (in_array($status, [ai_gateway::STATUS_BUDGET, ai_gateway::STATUS_NO_RESPONSE], true)) {
+                    $retry = $now + self::AI_RETRY_AFTER;
+                    $nexttransition = $nexttransition ? min($nexttransition, $retry) : $retry;
+                }
             }
 
             // Rechecks right before storing and delivering (P0-02, L-G06). A withdrawal takes this
@@ -243,6 +255,9 @@ class commentary_service {
                 'candidates' => array_map(static fn(recommendation $r) => $r->key, $candidates),
                 'selected' => $keys,
                 'source' => $commentary['source'] ?? '',
+                'aistatus' => $aiallowed ? $this->gateway->last_status() : 'not_allowed',
+                'templates' => $commentary['meta']['templates'] ?? [],
+                'versions' => self::versions(),
                 'persona' => $persona,
                 'groupstatements' => count($groupfacts),
             ], $now);
@@ -312,12 +327,30 @@ class commentary_service {
             'i' => (int) $sideline->id,
             'cfg' => (int) $sideline->configversion,
             'rules' => rule_evaluator::RULES_VERSION,
+            'templates' => template_registry::VERSION,
+            // Local language customisation (tool_customlang) changes the wording; Moodle then raises langrev.
+            'langrev' => (int) get_config('core', 'langrev'),
             'persona' => $persona . ':' . persona_registry::version($persona),
             'lang' => $lang,
             'ai' => $aiallowed ? 1 : 0,
             'name' => sha1((string) $user->firstname),
             'recs' => array_map([$this, 'rec_array'], $recommendations),
         ]));
+    }
+
+    /**
+     * Versions of rules, templates and prompt, for traces and the debug export (P-41).
+     *
+     * @return array
+     */
+    public static function versions(): array {
+        return [
+            'rules' => rule_evaluator::RULES_VERSION,
+            'templates' => template_registry::VERSION,
+            'langrev' => (int) get_config('core', 'langrev'),
+            'prompt' => \mod_sideline\local\ai\prompt_builder::VERSION,
+            'plugin' => (string) get_config('mod_sideline', 'version'),
+        ];
     }
 
     /**

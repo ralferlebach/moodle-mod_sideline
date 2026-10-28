@@ -43,6 +43,8 @@ class fake_text_generator implements text_generator {
     public bool $available = true;
     /** @var callable|null Builds the response from the prompt, null response when it returns null. */
     public $responder = null;
+    /** @var int|null Tokens reported for every call, null for a provider that reports none. */
+    public ?int $tokens = 100;
 
     #[\Override]
     public function is_available(int $userid, \context $context): bool {
@@ -56,6 +58,37 @@ class fake_text_generator implements text_generator {
         return $this->responder ? ($this->responder)($prompt) : null;
     }
 
+    #[\Override]
+    public function last_tokens(): ?int {
+        return $this->tokens;
+    }
+
+    /**
+     * The facts blocks of a generation prompt.
+     *
+     * @param string $prompt Prompt.
+     * @return array|null Blocks, or null for a translation prompt.
+     */
+    public static function prompt_blocks(string $prompt): ?array {
+        if (!preg_match('/FACTS:\n(.*?)\n\nOUTPUT FORMAT/s', $prompt, $m)) {
+            return null;
+        }
+        return json_decode($m[1], true)['blocks'] ?? null;
+    }
+
+    /**
+     * The texts of a translation prompt.
+     *
+     * @param string $prompt Prompt.
+     * @return array|null Blocks with key and text, or null for a generation prompt.
+     */
+    public static function translation_blocks(string $prompt): ?array {
+        if (!preg_match('/TEXTS:\n(.*?)\n\nOUTPUT FORMAT/s', $prompt, $m)) {
+            return null;
+        }
+        return json_decode($m[1], true)['blocks'] ?? null;
+    }
+
     /**
      * A responder that answers every block with a text built from the required tokens of the prompt.
      *
@@ -64,11 +97,10 @@ class fake_text_generator implements text_generator {
      */
     public static function echoing_tokens(string $suffix = ''): callable {
         return static function (string $prompt) use ($suffix): string {
-            preg_match('/FACTS:\n(.*?)\n\nOUTPUT FORMAT/s', $prompt, $m);
-            $facts = json_decode($m[1], true);
             $blocks = [];
-            foreach ($facts['blocks'] as $block) {
-                $text = 'Coach says ' . implode(' and ', $block['required_tokens']) . $suffix;
+            foreach (self::prompt_blocks($prompt) ?? [] as $block) {
+                // Plain English with function words, so that the language check recognises it.
+                $text = 'The coach says this is about ' . implode(' and ', $block['required_tokens']) . $suffix;
                 $blocks[] = ['key' => $block['key'], 'text' => trim($text)];
             }
             return json_encode(['blocks' => $blocks]);

@@ -5,7 +5,7 @@ Eine Moodle-Aktivität, die Lernenden einen kurzen, persönlichen „Sportreport
 PHP entscheidet deterministisch, was gesagt wird (Deadlines, Sperren, Erfolge); KI formuliert höchstens den Wortlaut.
 Fällt KI aus oder liefert ungültigen Text, greifen lokalisierte Vorlagen, zuletzt ein generischer Text.
 
-Status: **0.2.0 beta** – siehe `docs/CHANGELOG.md`, Nachweise in `docs/TRACEABILITY.md`.
+Status: **0.3.0 beta** – siehe `docs/CHANGELOG.md`, Nachweise in `docs/TRACEABILITY.md`.
 
 Anforderungen
 -------------
@@ -31,10 +31,20 @@ Datenschutz
 * Privacy-API-Provider für alle personenbezogenen Tabellen.
 * Gruppenmodus nur nach aktivem Opt-in der betroffenen Person, Namen nur nach gesonderter Zustimmung.
 * Debug-Export nur für Standortadministration, mit Zweckangabe und Audit-Log.
+* KI-Texte werden auf Sprache und auf Aussagen geprüft, die die Fakten nicht tragen (z. B. „bestanden“ bei einem nicht bestandenen Test). Im Zweifel erscheint die Vorlage.
+* Moodle-Core speichert jeden KI-Aufruf (mit Platzhaltern statt Namen) unbefristet. Die Aufbewahrung wird über das Datenregister von Moodle festgelegt (`docs/adr/ADR-AI-02.md`).
+
+Administration
+--------------
+
+* KI an/aus, Aufrufe pro Stunde, Token-Budget pro Tag (mit Verbrauchsanzeige), Kursverbünde an/aus, Aufbewahrungsfristen.
+* Interview-Richtlinie für die ganze Website: an/aus, erlaubte Fragetypen, Mindestabstand, Fragen pro Person und Woche.
+* Personas freigeben und widerrufen, mit Vorschau auf erfundenen Daten.
 
 Entwicklung
 -----------
 
-Siehe `docs/environment-setup.md` (Umgebung) und `docs/ARBEITSPLANUNG.md` (Plan). Tests: `make phpunit`, Stil: `make lint-php`.
+Siehe `docs/environment-setup.md` (Umgebung), `docs/README.md` (Werkzeuge und Pipelines) und `docs/TRACEABILITY.md` (Nachweise).
+Tests: `make phpunit`, `make test-amd`, Behat unter `tests/behat`, Lasttest `make load-seed k6`. Stil: `make lint-php`.
 
 Lizenz: GNU GPL v3 or later.

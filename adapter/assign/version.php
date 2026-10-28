@@ -25,9 +25,9 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'slcmod_assign';
-$plugin->version   = 2026102502;
+$plugin->version   = 2026102802;
 $plugin->requires  = 2024100700;
 $plugin->maturity  = MATURITY_BETA;
 $plugin->supported = [405, 503];
-$plugin->release   = '0.2.1';
+$plugin->release   = '0.3.0';
 $plugin->dependencies = ['mod_sideline' => 2026102500, 'mod_assign' => 2024100700];

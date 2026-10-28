@@ -23,6 +23,11 @@ defined('MOODLE_INTERNAL') || die();
 global $CFG;
 require_once($CFG->dirroot . '/backup/util/includes/backup_includes.php');
 require_once($CFG->dirroot . '/backup/util/includes/restore_includes.php');
+// The plan builders load the moodle2 base classes that the plugin's task and step classes extend.
+require_once($CFG->dirroot . '/backup/moodle2/backup_plan_builder.class.php');
+require_once($CFG->dirroot . '/backup/moodle2/restore_plan_builder.class.php');
+require_once($CFG->dirroot . '/mod/sideline/backup/moodle2/backup_sideline_activity_task.class.php');
+require_once($CFG->dirroot . '/mod/sideline/backup/moodle2/restore_sideline_activity_task.class.php');
 
 /**
  * Backup and restore of the configuration, the scope and the absence of personal data (SLC-020-P1-12).
@@ -30,7 +35,15 @@ require_once($CFG->dirroot . '/backup/util/includes/restore_includes.php');
  * @package    mod_sideline
  * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers \backup_sideline_activity_task
+ * @covers \backup_sideline_activity_structure_step
+ * @covers \restore_sideline_activity_task
+ * @covers \restore_sideline_activity_structure_step
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\backup_sideline_activity_task::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\backup_sideline_activity_structure_step::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\restore_sideline_activity_task::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\restore_sideline_activity_structure_step::class)]
 final class backup_restore_test extends \advanced_testcase {
     /**
      * Back a course up and restore it into a new course.

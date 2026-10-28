@@ -5,3 +5,17 @@
 # affected, which is why this file is excluded from the release archive.
 #
 # The stale-files CI job fails while any of these paths still exists.
+
+# 0.3.0: template leftovers that referred to other plugins (replaced by tests/load/sideline-commentary.js).
+.github/workflows/playwright.yml
+.github/workflows/load-jmeter.yml
+tests/playwright/README.md
+tests/playwright/helpers.js
+tests/playwright/package-lock.json
+tests/playwright/package.json
+tests/playwright/playwright.config.js
+tests/playwright/seed.php
+tests/load/seed_large.php
+tests/load/sideline-capacity-race.js
+tests/load/sideline-read-endpoints.jmx
+tests/load/sideline-read-endpoints.js

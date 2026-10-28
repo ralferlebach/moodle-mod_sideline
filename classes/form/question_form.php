@@ -42,9 +42,18 @@ class question_form extends \moodleform {
         $mform->addElement('hidden', 'action', 'edit');
         $mform->setType('action', PARAM_ALPHA);
 
+        // Only the types the site policy allows can be chosen (P-31). The current type of an existing question
+        // stays selectable, so it can be edited or disabled without changing its type (and losing its answers).
+        $allowed = \mod_sideline\local\dialog\dialog_manager::allowed_types();
+        $current = (string) ($this->_customdata['currenttype'] ?? '');
         $types = [];
         foreach (question_type::TYPES as $type) {
-            $types[$type] = get_string('qtype_' . $type, 'mod_sideline');
+            if (in_array($type, $allowed, true) || $type === $current) {
+                $types[$type] = get_string('qtype_' . $type, 'mod_sideline');
+            }
+        }
+        if (!$types) {
+            $mform->addElement('static', 'notypes', '', get_string('questions_notypes', 'mod_sideline'));
         }
         $mform->addElement('select', 'qtype', get_string('qtype', 'mod_sideline'), $types);
         $mform->addElement('textarea', 'prompt', get_string('qprompt', 'mod_sideline'), ['rows' => 3, 'cols' => 60]);
@@ -112,6 +121,10 @@ class question_form extends \moodleform {
     #[\Override]
     public function validation($data, $files) {
         $errors = parent::validation($data, $files);
+        if (empty($data['qtype']) || !in_array($data['qtype'], question_type::TYPES, true)) {
+            $errors['qtype'] = get_string('questions_notypes', 'mod_sideline');
+            return $errors;
+        }
         [, $problems] = question_type::normalise_config($data['qtype'], self::config_from($data));
         if ($problems) {
             $errors['qtype'] = implode(' ', $problems);

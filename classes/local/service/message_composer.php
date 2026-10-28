@@ -45,9 +45,10 @@ class message_composer {
      * @param \cm_info[] $cms Observed activities, for URL resolution.
      * @param string $persona Persona key.
      * @param string $lang Language code of the user.
+     * @param string|null $opener Opener to use instead of the persona's, for the persona preview (P-14).
      * @return array The commentary structure, see commentary_cache.
      */
-    public function compose(array $recommendations, array $cms, string $persona, string $lang): array {
+    public function compose(array $recommendations, array $cms, string $persona, string $lang, ?string $opener = null): array {
         if (!persona_registry::is_valid($persona)) {
             $persona = persona_registry::DEFAULT_KEY;
         }
@@ -55,6 +56,7 @@ class message_composer {
         $lang = $sm->translation_exists($lang) || $lang === 'en' ? $lang : 'en';
 
         $blocks = [];
+        $versions = [];
         foreach ($recommendations as $index => $rec) {
             $a = $this->template_args($rec, $lang);
             if (!empty($rec->facts['templates'])) {
@@ -71,7 +73,7 @@ class message_composer {
             }
             // The persona opener colours only the main message.
             if ($index === 0) {
-                $text = trim(persona_registry::opener($persona, $lang) . ' ' . $text);
+                $text = trim(($opener ?? persona_registry::opener($persona, $lang)) . ' ' . $text);
             }
             $block = ['key' => $rec->key, 'text' => $text];
             $action = $this->action_for($rec, $cms, $lang);
@@ -79,12 +81,14 @@ class message_composer {
                 $block['action'] = $action;
             }
             $blocks[] = $block;
+            $versions[$rec->key] = template_registry::tag($rec->key, $rec->facts);
         }
 
         $source = self::SOURCE_TEMPLATE;
         if (!$blocks) {
             $source = self::SOURCE_GENERIC;
             $blocks[] = ['key' => 'generic', 'text' => $sm->get_string('tpl_generic', 'mod_sideline', null, $lang)];
+            $versions['generic'] = template_registry::tag('generic');
         }
 
         return [
@@ -93,6 +97,8 @@ class message_composer {
             'persona' => $persona,
             'source' => $source,
             'blocks' => $blocks,
+            // Not delivered to the browser: the service removes "meta" before returning (P-07, P-41).
+            'meta' => ['templates' => $versions],
         ];
     }
 
@@ -119,6 +125,7 @@ class message_composer {
         string $source,
     ): array {
         $blocks = [];
+        $versions = [];
         foreach ($recommendations as $rec) {
             if (!isset($texts[$rec->key])) {
                 continue;
@@ -129,6 +136,8 @@ class message_composer {
                 $block['action'] = $action;
             }
             $blocks[] = $block;
+            // AI text is not a template, but a custom rule's template is its intent: record its version.
+            $versions[$rec->key] = template_registry::tag($rec->key, $rec->facts);
         }
         return [
             'version' => 1,
@@ -136,6 +145,7 @@ class message_composer {
             'persona' => $persona,
             'source' => $source,
             'blocks' => $blocks,
+            'meta' => ['templates' => $versions],
         ];
     }
 

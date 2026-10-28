@@ -22,15 +22,18 @@ use core_ai\manager;
 /**
  * Text generation through Moodle's AI subsystem (core_ai\manager and the generate_text action).
  *
- * Open point recorded in the work plan (P-21, ADR-AI-01): whether a dedicated aiplacement_sideline
- * is needed to represent policy, capability and reporting correctly. Until the M0 spike decides,
- * this class performs the checks of the subsystem explicitly and never bypasses them.
+ * Decided in ADR-AI-01 (P-21): no dedicated aiplacement_sideline. This class performs the checks of
+ * the subsystem explicitly and never bypasses them; the own capability mod/sideline:useai controls
+ * per role who gets AI phrasing.
  *
  * @package    mod_sideline
  * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class core_text_generator implements text_generator {
+    /** @var int|null Tokens of the last call. */
+    private ?int $lasttokens = null;
+
     #[\Override]
     public function is_available(int $userid, \context $context): bool {
         $manager = \core\di::get(manager::class);
@@ -51,6 +54,7 @@ class core_text_generator implements text_generator {
 
     #[\Override]
     public function generate(string $prompt, int $userid, int $contextid): ?string {
+        $this->lasttokens = null;
         try {
             $action = new generate_text(contextid: $contextid, userid: $userid, prompttext: $prompt);
             $response = \core\di::get(manager::class)->process_action($action);
@@ -62,7 +66,16 @@ class core_text_generator implements text_generator {
         if (!$response->get_success()) {
             return null;
         }
-        $content = $response->get_response_data()['generatedcontent'] ?? null;
+        $data = $response->get_response_data();
+        if (isset($data['prompttokens']) || isset($data['completiontokens'])) {
+            $this->lasttokens = (int) ($data['prompttokens'] ?? 0) + (int) ($data['completiontokens'] ?? 0);
+        }
+        $content = $data['generatedcontent'] ?? null;
         return is_string($content) && trim($content) !== '' ? $content : null;
+    }
+
+    #[\Override]
+    public function last_tokens(): ?int {
+        return $this->lasttokens;
     }
 }

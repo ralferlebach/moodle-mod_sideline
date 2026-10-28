@@ -23,9 +23,9 @@ use mod_sideline\local\instance_config;
  *
  * Only activities the user can see, or sees as locked, are returned. Hidden and stealth
  * activities never are, whatever the user's access path. Section scope descends into nested
- * subsections (delegated sections). A course union adds further courses, each of them only when
- * the user can currently access it; this is checked on every request, so a revoked enrolment
- * takes effect at once.
+ * subsections (delegated sections). A course union adds further courses and course branches
+ * (categories with their subcategories), each course only when the user can currently access it;
+ * this is checked on every request, so a revoked enrolment takes effect at once.
  *
  * @package    mod_sideline
  * @copyright  2026 Ralf Erlebach
@@ -69,9 +69,68 @@ class scope_resolver {
             }
         }
 
-        foreach (instance_config::get_sources((int) $sideline->id) as $courseid) {
+        // Every source counts only while the teacher who added it still may manage activities there (P-43).
+        $courseids = [];
+        foreach (instance_config::get_source_authorities((int) $sideline->id) as $courseid => $editorid) {
+            if (self::authorised($editorid, \context_course::instance($courseid, IGNORE_MISSING))) {
+                $courseids[] = $courseid;
+            }
+        }
+        $courseids = array_merge($courseids, $this->branch_courses($sideline, $userid, $courseids));
+        foreach (array_unique($courseids) as $courseid) {
             foreach ($this->source_cms($courseid, $userid) as $cm) {
                 $result[$cm->id] = $cm;
+            }
+        }
+        return $result;
+    }
+
+    /**
+     * Courses of the instance's course branches in which the user is actively enrolled (L-19).
+     *
+     * Only the user's own enrolments are looked at, so the cost does not grow with the size of the
+     * branch; the number of courses is bounded (N-02). Every course is checked again in source_cms().
+     *
+     * @param \stdClass $sideline Instance record.
+     * @param int $userid User id.
+     * @param int[] $exclude Course ids that are already sources.
+     * @return int[] Course ids, in course sort order.
+     */
+    private function branch_courses(\stdClass $sideline, int $userid, array $exclude): array {
+        $categories = instance_config::get_source_category_authorities((int) $sideline->id);
+        if (!$categories) {
+            return [];
+        }
+        $paths = [];
+        foreach ($categories as $categoryid => $editorid) {
+            $category = \core_course_category::get($categoryid, IGNORE_MISSING, true);
+            if ($category && self::authorised($editorid, \context_coursecat::instance($categoryid, IGNORE_MISSING))) {
+                $paths[$category->path] = $editorid;
+            }
+        }
+        if (!$paths) {
+            return [];
+        }
+        $result = [];
+        $exclude = array_flip(array_merge($exclude, [(int) $sideline->course]));
+        foreach (enrol_get_users_courses($userid, true, 'id, category') as $course) {
+            if (isset($exclude[(int) $course->id]) || count($result) >= instance_config::MAX_BRANCH_COURSES) {
+                continue;
+            }
+            $category = \core_course_category::get((int) $course->category, IGNORE_MISSING, true);
+            if (!$category) {
+                continue;
+            }
+            foreach ($paths as $path => $editorid) {
+                // The course's category is the branch itself or lies below it, and the teacher's right holds in
+                // the course itself too (a prohibition set at course level overrides the category).
+                if (
+                    ($category->path === $path || str_starts_with($category->path . '/', $path . '/'))
+                    && self::authorised($editorid, \context_course::instance((int) $course->id, IGNORE_MISSING))
+                ) {
+                    $result[] = (int) $course->id;
+                    break;
+                }
             }
         }
         return $result;
@@ -99,6 +158,23 @@ class scope_resolver {
             $result[] = $cm;
         }
         return $result;
+    }
+
+    /**
+     * Whether the teacher who added a source may still manage activities there.
+     *
+     * Sources saved before 0.3.0 carry no teacher (0); they were authorised when saved and count until a
+     * teacher saves the settings again.
+     *
+     * @param int $editorid Teacher.
+     * @param \context|false $context Course or category context, false when it no longer exists.
+     * @return bool
+     */
+    private static function authorised(int $editorid, \context|false $context): bool {
+        if (!$context) {
+            return false;
+        }
+        return $editorid === 0 || has_capability('moodle/course:manageactivities', $context, $editorid);
     }
 
     /**

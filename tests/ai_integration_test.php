@@ -94,18 +94,38 @@ final class ai_integration_test extends \advanced_testcase {
      *
      * @param int $status HTTP status.
      */
-    private function mock_provider(int $status = 200): void {
+    private function mock_provider(int $status = 200, int $requests = 1): void {
         ['mock' => $mock] = $this->get_mocked_http_client($this->history);
-        $mock->append(function (RequestInterface $request) use ($status) {
+        for ($i = 0; $i < $requests; $i++) {
+            $mock->append($this->responder($status));
+        }
+    }
+
+    /**
+     * One mocked provider answer: generation in English, translation into French.
+     *
+     * @param int $status HTTP status.
+     * @return callable
+     */
+    private function responder(int $status): callable {
+        return function (RequestInterface $request) use ($status) {
             if ($status !== 200) {
                 return new Response($status, ['Content-Type' => 'application/json'], '{"error":{"message":"down"}}');
             }
             $body = json_decode((string) $request->getBody(), true);
             $prompt = end($body['messages'])['content'];
-            preg_match('/FACTS:\n(.*?)\n\nOUTPUT FORMAT/s', $prompt, $m);
             $blocks = [];
-            foreach (json_decode($m[1], true)['blocks'] as $block) {
-                $blocks[] = ['key' => $block['key'], 'text' => 'Great going ' . implode(' and ', $block['required_tokens'])];
+            if (preg_match('/TEXTS:\n(.*?)\n\nOUTPUT FORMAT/s', $prompt, $m)) {
+                // The translation step: keep every token, French wording.
+                foreach (json_decode($m[1], true)['blocks'] as $block) {
+                    preg_match_all('/\[anon[a-z]*\d*\]/', $block['text'], $tokens);
+                    $blocks[] = ['key' => $block['key'], 'text' => 'Très bien, tu avances avec ' . implode(' et ', $tokens[0])];
+                }
+            } else {
+                preg_match('/FACTS:\n(.*?)\n\nOUTPUT FORMAT/s', $prompt, $m);
+                foreach (json_decode($m[1], true)['blocks'] as $block) {
+                    $blocks[] = ['key' => $block['key'], 'text' => 'Great going ' . implode(' and ', $block['required_tokens'])];
+                }
             }
             $content = json_encode(['blocks' => $blocks]);
             return new Response(200, ['Content-Type' => 'application/json'], json_encode([
@@ -117,17 +137,27 @@ final class ai_integration_test extends \advanced_testcase {
                 ]],
                 'usage' => ['prompt_tokens' => 1, 'completion_tokens' => 1, 'total_tokens' => 2],
             ]));
-        });
+        };
     }
 
     /**
      * Commentary through the real core generator.
      *
+     * @param string|null $lang Language to force for the learner.
      * @return array
      */
-    private function get(): array {
+    private function get(?string $lang = null): array {
         global $DB;
         $this->setUser($this->student);
+        if ($lang !== null) {
+            // A minimal language pack: Moodle only switches to installed languages.
+            global $CFG;
+            check_dir_exists($CFG->dataroot . '/lang/' . $lang);
+            $file = $CFG->dataroot . '/lang/' . $lang . '/langconfig.php';
+            file_put_contents($file, "<?php\n\$string['thislanguage'] = '$lang';\n");
+            get_string_manager()->reset_caches(true);
+            force_current_language($lang);
+        }
         return (new commentary_service())->get(
             $DB->get_record('sideline', ['id' => $this->instance->id]),
             $this->course,
@@ -162,6 +192,42 @@ final class ai_integration_test extends \advanced_testcase {
         $stored = json_encode($DB->get_records('ai_action_generate_text'));
         $this->assertStringNotContainsString('Maria', $stored);
         $this->assertStringNotContainsString('Alpha unit', $stored);
+    }
+
+    public function test_translation_step_through_core_keeps_tokens_and_core_stores_only_tokens(): void {
+        global $DB;
+        \core_ai\manager::user_policy_accepted((int) $this->student->id, \context_module::instance($this->instance->cmid)->id);
+        $this->mock_provider(200, 2);
+        // A learner whose language is French: there are no phrase lists for French (P-24).
+        $result = $this->get('fr');
+
+        $this->assertCount(2, $this->history, 'Generation in English, then the separate translation step (P-24)');
+        $this->assertSame('ai', $result['commentary']['source']);
+        $this->assertStringContainsString('Très bien', json_encode($result['commentary'], JSON_UNESCAPED_UNICODE));
+        $this->assertStringContainsString('Beta unit', json_encode($result['commentary']), 'Resolved locally after both steps');
+        foreach ($this->history as $call) {
+            $sent = (string) $call['request']->getBody();
+            foreach (['Maria', 'Schmidt', 'Alpha unit', 'Beta unit', 'Secret course'] as $forbidden) {
+                $this->assertStringNotContainsString($forbidden, $sent, "Leaves the site: $forbidden");
+            }
+        }
+        // P-26: core records both actions, with tokens only; the ledger uses the provider's token numbers.
+        $this->assertSame(2, $DB->count_records('ai_action_register'));
+        $stored = json_encode($DB->get_records('ai_action_generate_text'), JSON_UNESCAPED_UNICODE);
+        foreach (['Maria', 'Alpha unit', 'Beta unit'] as $forbidden) {
+            $this->assertStringNotContainsString($forbidden, $stored);
+        }
+        $this->assertStringContainsString('[anonmod', $stored);
+        $this->assertSame([2, 2], array_map('intval', $DB->get_fieldset_sql('SELECT tokens FROM {sideline_aiusage} ORDER BY id')));
+
+        // Core's own privacy deletion blanks prompt and response of the learner's actions.
+        $contextlist = new \core_privacy\local\request\approved_contextlist(
+            $this->student,
+            'core_ai',
+            [\context_module::instance($this->instance->cmid)->id]
+        );
+        \core_ai\privacy\provider::delete_data_for_user($contextlist);
+        $this->assertSame(0, $DB->count_records_select('ai_action_generate_text', $DB->sql_like('prompt', '?'), ['%anon%']));
     }
 
     public function test_provider_errors_and_missing_capability_fall_back_to_templates(): void {

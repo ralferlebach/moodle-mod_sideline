@@ -297,13 +297,61 @@ cd /tmp/fe && npm install babel-jest@30 @babel/core @babel/preset-env
 NODE_PATH=/tmp/fe/node_modules npx jest --config /home/claude/work/moodle-mod_sideline/tests/js/jest.config.js
 ```
 
-**PHP 8.1** (Mindestversion von Moodle 4.5) steht im Container nicht als Laufzeit zur Verfügung. Statische Prüfung:
+**PHP 8.1 und 8.2 zur Laufzeit** (seit 0.3.0) kommen aus dem PPA `ondrej/php`, parallel zu 8.3. `add-apt-repository` fehlt im Container, deshalb wird das Repository von Hand eingetragen:
+
+```bash
+curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x14AA40EC0831756756D7F66C4F4EA0AAE5267A6C" \
+  | gpg --dearmor > /usr/share/keyrings/ondrej-php.gpg
+echo "deb [signed-by=/usr/share/keyrings/ondrej-php.gpg] https://ppa.launchpadcontent.net/ondrej/php/ubuntu noble main" \
+  > /etc/apt/sources.list.d/ondrej-php.list
+apt-get update
+for v in 8.1 8.2; do apt-get install -y php$v-cli php$v-{pgsql,mysql,intl,xml,mbstring,curl,zip,gd,soap,bcmath}; done
+update-alternatives --set php /usr/bin/php8.3      # 8.3 bleibt Standard
+cd /home/claude/moodle405 && php8.1 admin/tool/phpunit/cli/init.php && php8.1 vendor/bin/phpunit --testsuite mod_sideline_testsuite
+```
+
+Zusätzlich die statische Prüfung:
 
 ```bash
 cd /tmp/moodlecs && composer require --dev "phpcompatibility/php-compatibility:^10.0@dev"
 # installed_paths um vendor/phpcompatibility/php-compatibility/PHPCompatibility ergänzen
 /tmp/moodlecs/vendor/bin/phpcs --standard=PHPCompatibility --runtime-set testVersion 8.1- --extensions=php .
 ```
+
+## 8e. Coverage, HTTP-Lasttest, Restore auf fremder Website (0.3.0)
+
+**Coverage** mit pcov (`apt-get install php8.3-pcov`). Moodle 5.1 und neuer liegen unter `public/`, deshalb muss
+`pcov.directory` gesetzt werden, sonst misst pcov nichts:
+
+```bash
+cd /home/claude/moodle
+php -d pcov.enabled=1 -d pcov.directory=$PWD/public/mod/sideline vendor/bin/phpunit \
+  --testsuite mod_sideline_testsuite,slcmod_assign_testsuite,slcmod_quiz_testsuite --coverage-clover /tmp/clover.xml
+php public/mod/sideline/tools/coverage_gate.php /tmp/clover.xml 80
+```
+
+Nur Code, der in einem `CoversClass` oder `CoversFunction` steht, zählt (PHPUnit 11).
+Stand 0.3.0: 89,4 % der Zeilen (3107 von 3475): Klassen, Backup und lib.php.
+
+**k6** liegt als Binärdatei unter den GitHub-Releases (`grafana/k6`, z. B. v1.3.0, `linux-amd64.tar.gz`). Ablauf und
+Messwerte: `tests/load/README.md`. Der Server muss mit `PHP_CLI_SERVER_WORKERS=8` laufen, sonst werden die
+Anfragen nacheinander abgearbeitet.
+
+**Restore auf fremder Website:**
+
+```bash
+php tools/foreign_restore_source.php /home/claude/moodle405       # Quellkurs auf 4.5, gibt die Kurs-ID aus
+cd /home/claude/moodle405 && php admin/cli/backup.php --courseid=<id> --destination=/tmp/bk
+cd /home/claude/moodle && php admin/cli/restore_backup.php --file=/tmp/bk/<datei>.mbz --categoryid=1
+php /home/claude/work/moodle-mod_sideline/tools/foreign_restore_check.php /home/claude/moodle
+```
+
+Ergebnis 0.3.0:
+- Die Konfiguration kommt an.
+- Scope und Regelreferenzen zeigen auf die neuen Kursmodule.
+- Es kommt keine Einwilligung, kein Einwilligungsprotokoll und kein Cache mit.
+
+**`local_moodlecheck`** lässt sich hier nicht in den Moodle-Baum installieren. Die PHPDoc-Prüfung läuft in der CI.
 
 ## 9. Bekannte Abweichungen zum Plugin-Template
 

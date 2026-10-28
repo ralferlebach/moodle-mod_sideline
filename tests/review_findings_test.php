@@ -38,9 +38,21 @@ require_once(__DIR__ . '/fixtures/fake_text_generator.php');
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @covers \mod_sideline\local\group\group_service
  * @covers \mod_sideline\local\instance_config
+ * @covers \mod_sideline\local\service\commentary_service
+ * @covers \mod_sideline\local\service\state_collector
+ * @covers \mod_sideline\local\service\availability_analyser
+ * @covers \mod_sideline\local\service\scope_resolver
+ * @covers \mod_sideline\local\transfer\config_transfer
+ * @covers \mod_sideline\local\dialog\dialog_manager
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\group\group_service::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\instance_config::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\commentary_service::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\state_collector::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\availability_analyser::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\scope_resolver::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\transfer\config_transfer::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\dialog\dialog_manager::class)]
 final class review_findings_test extends \advanced_testcase {
     /** @var \stdClass Course. */
     private \stdClass $course;

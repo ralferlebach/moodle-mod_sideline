@@ -64,7 +64,18 @@ class dialog_manager {
     public static function due_question(\stdClass $sideline, int $userid, array $currentkeys, int $now): ?\stdClass {
         global $DB;
 
-        if (empty($sideline->dialogenabled)) {
+        if (empty($sideline->dialogenabled) || !self::site_allows_interviews()) {
+            return null;
+        }
+        // Site-wide frequency limit per learner across all activities (P-31, P-15).
+        $maxperweek = (int) get_config('mod_sideline', 'interviewmaxperweek');
+        if (
+            $maxperweek > 0 && $DB->count_records_select(
+                'sideline_answer',
+                'userid = ? AND timemodified > ?',
+                [$userid, $now - WEEKSECS]
+            ) >= $maxperweek
+        ) {
             return null;
         }
         $answers = $DB->get_records(
@@ -74,10 +85,16 @@ class dialog_manager {
             'questionid, timemodified',
         );
         $lastinteraction = $answers ? max(array_map(static fn($a) => (int) $a->timemodified, $answers)) : 0;
-        if ($lastinteraction && $now - $lastinteraction < (int) $sideline->dialogcooldown) {
+        // The site's minimum gap is a lower bound for the activity's own cooldown.
+        $gap = max((int) $sideline->dialogcooldown, (int) get_config('mod_sideline', 'interviewmingap'));
+        if ($lastinteraction && $now - $lastinteraction < $gap) {
             return null;
         }
+        $types = self::allowed_types();
         foreach (self::questions((int) $sideline->id) as $question) {
+            if (!in_array($question->qtype, $types, true)) {
+                continue;
+            }
             if ($question->triggerkey !== 'any' && !in_array($question->triggerkey, $currentkeys, true)) {
                 continue;
             }
@@ -88,6 +105,28 @@ class dialog_manager {
             return $question;
         }
         return null;
+    }
+
+    /**
+     * Whether interviews are allowed on this site at all (P-31).
+     *
+     * @return bool
+     */
+    public static function site_allows_interviews(): bool {
+        return (string) get_config('mod_sideline', 'interviewsenabled') !== '0';
+    }
+
+    /**
+     * Question types the site allows (P-31). Without a setting, all types are allowed.
+     *
+     * @return string[]
+     */
+    public static function allowed_types(): array {
+        $setting = get_config('mod_sideline', 'interviewtypes');
+        if ($setting === false) {
+            return question_type::TYPES;
+        }
+        return array_values(array_intersect(question_type::TYPES, explode(',', (string) $setting)));
     }
 
     /**
@@ -106,6 +145,11 @@ class dialog_manager {
         $question = $DB->get_record('sideline_question', ['id' => $questionid, 'sidelineid' => $sideline->id, 'enabled' => 1]);
         if (!$question) {
             throw new \invalid_parameter_exception('Unknown question');
+        }
+        // A question the site policy does not allow is never asked, so it cannot be answered either.
+        // Skipping stays possible, so a learner can always dismiss what is on screen.
+        if (!$skip && (!self::site_allows_interviews() || !in_array($question->qtype, self::allowed_types(), true))) {
+            throw new \invalid_parameter_exception('Question not allowed by the site policy');
         }
         $stored = null;
         if (!$skip) {
@@ -181,13 +225,17 @@ class dialog_manager {
             return [];
         }
         $questions = self::questions((int) $sideline->id, false);
+        // Answers keep their effect only while the site still allows interviews and the question's type (P-31).
+        $siteallows = self::site_allows_interviews();
+        $types = self::allowed_types();
         $result = [];
         foreach ($DB->get_records('sideline_answer', ['sidelineid' => $sideline->id, 'userid' => $userid], 'timemodified') as $a) {
             $q = $questions[$a->questionid] ?? null;
             if (!$q) {
                 continue;
             }
-            $effect = (!$a->skipped && $a->value !== null && $q->enabled)
+            $active = $q->enabled && $siteallows && in_array($q->qtype, $types, true);
+            $effect = (!$a->skipped && $a->value !== null && $active)
                 ? question_type::effect($q->qtype, $q->configdata, $a->value) : 'none';
             $result[] = [
                 'questionid' => (int) $q->id,

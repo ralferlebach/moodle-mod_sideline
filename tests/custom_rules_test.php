@@ -38,11 +38,17 @@ require_once(__DIR__ . '/fixtures/fake_text_generator.php');
  * @covers \mod_sideline\local\rules\rule_store
  * @covers \mod_sideline\local\rules\rule_preview
  * @covers \mod_sideline\local\transfer\config_transfer
+ * @covers \mod_sideline\local\service\rule_evaluator
+ * @covers \mod_sideline\local\service\message_composer
+ * @covers \mod_sideline\local\ai\pseudonymizer
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(rule_schema::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(rule_store::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(rule_preview::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(config_transfer::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\rule_evaluator::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\message_composer::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\ai\pseudonymizer::class)]
 final class custom_rules_test extends \advanced_testcase {
     /** @var int Fixed time. */
     private const NOW = 1800000000;
