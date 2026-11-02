@@ -111,8 +111,16 @@ final class group_mode_test extends \advanced_testcase {
      */
     private function complete(\stdClass $user, int $state = COMPLETION_COMPLETE): void {
         $this->setAdminUser();
+        global $DB;
         $cm = get_coursemodule_from_instance('page', $this->pagea->id);
         (new \completion_info($this->course))->update_state($cm, $state, $user->id, true);
+        // Group statements use a window that ends at the start of today (issue #12): yesterday counts.
+        $DB->set_field(
+            'course_modules_completion',
+            'timemodified',
+            group_service::day_start(time()) - HOURSECS,
+            ['coursemoduleid' => $cm->id, 'userid' => $user->id]
+        );
     }
 
     /**
@@ -175,7 +183,9 @@ final class group_mode_test extends \advanced_testcase {
         }
         $blocks = $this->group_blocks($this->commentary($sideline, $context));
         $this->assertArrayHasKey('group_together', $blocks);
-        $this->assertStringContainsString('3', $blocks['group_together']);
+        // A coarse band, never the exact number (issue #12).
+        $this->assertStringContainsString('A few', $blocks['group_together']);
+        $this->assertStringNotContainsString('3', $blocks['group_together']);
         foreach (['Paul', 'Petra', 'Pia'] as $name) {
             $this->assertStringNotContainsString($name, $blocks['group_together']);
         }
@@ -320,9 +330,14 @@ final class group_mode_test extends \advanced_testcase {
             return $echo($prompt);
         };
         $commentary = $this->commentary($sideline, $context, $fake);
-        $this->assertSame(1, $fake->calls);
+        $this->assertSame(2, $fake->calls, 'The text with the withdrawn person is discarded and computed again');
         $this->assertStringNotContainsString('Paul', json_encode($commentary));
-        $this->assertSame(0, $DB->count_records('sideline_cache', ['sidelineid' => $sideline->id]));
+        // What is stored now is computed without the person.
+        $this->assertStringNotContainsString('Paul', (string) $DB->get_field(
+            'sideline_cache',
+            'commentary',
+            ['sidelineid' => $sideline->id]
+        ));
     }
 
     public function test_6_widening_the_level_requires_a_new_decision(): void {

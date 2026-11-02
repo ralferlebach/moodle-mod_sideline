@@ -16,7 +16,7 @@ Grundsatz: Geprüft wird mit denselben Werkzeugen und Optionen wie auf GitHub, n
 | Komponente | Wert |
 |---|---|
 | Moodle | 4.5, 5.0, 5.1, 5.2, 5.3 (Branches `MOODLE_405_STABLE` … `MOODLE_503_STABLE`) |
-| PHP | 8.3 (Standard), 8.1 und 8.2 parallel für die Matrix |
+| PHP | 8.3 (Standard), 8.2 parallel für die Matrix (8.1 nur noch für Laufzeittests außerhalb der Matrix) |
 | Datenbanken | PostgreSQL 17 (Port 5432), MariaDB 11.4 (Port 3307) |
 | moodle-plugin-ci | 4.5.x unter `/opt/mpci/ci`, mit Wrappern unter `/opt/mpci/wrap` |
 | Browser | Chromium 153 aus Playwright (`/opt/pw-browsers`), ChromeDriver 153, Xvfb |
@@ -135,7 +135,7 @@ mkdir -p /tmp/claude-0/cd && cd /tmp/claude-0/cd && npx -y @puppeteer/browsers i
 
 ```bash
 tools/ci-local/ci.sh MOODLE_503_STABLE pgsql 8.3            # alle Schritte
-tools/ci-local/ci.sh MOODLE_405_STABLE pgsql 8.1 "codechecker phpdoc"   # einzelne Schritte, nach einem install
+tools/ci-local/ci.sh MOODLE_405_STABLE pgsql 8.2 "codechecker phpdoc"   # einzelne Schritte, nach einem install
 SRC=/pfad/zum/entpackten/zip/sideline tools/ci-local/ci.sh MOODLE_502_STABLE mariadb 8.3   # Abnahme des ZIP
 ```
 
@@ -148,8 +148,21 @@ Schritte und Optionen sind die aus `.github/workflows/moodle-plugin-ci-main.yml`
 - `phpdoc --max-warnings 0`;
 - `validate`, `savepoints`, `mustache`;
 - `grunt --max-lint-warnings 0`;
-- `phpunit --fail-on-warning`;
+- `phpunit --fail-on-warning --fail-on-skipped --fail-on-incomplete` (ein übersprungener Test ist ein Fehler);
+- `adapters`: dieselbe PHPUnit-Prüfung für `slcmod_assign_testsuite` und `slcmod_quiz_testsuite`;
+- `race`: installiert die Hauptseite (`admin/cli/install_database.php`) und startet `tools/race/run.php`, echte Parallelprozesse für KI-Kontingent, Widerruf und Invalidierung (Issues #3, #8);
 - `behat --profile chrome --tags "@mod_sideline&&~@broken"`.
+
+Dazu kommen zwei weitere Jobs des Workflows:
+
+```bash
+tools/ci-local/js-checks.sh                                     # Job "frontend" (Abschnitt 5)
+tools/ci-local/upgrade.sh MOODLE_405_STABLE pgsql 8.3 /pfad/zum/vorigen/release   # Job "upgrade"
+```
+
+`upgrade.sh` installiert Moodle mit dem vorigen Release und legt mit dessen Code Daten an (`tools/ci/upgrade_seed.php`). Dann ersetzt es das Plugin durch die volle aktuelle Codebasis, führt das Upgrade aus, prüft das Schema (`check_database_schema.php`) und die Daten (`tools/ci/upgrade_verify.php`).
+
+Ein Release-Gate oder einen Versionsgleichlauf gibt es nicht mehr (Issue #2). „CI complete“ fasst nur die funktionalen Jobs zusammen: Matrix, Frontend, Upgrade, Artefakt, Coverage, veraltete Dateien.
 
 Ergebnis je Schritt steht in `/home/claude/ci/<tag>/ci-logs/rc.txt`, das Protokoll in `<schritt>.log`. Behat-Läufe warten aufeinander (gemeinsame Ports 8000 und 4444), alles andere kann parallel laufen.
 
@@ -159,7 +172,7 @@ Wie in der CI:
 
 | Moodle | PHP | DB |
 |---|---|---|
-| 4.5 | 8.1 | pgsql |
+| 4.5 | 8.2 | pgsql |
 | 4.5 | 8.3 | mariadb |
 | 5.0 | 8.2 | pgsql |
 | 5.0 | 8.3 | mariadb |
@@ -168,7 +181,9 @@ Wie in der CI:
 | 5.3 | 8.3 | pgsql |
 | 5.3 | 8.3 | mariadb |
 
-Vor einer Auslieferung laufen mindestens 4.5/8.1/pgsql und 5.3/8.3/pgsql vollständig grün. Vor einem Release läuft die ganze Matrix. Was moodle-plugin-ci auf welcher Version anders prüft, steht in Abschnitt 9.
+PHP 8.1 und älter laufen in keiner Matrix mehr (Issue #1). Moodle 4.5 unterstützt 8.1 weiterhin; `version.php` bleibt unverändert.
+
+Vor einer Auslieferung laufen mindestens 4.5/8.2/pgsql und 5.3/8.3/pgsql vollständig grün. Vor einem Release läuft die ganze Matrix. Was moodle-plugin-ci auf welcher Version anders prüft, steht in Abschnitt 9.
 
 ## 5. Frontend-Prüfungen
 
@@ -247,12 +262,16 @@ Reihenfolge, ohne Ausnahme:
 - **Parallele moodle-plugin-ci-Läufe** teilen sich dessen `.env` (Pfad des zuletzt installierten Baums). `ci.sh` setzt `MOODLE_DIR` und `PLUGIN_DIR` deshalb selbst. Gesetzte Variablen haben Vorrang vor der Datei.
 - **`pkill -f <muster>`** trifft auch die eigene Shell, wenn das Muster in ihrer Befehlszeile steht. Server besser über ihre PID beenden (`… & SPID=$!; …; kill $SPID`).
 - **Platte voll** zeigt sich als „Avail 0“ bei wenig „Used“ und als seltsame Composer-Fehler („sha1 file … write error“). Alte CI-Bäume und `~/.cache/composer/vcs` löschen.
+- **Races und Maschinenlast:** Feste Verzögerungen reichen unter Last nicht. Der erzeugende Prozess war noch nicht im Anbieteraufruf, als die Invalidierung kam (4.5/mariadb mit acht parallelen Zellen). Die Prozesse warten deshalb auf ein Signal aus dem Anbieteraufruf (`--signal`, `--waitfor`).
+- **PostgreSQL nach Masseneinfügen:** Ohne Statistik plant PostgreSQL die Gruppenabfrage schlecht (rund 400 ms statt 20 ms bei 5000 Personen). Messwerkzeuge führen vorher `ANALYZE` aus.
+- **Gruppen direkt in die Datenbank geschrieben:** Moodles Gruppencaches (`groupdata`, `user_group_groupings`) müssen invalidiert werden, sonst sieht der Code die Gruppen nicht. `cache_helper::purge_all()` allein reicht im selben Prozess nicht.
+- **Moodle 5.x CLI:** `admin/cli/*.php` liegt im Wurzelverzeichnis, nicht unter `public/`.
 - **k6 und Moodle-Sitzungen:** `noCookiesReset`, sonst ist jede zweite Anfrage abgemeldet.
 - **Playwright-Login:** erst nach `networkidle` ausfüllen; Benutzertouren im Seed abschalten.
 - `core_ai\manager::user_policy_accepted()` **schreibt**; zum Lesen `get_user_policy_status()`.
 
 ## 10. Verifikationsstand
 
-Stand 02.11.2026, Version 0.3.2: Alle Abschnitte dieser Anleitung sind im Container ausgeführt. Die CI-Matrix aus Abschnitt 4.3 lief vollständig grün auf dem entpackten Auslieferungs-ZIP, ebenso `js-checks.sh` und Playwright auf 4.5 und 5.3. Einzelheiten: `docs/TRACEABILITY.md`, Abschnitt Läufe.
+Stand 03.11.2026, Version 0.4.0: Alle Abschnitte dieser Anleitung sind im Container ausgeführt. Auf dem entpackten Auslieferungs-ZIP lief Folgendes vollständig grün: die CI-Matrix aus Abschnitt 4.3 (je 14 Schritte inklusive Adapter-Suites und Races), `js-checks.sh`, `upgrade.sh` auf 4.5/pgsql und 5.3/mariadb, Playwright auf 4.5 und 5.3 sowie `tools/bench_groups.php` und k6 mit Gruppenmodus auf 5.3 mit beiden Datenbanken. Einzelheiten: `docs/TRACEABILITY.md`, Abschnitt Läufe.
 
 Nicht lokal nachgebildet: der Selenium-Container (stattdessen ChromeDriver mit demselben Chromium, Profil `chrome`) und die GitHub-Dienste für PostgreSQL und MariaDB (stattdessen lokale Server derselben Hauptversionen).

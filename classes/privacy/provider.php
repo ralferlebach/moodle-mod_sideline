@@ -234,14 +234,10 @@ class provider implements
             "sidelineid = :sid AND adminid $insql",
             ['sid' => $sidelineid] + $inparams,
         );
-        // Other learners' commentary may name these users when group mode is or was on.
-        $mode = $DB->get_field('sideline', 'sharingmode', ['id' => $sidelineid]);
-        if (
-            $mode !== \mod_sideline\local\instance_config::GROUP_INDIVIDUAL
-                || $DB->record_exists_select('sideline_publish', 'sidelineid = ?', [$sidelineid])
-        ) {
-            $DB->delete_records('sideline_cache', ['sidelineid' => $sidelineid]);
-        }
+        // Other learners' commentary may name these users or count them in a group statement, whatever the
+        // mode is now and even when their publication rows are already gone (issue #14). Cached texts are
+        // derived data and are rebuilt on the next request, so every cached text of the instance is dropped.
+        $DB->delete_records('sideline_cache', ['sidelineid' => $sidelineid]);
     }
 
     /**

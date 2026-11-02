@@ -69,7 +69,7 @@ Feature: Sideline Learning Coach
       | activity | name  | course | idnumber |
       | sideline | Coach | C1     | coach1   |
     When I am on the "Coach" "mod_sideline > Transfer" page logged in as "teacher1"
-    Then I should see "They never contain answers, consents, caches or any other personal data."
+    Then I should see "They never contain answers, consents, consent logs, caches, traces, debug logs, tokens or any other personal data."
     And "Export configuration" "button" should exist
 
   Scenario: Administrators approve site personas
@@ -206,3 +206,88 @@ Feature: Sideline Learning Coach
     And I log out
     And I am on the "Course 1" "course" page logged in as "student1"
     Then I should not see "Sam from your group"
+
+  @javascript
+  Scenario: A withdrawal in another tab stops the open panel at its next request
+    Given the following "activities" exist:
+      | activity | name  | course | idnumber | consentrequired | dialogenabled | display |
+      | sideline | Coach | C1     | coach1   | 1               | 1             | inline  |
+    And the following "mod_sideline > questions" exist:
+      | activity | prompt           | options                    |
+      | coach1   | How is it going? | Fine:none;Busy:small_steps |
+    When I am on the "Course 1" "course" page logged in as "student1"
+    And I press "I agree"
+    Then I should see "A quick question: How is it going?"
+    And "student1" withdraws the consent for "coach1" elsewhere
+    And I click on "Busy" "text"
+    And I press "Answer"
+    Then I should see "The commentary could not be loaded."
+    And I should not see "A quick question: How is it going?"
+    And I press "Try again"
+    Then I should see "May the coach look at your progress?"
+    And I should not see "You have completed 0 of 1 activities so far."
+
+  @javascript
+  Scenario: A teacher's own text is phrased by the AI, a text with a name of the course never leaves the site
+    Given the following "users" exist:
+      | username | firstname | lastname |
+      | student2 | Sam       | Two      |
+    And the following "course enrolments" exist:
+      | user     | course | role    |
+      | student2 | C1     | student |
+    And the Sideline AI is simulated
+    And the following "activities" exist:
+      | activity | name    | course | idnumber | display | aienabled |
+      | sideline | Coach A | C1     | coach1   | inline  | 1         |
+      | sideline | Coach B | C1     | coach2   | inline  | 1         |
+    And the following "mod_sideline > rules" exist:
+      | activity | key          | template                         |
+      | coach1   | custom_clean | Do not forget {label}, it helps. |
+      | coach2   | custom_named | Ask Sam about {label}.           |
+    When I am on the "Course 1" "course" page logged in as "student1"
+    Then I should see "Simulated coach: this is about Unit one"
+    And I should see "Ask Sam about Unit one."
+    And the simulated Sideline AI should have received 1 prompt
+
+  @javascript @accessibility
+  Scenario: Learners select several options of a question and see them in their answers
+    Given the following "activities" exist:
+      | activity | name  | course | idnumber | dialogenabled | display |
+      | sideline | Coach | C1     | coach1   | 1             | inline  |
+    And the following "mod_sideline > questions" exist:
+      | activity | prompt               | options                                                 | multiple | minselect | maxselect |
+      | coach1   | What holds you back? | Little time:focus_deadlines;Tired:pause_ok;Nothing:none | 1        | 1         | 2         |
+    When I am on the "Course 1" "course" page logged in as "student1"
+    Then I should see "Select 1 to 2 options."
+    And the page should meet accessibility standards with "wcag131, wcag141, wcag412" extra tests
+    And I click on "Little time" "checkbox"
+    And I click on "Tired" "checkbox"
+    And I press "Answer"
+    And I press "Show my answers"
+    Then I should see "Little time, Tired"
+
+  @javascript
+  Scenario: Admitting a further group asks sharing learners to decide again
+    Given the following "users" exist:
+      | username | firstname | lastname |
+      | student2 | Sam       | Two      |
+    And the following "course enrolments" exist:
+      | user     | course | role    |
+      | student2 | C1     | student |
+    And the following "groups" exist:
+      | name | course | idnumber |
+      | Red  | C1     | G1       |
+    And the following "group members" exist:
+      | user     | group |
+      | student2 | G1    |
+    And the following "activities" exist:
+      | activity | name  | course | idnumber | display | sharingmode | grouppublish |
+      | sideline | Coach | C1     | coach1   | inline  | closed      | named        |
+    When I am on the "Course 1" "course" page logged in as "student2"
+    And I click on "Share my completed activities with my group" "checkbox"
+    And I press "Save"
+    And the following "groups" exist:
+      | name | course | idnumber |
+      | Blue | C1     | G2       |
+    And I reload the page
+    Then I should see "The sharing information has changed. Please decide again."

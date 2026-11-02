@@ -118,5 +118,62 @@ function xmldb_sideline_upgrade($oldversion) {
         upgrade_mod_savepoint(true, 2026102802, 'sideline');
     }
 
+    // 0.3.x to 0.4.0: open AI reservations (issue #8), configurable group event types (issue #6),
+    // course sources without a verifiable teacher (issue #5).
+    if ($oldversion < 2026110300) {
+        $table = new xmldb_table('sideline_aiusage');
+        $field = new xmldb_field('timecompleted', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0', 'timecreated');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+            // Every earlier row belongs to a call that has ended.
+            $DB->execute('UPDATE {sideline_aiusage} SET timecompleted = timecreated');
+        }
+        $table = new xmldb_table('sideline');
+        $field = new xmldb_field('groupevents', XMLDB_TYPE_CHAR, '100', null, XMLDB_NOTNULL, null, 'completed', 'groupversion');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+        $field = new xmldb_field('groupcircle', XMLDB_TYPE_TEXT, null, null, null, null, null, 'groupevents');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+        // Anonymous aggregates of two people are no longer allowed (issue #12): raising the minimum
+        // narrows sharing, so no new decision of the learners is needed.
+        $DB->set_field_select('sideline', 'groupminsize', 3, 'groupminsize < 3');
+
+        // Sources saved before 0.3.0 carry no teacher. They no longer count (issue #5) until a teacher
+        // who may manage activities there saves the settings again. Record which instances are affected.
+        mod_sideline_upgrade_report_legacy_sources();
+        upgrade_mod_savepoint(true, 2026110300, 'sideline');
+    }
+
     return true;
+}
+
+/**
+ * Report course sources and course branches without a verifiable teacher (issue #5).
+ *
+ * They are kept, so that a teacher can confirm them by saving the settings, but scope_resolver
+ * ignores them from 0.4.0 on. The affected instances get a new configuration version (their cached
+ * texts become stale) and are written to the upgrade log, so the change is traceable.
+ */
+function mod_sideline_upgrade_report_legacy_sources(): void {
+    global $DB;
+
+    $ids = [];
+    foreach (['sideline_source', 'sideline_sourcecat'] as $table) {
+        foreach ($DB->get_fieldset_select($table, 'DISTINCT sidelineid', 'usermodified = 0') as $id) {
+            $ids[(int) $id] = true;
+        }
+    }
+    foreach (array_keys($ids) as $id) {
+        $DB->execute('UPDATE {sideline} SET configversion = configversion + 1 WHERE id = ?', [$id]);
+        $DB->delete_records('sideline_cache', ['sidelineid' => $id]);
+        upgrade_log(
+            UPGRADE_LOG_NOTICE,
+            'mod_sideline',
+            'Course sources without a verifiable teacher are inactive until re-authorised',
+            'sideline instance ' . $id,
+        );
+    }
 }

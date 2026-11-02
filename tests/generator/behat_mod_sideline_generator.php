@@ -31,6 +31,12 @@ class behat_mod_sideline_generator extends behat_generator_base {
                 'required' => ['activity', 'prompt', 'options'],
                 'switchids' => ['activity' => 'cmid'],
             ],
+            'rules' => [
+                'singular' => 'rule',
+                'datagenerator' => 'rule',
+                'required' => ['activity', 'key', 'template'],
+                'switchids' => ['activity' => 'cmid'],
+            ],
         ];
     }
 
@@ -55,8 +61,29 @@ class behat_mod_sideline_generator extends behat_generator_base {
             [$label, $effect] = array_map('trim', explode(':', $option . ':none'));
             $options[] = ['label' => $label, 'effect' => $effect];
         }
+        // Optional: "multiple" with "minselect" and "maxselect" for several selections (issue #11).
+        $config = ['options' => $options];
+        if (!empty($data['multiple'])) {
+            $config += ['multiple' => 1, 'minselect' => (int) ($data['minselect'] ?? 1),
+                'maxselect' => (int) ($data['maxselect'] ?? count($options))];
+        }
         $this->datagenerator->get_plugin_generator('mod_sideline')->create_question([
-            'cmid' => $data['cmid'], 'qtype' => 'mc', 'prompt' => $data['prompt'], 'config' => ['options' => $options],
+            'cmid' => $data['cmid'], 'qtype' => 'mc', 'prompt' => $data['prompt'], 'config' => $config,
+        ]);
+    }
+
+    /**
+     * Create a custom rule that fires while any observed activity is not completed.
+     *
+     * @param array $data activity, key, template (English).
+     */
+    protected function process_rule(array $data): void {
+        global $DB;
+        $sideline = $DB->get_record('sideline', ['id' => $DB->get_field('course_modules', 'instance', ['id' => $data['cmid']])]);
+        $this->datagenerator->get_plugin_generator('mod_sideline')->create_rule($sideline, [
+            'key' => $data['key'], 'category' => 'safety', 'priority' => 1, 'match' => 'all',
+            'conditions' => [['type' => 'activity', 'cmid' => 0, 'field' => 'completion', 'is' => 'no']],
+            'action' => 'none', 'templates' => ['en' => $data['template']],
         ]);
     }
 }

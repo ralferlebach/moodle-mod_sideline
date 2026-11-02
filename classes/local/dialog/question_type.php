@@ -43,6 +43,12 @@ class question_type {
     /** @var string[] Allowed effects. */
     public const EFFECTS = ['none', 'focus_deadlines', 'small_steps', 'pause_ok'];
 
+    /** @var string[] Precedence of effects when several selected options carry one (multiple choice, issue #11). */
+    public const EFFECT_PRIORITY = ['focus_deadlines', 'small_steps', 'pause_ok'];
+
+    /** @var string[] How the effects of several selected options combine: by precedence, or not at all. */
+    public const COMBINE = ['priority', 'none'];
+
     /** @var int Longest free text answer. */
     public const MAX_TEXT = 1000;
 
@@ -69,7 +75,17 @@ class question_type {
                 if (count($options) < 2 || count($options) > 8) {
                     $errors[] = get_string('err_q_options', 'mod_sideline');
                 }
-                return [['options' => $options], $errors];
+                // Single choice (default) or multiple choice with a minimum and a maximum number of selections.
+                $multiple = !empty($config['multiple']);
+                $min = $multiple ? max(1, (int) ($config['minselect'] ?? 1)) : 1;
+                $max = $multiple ? (int) ($config['maxselect'] ?? count($options)) : 1;
+                if ($multiple && ($max < $min || $max > max(1, count($options)))) {
+                    $errors[] = get_string('err_q_selectrange', 'mod_sideline');
+                }
+                $combine = (string) ($config['combine'] ?? 'priority');
+                $combine = in_array($combine, self::COMBINE, true) ? $combine : 'priority';
+                return [['options' => $options, 'multiple' => $multiple, 'minselect' => $min, 'maxselect' => $max,
+                    'combine' => $combine], $errors];
             case self::TEXT:
                 $max = min(self::MAX_TEXT, max(10, (int) ($config['maxlength'] ?? 500)));
                 return [['maxlength' => $max], $errors];
@@ -122,8 +138,28 @@ class question_type {
     public static function normalise_value(string $type, array $config, mixed $value): ?string {
         switch ($type) {
             case self::MC:
-                $index = filter_var($value, FILTER_VALIDATE_INT);
-                return ($index !== false && isset($config['options'][$index])) ? json_encode($index) : null;
+                if (empty($config['multiple'])) {
+                    $index = filter_var($value, FILTER_VALIDATE_INT);
+                    return ($index !== false && isset($config['options'][$index])) ? json_encode($index) : null;
+                }
+                // Multiple choice: a JSON list of distinct, known option indexes within the allowed count.
+                $values = is_string($value) ? json_decode($value, true) : $value;
+                if (!is_array($values) || !array_is_list($values)) {
+                    return null;
+                }
+                $indexes = [];
+                foreach ($values as $v) {
+                    $i = is_int($v) || (is_string($v) && ctype_digit($v)) ? (int) $v : null;
+                    if ($i === null || !isset($config['options'][$i]) || in_array($i, $indexes, true)) {
+                        return null;
+                    }
+                    $indexes[] = $i;
+                }
+                if (count($indexes) < (int) $config['minselect'] || count($indexes) > (int) $config['maxselect']) {
+                    return null;
+                }
+                sort($indexes);
+                return json_encode($indexes);
             case self::TEXT:
                 $text = trim(clean_param((string) $value, PARAM_NOTAGS));
                 if ($text === '' || mb_strlen($text) > (int) $config['maxlength']) {
@@ -169,7 +205,20 @@ class question_type {
         $value = json_decode($stored, true);
         switch ($type) {
             case self::MC:
-                return $config['options'][(int) $value]['effect'] ?? 'none';
+                if (!is_array($value)) {
+                    return $config['options'][(int) $value]['effect'] ?? 'none';
+                }
+                if (($config['combine'] ?? 'priority') === 'none') {
+                    return 'none';
+                }
+                // Several options with different effects: the one with the highest precedence wins.
+                $effects = array_map(static fn($i): string => $config['options'][(int) $i]['effect'] ?? 'none', $value);
+                foreach (self::EFFECT_PRIORITY as $effect) {
+                    if (in_array($effect, $effects, true)) {
+                        return $effect;
+                    }
+                }
+                return 'none';
             case self::SLIDER:
                 if ($config['threshold'] === null || !is_numeric($value)) {
                     return 'none';

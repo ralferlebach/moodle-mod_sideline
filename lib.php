@@ -169,6 +169,8 @@ function sideline_save_relations(stdClass $data): void {
             (array) ($data->groupingids ?? [])
         );
     }
+    // Every change of mode or groups is compared with the circle learners decided for (issue #9).
+    \mod_sideline\local\instance_config::refresh_group_circle((int) $data->id);
 }
 
 /**

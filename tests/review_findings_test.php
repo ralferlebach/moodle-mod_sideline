@@ -76,12 +76,12 @@ final class review_findings_test extends \advanced_testcase {
         $this->peer = $gen->create_and_enrol($this->course, 'student', ['firstname' => 'Paula']);
         $gen->create_group_member(['groupid' => $this->group->id, 'userid' => $this->peer->id]);
         $this->setAdminUser();
-        (new \completion_info($this->course))->update_state(
-            get_coursemodule_from_instance('page', $this->page->id),
-            COMPLETION_COMPLETE,
-            $this->peer->id,
-            true
-        );
+        global $DB;
+        $cm = get_coursemodule_from_instance('page', $this->page->id);
+        (new \completion_info($this->course))->update_state($cm, COMPLETION_COMPLETE, $this->peer->id, true);
+        // Group statements use a window that ends at the start of today (issue #12): yesterday counts.
+        $DB->set_field('course_modules_completion', 'timemodified', \mod_sideline\local\group\group_service::day_start(time())
+            - HOURSECS, ['coursemoduleid' => $cm->id, 'userid' => $this->peer->id]);
     }
 
     /**

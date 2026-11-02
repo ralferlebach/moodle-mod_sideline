@@ -3,7 +3,7 @@
 # with the same commands and options (docs/environment-setup.md, section 4). One-time setup: setup.sh.
 #
 # Usage: tools/ci-local/ci.sh <MOODLE_BRANCH> <pgsql|mariadb> <php-version> [steps]
-#   steps: "all" (default) or a list such as "install codechecker phpunit".
+#   steps: "all" (default) or a list such as "install codechecker phpunit adapters race".
 #   SRC=<dir>  plugin to test (default: this working copy; for the release check the unpacked ZIP).
 # Results: $CI_WORK/<tag>/ci-logs/rc.txt (one "step rc=N" line per step) and one log per step.
 #
@@ -18,7 +18,7 @@ SRC=${SRC:-$(cd "$HERE/../.." && pwd)}
 MPCI=${MPCI:-/opt/mpci}
 CI_WORK=${CI_WORK:-/home/claude/ci}
 CHROMEDRIVER=${CHROMEDRIVER:-$(ls /tmp/claude-0/cd/chromedriver/linux-*/chromedriver-linux64/chromedriver 2>/dev/null | tail -1)}
-TAG=$(echo "$BRANCH" | sed 's/MOODLE_\([0-9]*\)_STABLE/\1/')-$DB-$PHPV
+TAG=${CI_TAG:-$(echo "$BRANCH" | sed "s/MOODLE_\([0-9]*\)_STABLE/\1/")-$DB-$PHPV}
 W=$CI_WORK/$TAG
 declare -A TREE=([MOODLE_405_STABLE]=/home/claude/moodle405 [MOODLE_500_STABLE]=/home/claude/moodle500
     [MOODLE_501_STABLE]=/home/claude/moodle501 [MOODLE_502_STABLE]=/home/claude/moodle502 [MOODLE_503_STABLE]=/home/claude/moodle)
@@ -72,7 +72,17 @@ want validate && run validate moodle-plugin-ci validate
 want savepoints && run savepoints moodle-plugin-ci savepoints
 want mustache && run mustache moodle-plugin-ci mustache
 want grunt && run grunt moodle-plugin-ci grunt --max-lint-warnings 0
-want phpunit && run phpunit moodle-plugin-ci phpunit --fail-on-warning
+want phpunit && run phpunit moodle-plugin-ci phpunit --fail-on-warning --fail-on-skipped --fail-on-incomplete
+if want adapters; then
+    run adapters bash -c 'for s in slcmod_assign_testsuite slcmod_quiz_testsuite; do
+        moodle-plugin-ci phpunit --fail-on-warning --fail-on-skipped --fail-on-incomplete --testdox --testsuite $s || exit 1; done'
+fi
+if want race; then
+    # The races need a site of their own (main tables next to the PHPUnit and Behat ones), as on GitHub.
+    php moodle/admin/cli/install_database.php --agree-license --adminpass=Admin1! --adminemail=admin@example.com \
+        --fullname=CI --shortname=CI > ci-logs/race-install.log 2>&1
+    run race php "$W/$web/mod/sideline/tools/race/run.php"
+fi
 if want behat; then
     # One Behat run at a time: all runs share port 8000 (behat_wwwroot) and 4444 (WebDriver).
     exec 9>/tmp/claude-0/behat.lock; flock 9

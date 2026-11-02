@@ -25,11 +25,11 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'mod_sideline';
-$plugin->version   = 2026110201;
+$plugin->version   = 2026110300;
 $plugin->requires  = 2024100700; // Moodle 4.5.
 $plugin->supported = [405, 503];
 $plugin->maturity  = MATURITY_BETA;
-$plugin->release   = '0.3.2';
+$plugin->release   = '0.4.0';
 
 // Declare the MINIMUM version of each dependency that provides the API in use - never the current
 // build number. An exact pin breaks installation as soon as a sibling lags by a single release,

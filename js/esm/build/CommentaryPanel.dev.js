@@ -204,7 +204,7 @@ const CommentaryPanel = /* @__PURE__ */ __name(({ cmid, typing, strings }) => {
     const groupmode = data.sharingmode ?? "individual";
     const namesallowed = data.grouplevel === "named" || data.grouplevel === "named_with_group";
     body = /* @__PURE__ */ jsxDEV(Fragment, { children: [
-      /* @__PURE__ */ jsxDEV("div", { "data-region": "commentary", children: data.blocks.map((block) => /* @__PURE__ */ jsxDEV(Block, { block, typing }, block.key, false, {
+      /* @__PURE__ */ jsxDEV("div", { "data-region": "commentary", lang: data.locale || void 0, children: data.blocks.map((block) => /* @__PURE__ */ jsxDEV(Block, { block, typing }, block.key, false, {
         fileName: "public/mod/sideline/js/esm/src/CommentaryPanel.tsx",
         lineNumber: 187,
         columnNumber: 49
@@ -213,6 +213,16 @@ const CommentaryPanel = /* @__PURE__ */ __name(({ cmid, typing, strings }) => {
         lineNumber: 186,
         columnNumber: 17
       }),
+      data.source === "translated" ? /* @__PURE__ */ jsxDEV("p", { className: "small text-muted mb-1", "data-region": "translated", children: strings.translatedNote }, void 0, false, {
+        fileName: "public/mod/sideline/js/esm/src/CommentaryPanel.tsx",
+        lineNumber: 190,
+        columnNumber: 21
+      }) : null,
+      data.langfallback ? /* @__PURE__ */ jsxDEV("p", { className: "small text-muted mb-1", "data-region": "langfallback", children: strings.languageFallback }, void 0, false, {
+        fileName: "public/mod/sideline/js/esm/src/CommentaryPanel.tsx",
+        lineNumber: 193,
+        columnNumber: 21
+      }) : null,
       question ? /* @__PURE__ */ jsxDEV(
         QuestionForm,
         {
@@ -224,14 +234,14 @@ const CommentaryPanel = /* @__PURE__ */ __name(({ cmid, typing, strings }) => {
         false,
         {
           fileName: "public/mod/sideline/js/esm/src/CommentaryPanel.tsx",
-          lineNumber: 191,
+          lineNumber: 197,
           columnNumber: 21
         }
       ) : null,
       personas.length > 1 ? /* @__PURE__ */ jsxDEV("div", { className: "mt-3", "data-region": "persona", children: [
         /* @__PURE__ */ jsxDEV("label", { htmlFor: `${id}-persona`, className: "form-label me-2", children: strings.personaLabel }, void 0, false, {
           fileName: "public/mod/sideline/js/esm/src/CommentaryPanel.tsx",
-          lineNumber: 197,
+          lineNumber: 203,
           columnNumber: 25
         }),
         /* @__PURE__ */ jsxDEV(
@@ -243,7 +253,7 @@ const CommentaryPanel = /* @__PURE__ */ __name(({ cmid, typing, strings }) => {
             onChange: (e) => act(() => setPersona(cmid, e.target.value)),
             children: personas.map((p) => /* @__PURE__ */ jsxDEV("option", { value: p.key, children: p.name }, p.key, false, {
               fileName: "public/mod/sideline/js/esm/src/CommentaryPanel.tsx",
-              lineNumber: 201,
+              lineNumber: 207,
               columnNumber: 50
             }))
           },
@@ -251,13 +261,13 @@ const CommentaryPanel = /* @__PURE__ */ __name(({ cmid, typing, strings }) => {
           false,
           {
             fileName: "public/mod/sideline/js/esm/src/CommentaryPanel.tsx",
-            lineNumber: 198,
+            lineNumber: 204,
             columnNumber: 25
           }
         )
       ] }, void 0, true, {
         fileName: "public/mod/sideline/js/esm/src/CommentaryPanel.tsx",
-        lineNumber: 196,
+        lineNumber: 202,
         columnNumber: 21
       }) : null,
       groupmode !== "individual" ? /* @__PURE__ */ jsxDEV("form", { className: "mt-3", "data-region": "sharing", onSubmit: (e) => {
@@ -267,17 +277,17 @@ const CommentaryPanel = /* @__PURE__ */ __name(({ cmid, typing, strings }) => {
         /* @__PURE__ */ jsxDEV("fieldset", { children: [
           /* @__PURE__ */ jsxDEV("legend", { className: "h6", children: strings.sharingTitle }, void 0, false, {
             fileName: "public/mod/sideline/js/esm/src/CommentaryPanel.tsx",
-            lineNumber: 212,
+            lineNumber: 218,
             columnNumber: 29
           }),
           /* @__PURE__ */ jsxDEV("p", { className: "small", children: strings.sharingText }, void 0, false, {
             fileName: "public/mod/sideline/js/esm/src/CommentaryPanel.tsx",
-            lineNumber: 213,
+            lineNumber: 219,
             columnNumber: 29
           }),
           data.sharereconsent ? /* @__PURE__ */ jsxDEV("p", { className: "small", role: "status", children: strings.sharingReconsent }, void 0, false, {
             fileName: "public/mod/sideline/js/esm/src/CommentaryPanel.tsx",
-            lineNumber: 214,
+            lineNumber: 220,
             columnNumber: 52
           }) : null,
           /* @__PURE__ */ jsxDEV("div", { className: "form-check", children: [
@@ -294,18 +304,18 @@ const CommentaryPanel = /* @__PURE__ */ __name(({ cmid, typing, strings }) => {
               false,
               {
                 fileName: "public/mod/sideline/js/esm/src/CommentaryPanel.tsx",
-                lineNumber: 216,
+                lineNumber: 222,
                 columnNumber: 33
               }
             ),
             /* @__PURE__ */ jsxDEV("label", { className: "form-check-label", htmlFor: `${id}-publish`, children: strings.sharingPublish }, void 0, false, {
               fileName: "public/mod/sideline/js/esm/src/CommentaryPanel.tsx",
-              lineNumber: 218,
+              lineNumber: 224,
               columnNumber: 33
             })
           ] }, void 0, true, {
             fileName: "public/mod/sideline/js/esm/src/CommentaryPanel.tsx",
-            lineNumber: 215,
+            lineNumber: 221,
             columnNumber: 29
           }),
           namesallowed ? /* @__PURE__ */ jsxDEV("div", { className: "form-check", children: [
@@ -323,33 +333,33 @@ const CommentaryPanel = /* @__PURE__ */ __name(({ cmid, typing, strings }) => {
               false,
               {
                 fileName: "public/mod/sideline/js/esm/src/CommentaryPanel.tsx",
-                lineNumber: 222,
+                lineNumber: 228,
                 columnNumber: 37
               }
             ),
             /* @__PURE__ */ jsxDEV("label", { className: "form-check-label", htmlFor: `${id}-named`, children: strings.sharingNamed }, void 0, false, {
               fileName: "public/mod/sideline/js/esm/src/CommentaryPanel.tsx",
-              lineNumber: 224,
+              lineNumber: 230,
               columnNumber: 37
             })
           ] }, void 0, true, {
             fileName: "public/mod/sideline/js/esm/src/CommentaryPanel.tsx",
-            lineNumber: 221,
+            lineNumber: 227,
             columnNumber: 33
           }) : null
         ] }, void 0, true, {
           fileName: "public/mod/sideline/js/esm/src/CommentaryPanel.tsx",
-          lineNumber: 211,
+          lineNumber: 217,
           columnNumber: 25
         }),
         /* @__PURE__ */ jsxDEV("button", { type: "submit", className: "btn btn-secondary btn-sm mt-1", children: strings.sharingSave }, void 0, false, {
           fileName: "public/mod/sideline/js/esm/src/CommentaryPanel.tsx",
-          lineNumber: 228,
+          lineNumber: 234,
           columnNumber: 25
         })
       ] }, void 0, true, {
         fileName: "public/mod/sideline/js/esm/src/CommentaryPanel.tsx",
-        lineNumber: 207,
+        lineNumber: 213,
         columnNumber: 21
       }) : null,
       /* @__PURE__ */ jsxDEV("div", { className: "mt-3 d-flex flex-wrap gap-2", children: [
@@ -367,7 +377,7 @@ const CommentaryPanel = /* @__PURE__ */ __name(({ cmid, typing, strings }) => {
           false,
           {
             fileName: "public/mod/sideline/js/esm/src/CommentaryPanel.tsx",
-            lineNumber: 234,
+            lineNumber: 240,
             columnNumber: 25
           }
         ) : null,
@@ -383,13 +393,13 @@ const CommentaryPanel = /* @__PURE__ */ __name(({ cmid, typing, strings }) => {
           false,
           {
             fileName: "public/mod/sideline/js/esm/src/CommentaryPanel.tsx",
-            lineNumber: 240,
+            lineNumber: 246,
             columnNumber: 25
           }
         ) : null
       ] }, void 0, true, {
         fileName: "public/mod/sideline/js/esm/src/CommentaryPanel.tsx",
-        lineNumber: 232,
+        lineNumber: 238,
         columnNumber: 17
       }),
       answers !== null ? /* @__PURE__ */ jsxDEV("div", { id: `${id}-answers`, "data-region": "answers", className: "mt-2", children: /* @__PURE__ */ jsxDEV(AnswerList, { answers, strings, onDelete: async (questionid) => {
@@ -397,11 +407,11 @@ const CommentaryPanel = /* @__PURE__ */ __name(({ cmid, typing, strings }) => {
         setAnswers((await getMyAnswers(cmid)).answers);
       } }, void 0, false, {
         fileName: "public/mod/sideline/js/esm/src/CommentaryPanel.tsx",
-        lineNumber: 248,
+        lineNumber: 254,
         columnNumber: 25
       }) }, void 0, false, {
         fileName: "public/mod/sideline/js/esm/src/CommentaryPanel.tsx",
-        lineNumber: 247,
+        lineNumber: 253,
         columnNumber: 21
       }) : null
     ] }, void 0, true, {
@@ -425,7 +435,7 @@ const CommentaryPanel = /* @__PURE__ */ __name(({ cmid, typing, strings }) => {
     false,
     {
       fileName: "public/mod/sideline/js/esm/src/CommentaryPanel.tsx",
-      lineNumber: 259,
+      lineNumber: 265,
       columnNumber: 9
     }
   );

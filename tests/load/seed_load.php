@@ -22,7 +22,11 @@
  * some progress, so the commentary differs between them. Prints the values the k6 plan needs as
  * shell "export" lines.
  *
- * Usage: php tests/load/seed_load.php [--users=50] [--activities=20]
+ * With --groups=N the coach runs in closed group mode: the learners are spread over N groups, all of
+ * them share and every second one has a completion of yesterday, so that every request goes through
+ * the group path (issue #7).
+ *
+ * Usage: php tests/load/seed_load.php [--users=50] [--activities=20] [--groups=0]
  *
  * @package    mod_sideline
  * @copyright  2026 Ralf Erlebach
@@ -41,9 +45,9 @@ if (file_exists($CFG->libdir . '/testing/classes/util.php')) {
     require_once($CFG->libdir . '/testing/classes/util.php');
 }
 
-[$options] = cli_get_params(['users' => 50, 'activities' => 20, 'help' => false]);
+[$options] = cli_get_params(['users' => 50, 'activities' => 20, 'groups' => 0, 'help' => false]);
 if ($options['help']) {
-    echo "php tests/load/seed_load.php [--users=50] [--activities=20]\n";
+    echo "php tests/load/seed_load.php [--users=50] [--activities=20] [--groups=0]\n";
     exit(0);
 }
 // A safety net against running this on a production site by mistake: localhost only, unless explicitly allowed.
@@ -67,7 +71,14 @@ for ($i = 1; $i <= (int) $options['activities']; $i++) {
     $pages[] = $generator->create_module('page', ['course' => $course->id, 'name' => 'Unit ' . $i,
         'completion' => COMPLETION_TRACKING_MANUAL]);
 }
-$sideline = $generator->create_module('sideline', ['course' => $course->id, 'display' => 'page', 'name' => 'Coach']);
+$groupmode = (int) $options['groups'] > 0;
+$sideline = $generator->create_module('sideline', ['course' => $course->id, 'display' => 'page', 'name' => 'Coach']
+    + ($groupmode ? ['sharingmode' => 'closed', 'grouppublish' => 'general', 'groupminsize' => 3] : []));
+$groups = [];
+for ($g = 0; $g < (int) $options['groups']; $g++) {
+    $groups[] = $generator->create_group(['courseid' => $course->id, 'name' => 'Load group ' . $g]);
+}
+$instance = $DB->get_record('sideline', ['id' => $sideline->id]);
 
 $completion = new completion_info($course);
 $prefix = 'slload' . $stamp . '_';
@@ -75,9 +86,17 @@ for ($i = 0; $i < (int) $options['users']; $i++) {
     $user = $generator->create_user(['username' => $prefix . $i, 'password' => $password, 'firstname' => 'Load' . $i,
         'lastname' => 'User', 'policyagreed' => 1]);
     $generator->enrol_user($user->id, $course->id, 'student');
+    if ($groupmode) {
+        $generator->create_group_member(['groupid' => $groups[$i % count($groups)]->id, 'userid' => $user->id]);
+        $DB->insert_record('sideline_publish', (object) ['sidelineid' => $instance->id, 'userid' => $user->id, 'publish' => 1,
+            'named' => 0, 'infoversion' => 999, 'timecreated' => $stamp, 'timemodified' => $stamp]);
+    }
     if ($i % 2) {
         $cm = get_coursemodule_from_instance('page', $pages[$i % count($pages)]->id);
         $completion->update_state($cm, COMPLETION_COMPLETE, $user->id);
+        // Yesterday: inside the window of anonymous group statements.
+        $DB->set_field('course_modules_completion', 'timemodified', $stamp - DAYSECS, ['coursemoduleid' => $cm->id,
+            'userid' => $user->id]);
     }
 }
 

@@ -61,6 +61,9 @@ final class pseudonymizer {
     /** @var int Counter for group name tokens. */
     private int $groupcount = 0;
 
+    /** @var string|null Why a configured free text may not leave the site, null when all may (issue #4). */
+    private ?string $unsafe = null;
+
     /**
      * Prepare the request.
      *
@@ -69,8 +72,16 @@ final class pseudonymizer {
      * @param string $dateformat Localised strftime format for dates, used when resolving tokens.
      * @param int $now Current time, for the relative categories.
      * @param string $lang Language of the learner, for custom rule templates.
+     * @param string[] $names Names of the people of the course, which a free text must not contain (issue #4).
      */
-    public function __construct(array $recommendations, string $firstname, string $dateformat, int $now, string $lang = 'en') {
+    public function __construct(
+        array $recommendations,
+        string $firstname,
+        string $dateformat,
+        int $now,
+        string $lang = 'en',
+        array $names = [],
+    ) {
         $this->map[self::USER_TOKEN] = $firstname;
         $labels = [];
         $dates = [];
@@ -119,20 +130,34 @@ final class pseudonymizer {
             if (!empty($rec->facts['outcome'])) {
                 $facts['outcome'] = (string) $rec->facts['outcome'];
             }
-            if (isset($rec->facts['count'])) {
-                $facts['people_count'] = (int) $rec->facts['count'];
-                $this->allowednumbers[] = (int) $rec->facts['count'];
+            // Group statements: a coarse band instead of a number, and the kind of event (issues #6, #12).
+            if (isset($rec->facts['band'])) {
+                $facts['people'] = match ((string) $rec->facts['band']) {
+                    'many' => 'many_people',
+                    'several' => 'several_people',
+                    default => 'a_few_people',
+                };
+            }
+            if (isset($rec->facts['event'])) {
+                $facts['event'] = match ((string) $rec->facts['event']) {
+                    'viewed' => 'opened_the_activity',
+                    'passed' => 'passed_the_activity',
+                    default => 'completed_the_activity',
+                };
             }
             // Custom rules: the teacher's template is the intent, with placeholders turned into tokens.
             if (!empty($rec->facts['templates']) && is_array($rec->facts['templates'])) {
                 $template = $rec->facts['templates'][$lang] ?? $rec->facts['templates']['en'] ?? reset($rec->facts['templates']);
+                // The teacher's text is free text, not a checked fact: it is sent only when the guard finds no
+                // identifier in it (names, e-mail, links, exact dates, ids, instructions to the model).
+                $raw = str_replace(['{label}', '{deadline}', '{done}', '{total}'], ' ', (string) $template);
+                $this->unsafe = $this->unsafe ?? prompt_text_guard::check($raw, array_merge($names, [$firstname]));
                 $intent = strtr((string) $template, [
                     '{label}' => $facts['label'] ?? '',
                     '{deadline}' => $facts['deadline'] ?? '',
                     '{done}' => isset($facts['progress_done']) ? (string) $facts['progress_done'] : '',
                     '{total}' => isset($facts['progress_total']) ? (string) $facts['progress_total'] : '',
                 ]);
-                // A name in a teacher template is still a name: the template text itself is not personal data.
                 $facts['intent'] = $intent;
             }
             $this->required[$rec->key] = $required;
@@ -143,6 +168,15 @@ final class pseudonymizer {
                 'has_action' => $rec->actiontype === recommendation::ACTION_OPEN,
             ];
         }
+    }
+
+    /**
+     * Why a configured free text of this request may not leave the site.
+     *
+     * @return string|null Reason code of prompt_text_guard, or null when every free text may be sent.
+     */
+    public function unsafe(): ?string {
+        return $this->unsafe;
     }
 
     /**

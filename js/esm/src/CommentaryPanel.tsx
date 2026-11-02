@@ -183,9 +183,15 @@ const CommentaryPanel = ({cmid, typing, strings}: PanelProps) => {
         const namesallowed = data.grouplevel === 'named' || data.grouplevel === 'named_with_group';
         body = (
             <>
-                <div data-region="commentary">
+                <div data-region="commentary" lang={data.locale || undefined}>
                     {data.blocks.map((block) => <Block key={block.key} block={block} typing={typing} />)}
                 </div>
+                {data.source === 'translated' ? (
+                    <p className="small text-muted mb-1" data-region="translated">{strings.translatedNote}</p>
+                ) : null}
+                {data.langfallback ? (
+                    <p className="small text-muted mb-1" data-region="langfallback">{strings.languageFallback}</p>
+                ) : null}
 
                 {question ? (
                     <QuestionForm key={question.id} question={question} strings={strings}

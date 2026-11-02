@@ -77,6 +77,23 @@ class question_form extends \moodleform {
         $mform->setType('mcoptions', PARAM_TEXT);
         $mform->addHelpButton('mcoptions', 'qmcoptions', 'mod_sideline');
         $mform->hideIf('mcoptions', 'qtype', 'neq', question_type::MC);
+        // Multiple selection (issue #11): how many options may be chosen, and how their effects combine.
+        $mform->addElement('advcheckbox', 'mcmultiple', get_string('qmcmultiple', 'mod_sideline'));
+        $mform->addHelpButton('mcmultiple', 'qmcmultiple', 'mod_sideline');
+        $mform->hideIf('mcmultiple', 'qtype', 'neq', question_type::MC);
+        foreach (['minselect' => 1, 'maxselect' => 2] as $name => $default) {
+            $mform->addElement('text', 'mc' . $name, get_string('qmc' . $name, 'mod_sideline'), ['size' => 3]);
+            $mform->setType('mc' . $name, PARAM_INT);
+            $mform->setDefault('mc' . $name, $default);
+            $mform->hideIf('mc' . $name, 'qtype', 'neq', question_type::MC);
+            $mform->hideIf('mc' . $name, 'mcmultiple', 'notchecked');
+        }
+        $mform->addElement('select', 'mccombine', get_string('qmccombine', 'mod_sideline'), [
+            'priority' => get_string('qmccombine_priority', 'mod_sideline'),
+            'none' => get_string('qmccombine_none', 'mod_sideline'),
+        ]);
+        $mform->hideIf('mccombine', 'qtype', 'neq', question_type::MC);
+        $mform->hideIf('mccombine', 'mcmultiple', 'notchecked');
 
         // Free text.
         $mform->addElement('text', 'maxlength', get_string('qmaxlength', 'mod_sideline'), ['size' => 5]);
@@ -150,7 +167,9 @@ class question_form extends \moodleform {
                     [$label, $effect] = array_map('trim', explode('|', $line . '|none'));
                     $options[] = ['label' => $label, 'effect' => $effect];
                 }
-                return ['options' => $options];
+                return ['options' => $options, 'multiple' => !empty($data['mcmultiple']),
+                    'minselect' => (int) ($data['mcminselect'] ?? 1), 'maxselect' => (int) ($data['mcmaxselect'] ?? 1),
+                    'combine' => (string) ($data['mccombine'] ?? 'priority')];
             case question_type::TEXT:
                 return ['maxlength' => (int) ($data['maxlength'] ?? 500)];
             case question_type::SLIDER:
@@ -188,6 +207,9 @@ class question_form extends \moodleform {
             'qid' => $question->id, 'qtype' => $question->qtype, 'prompt' => $question->prompt,
             'triggerkey' => $question->triggerkey, 'cooldown' => (int) $question->cooldown, 'enabled' => (int) $question->enabled,
             'mcoptions' => implode("\n", array_map(static fn($o) => $o['label'] . ' | ' . $o['effect'], $c['options'] ?? [])),
+            'mcmultiple' => !empty($c['multiple']) ? 1 : 0,
+            'mcminselect' => $c['minselect'] ?? 1, 'mcmaxselect' => $c['maxselect'] ?? 2,
+            'mccombine' => $c['combine'] ?? 'priority',
             'maxlength' => $c['maxlength'] ?? 500,
             'slidermin' => $c['min'] ?? 0, 'slidermax' => $c['max'] ?? 10, 'sliderstep' => $c['step'] ?? 1,
             'sliderminlabel' => $c['minlabel'] ?? '', 'slidermaxlabel' => $c['maxlabel'] ?? '',

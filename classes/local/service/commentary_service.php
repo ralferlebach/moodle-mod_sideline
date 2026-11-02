@@ -39,6 +39,18 @@ use mod_sideline\local\rules\rule_store;
  * the text, so any change in state, rights, visibility, answers or group facts that changes what
  * is said changes the fingerprint, with or without an event.
  *
+ * Delivery is atomic with respect to withdrawals and invalidations (issue #3):
+ * - The cache write is a compare and swap. If it fails, something changed while the text was being
+ *   generated, and the text is discarded: the whole computation runs again from fresh state, once.
+ *   If it fails again, only the non-personal generic text is delivered and nothing is stored.
+ * - After a successful write the consent is read again (write, then check). A withdrawal writes the
+ *   new status first and then deletes the cache rows (write, then delete). Whatever the interleaving,
+ *   either this request sees the withdrawal and deletes what it stored, or the withdrawal deletes it;
+ *   the protocol does not depend on a lock, so a lock timeout on either side cannot break it.
+ * - Every path that returns personal content (cache hit, fresh text, debug simulation) passes the
+ *   final gate deliverable() right before the return. A generation lock that cannot be obtained in
+ *   time yields the non-personal generic text, never text computed without the lock.
+ *
  * @package    mod_sideline
  * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -52,16 +64,27 @@ class commentary_service {
     /** @var int When AI was unavailable, the template text is kept this long before AI is tried again. */
     public const AI_RETRY_AFTER = 15 * MINSECS;
 
+    /** @var int Computations per request: a conflicting cache write leads to one fresh computation. */
+    public const MAX_ATTEMPTS = 2;
+
     /** @var ai_gateway AI gateway. */
     private ai_gateway $gateway;
+
+    /** @var \core\lock\lock_factory|null Lock factory, injectable for tests; null for the plugin's own. */
+    private ?\core\lock\lock_factory $locks;
+
+    /** @var int Number of computations of the last get() call (tests and traces). */
+    public int $attempts = 0;
 
     /**
      * Constructor.
      *
      * @param ai_gateway|null $gateway Gateway, injectable for tests.
+     * @param \core\lock\lock_factory|null $locks Lock factory, injectable for tests.
      */
-    public function __construct(?ai_gateway $gateway = null) {
+    public function __construct(?ai_gateway $gateway = null, ?\core\lock\lock_factory $locks = null) {
         $this->gateway = $gateway ?? new ai_gateway();
+        $this->locks = $locks;
     }
 
     /**
@@ -83,6 +106,38 @@ class commentary_service {
         int $now,
         bool $simulate = false,
     ): array {
+        $this->attempts = 0;
+        while (true) {
+            $this->attempts++;
+            $last = $this->attempts >= self::MAX_ATTEMPTS;
+            $result = $this->attempt($sideline, $course, $user, $context, $now, $simulate, $last);
+            if ($result !== null) {
+                return $result;
+            }
+        }
+    }
+
+    /**
+     * One computation.
+     *
+     * @param \stdClass $sideline Instance record.
+     * @param \stdClass $course Course record.
+     * @param \stdClass $user The learner.
+     * @param \context_module $context Module context.
+     * @param int $now Current time.
+     * @param bool $simulate Compute without writing anything and without AI.
+     * @param bool $last Whether this is the last attempt: a conflict then yields the generic text.
+     * @return array|null The result, or null when the cache write conflicted and another attempt is due.
+     */
+    private function attempt(
+        \stdClass $sideline,
+        \stdClass $course,
+        \stdClass $user,
+        \context_module $context,
+        int $now,
+        bool $simulate,
+        bool $last,
+    ): ?array {
         global $DB;
 
         $userid = (int) $user->id;
@@ -139,6 +194,9 @@ class commentary_service {
                 'nexttransition' => $nexttransition,
                 'versions' => self::versions(),
             ];
+            if (!self::deliverable($sideline, $userid)) {
+                return $this->consent_required($sideline, $userid);
+            }
             return $this->result(
                 $consent,
                 $composer->compose($recommendations, $cms, $persona, $lang),
@@ -152,29 +210,27 @@ class commentary_service {
 
         [$cached, $stamp] = commentary_cache::check($row, $fingerprint, $now);
         if ($cached !== null) {
+            if (!self::deliverable($sideline, $userid)) {
+                return $this->consent_required($sideline, $userid);
+            }
             return $this->result($consent, $composer->sanitize($cached, $cms), $sideline, $userid, $keys, $now, $persona);
         }
 
         // Singleflight: only one process generates for a given user and instance at a time (H).
-        $lock = \core\lock\lock_config::get_lock_factory('mod_sideline')
-            ->get_lock('gen_' . $sideline->id . '_' . $userid, 5);
+        $locks = $this->locks ?? \core\lock\lock_config::get_lock_factory('mod_sideline');
+        $lock = $locks->get_lock('gen_' . $sideline->id . '_' . $userid, 5);
         if (!$lock) {
-            // Could not get the lock in time: serve the template text, do not cache it.
-            return $this->result(
-                $consent,
-                $composer->compose($recommendations, $cms, $persona, $lang),
-                $sideline,
-                $userid,
-                $keys,
-                $now,
-                $persona
-            );
+            // Could not get the lock in time: nothing computed without the lock is delivered or stored.
+            return $this->neutral($sideline, $userid, $consent, $persona, $lang);
         }
         $sharelock = null;
         try {
             // Someone else may have finished while we waited.
             [$cached, $stamp] = commentary_cache::check(commentary_cache::row((int) $sideline->id, $userid), $fingerprint, $now);
             if ($cached !== null) {
+                if (!self::deliverable($sideline, $userid)) {
+                    return $this->consent_required($sideline, $userid);
+                }
                 return $this->result($consent, $composer->sanitize($cached, $cms), $sideline, $userid, $keys, $now, $persona);
             }
 
@@ -182,13 +238,15 @@ class commentary_service {
             if ($aiallowed) {
                 $texts = $this->gateway->phrase($recommendations, $user, $context, $persona, $lang, $now, (int) $sideline->id);
                 if ($texts !== null) {
+                    // A translated text is labelled as such, a template never is (issue #17).
                     $commentary = $composer->with_texts(
                         $recommendations,
                         $cms,
                         $persona,
                         $lang,
                         $texts,
-                        message_composer::SOURCE_AI
+                        $this->gateway->last_status() === ai_gateway::STATUS_TRANSLATED
+                            ? message_composer::SOURCE_TRANSLATED : message_composer::SOURCE_AI
                     );
                 }
             }
@@ -208,8 +266,7 @@ class commentary_service {
             // same lock before it deletes, so either we see it here or it deletes what we store.
             $fresh = $DB->get_record('sideline', ['id' => $sideline->id]);
             if (!$fresh || !consent_manager::allows_processing($fresh, $userid)) {
-                return ['status' => self::STATUS_CONSENT_REQUIRED, 'consent' => consent_manager::status($sideline, $userid),
-                    'commentary' => null, 'question' => null, 'persona' => ''];
+                return $this->consent_required($sideline, $userid);
             }
             $namedneeded = (bool) array_filter($groupfacts, static fn($f) => !empty($f['names']));
             // With group statements, recheck and store under the instance sharing lock, so a withdrawal
@@ -219,21 +276,11 @@ class commentary_service {
                 $contributors = [-1];
             }
             if (!(new group_service())->contributors_still_share($fresh, $contributors, $namedneeded)) {
-                // Somebody stopped sharing while we worked: deliver without any group statement, store nothing.
-                $without = array_values(array_filter(
-                    $recommendations,
-                    static fn(recommendation $r): bool => !str_starts_with($r->key, 'group_')
-                ));
-                $commentary = $composer->compose(
-                    $without ?: [new recommendation('smalltalk', recommendation::CAT_SMALLTALK, 100)],
-                    $cms,
-                    $persona,
-                    $lang
-                );
-                return $this->result($consent, $commentary, $sideline, $userid, $keys, $now, $persona);
+                // Somebody stopped sharing while we worked: the text is discarded and computed again from fresh state.
+                return $last ? $this->neutral($sideline, $userid, $consent, $persona, $lang) : null;
             }
 
-            commentary_cache::put(
+            $stored = commentary_cache::put(
                 (int) $sideline->id,
                 $userid,
                 $fingerprint,
@@ -242,6 +289,15 @@ class commentary_service {
                 $now,
                 $stamp
             );
+            if (!$stored) {
+                // Invalidated (event, withdrawal, deletion) while we worked: this text may be stale. Discard it.
+                return $last ? $this->neutral($sideline, $userid, $consent, $persona, $lang) : null;
+            }
+            // Write, then check: a withdrawal that happened after the check above is seen here (see class doc).
+            if (!self::deliverable($sideline, $userid)) {
+                commentary_cache::invalidate_user((int) $sideline->id, $userid);
+                return $this->consent_required($sideline, $userid);
+            }
             $new = array_filter(
                 array_diff($keys, $ctx->currentkeys),
                 static fn(string $k): bool => str_starts_with($k, 'custom_')
@@ -256,6 +312,13 @@ class commentary_service {
                 'selected' => $keys,
                 'source' => $commentary['source'] ?? '',
                 'aistatus' => $aiallowed ? $this->gateway->last_status() : 'not_allowed',
+                // What the provider exchanged (tokens only) and what the learner actually got (issue #14).
+                'ai' => $aiallowed ? $this->gateway->last_exchange() : [],
+                'output' => array_map(
+                    static fn(array $b): array => ['key' => $b['key'], 'text' => $b['text']],
+                    $commentary['blocks']
+                ),
+                'attempt' => $this->attempts,
                 'templates' => $commentary['meta']['templates'] ?? [],
                 'versions' => self::versions(),
                 'persona' => $persona,
@@ -269,6 +332,59 @@ class commentary_service {
             }
             $lock->release();
         }
+    }
+
+    /**
+     * The final gate before personal content leaves the service: the instance still exists and the
+     * learner's consent, read again from the database, allows processing.
+     *
+     * @param \stdClass $sideline Instance record.
+     * @param int $userid User id.
+     * @return bool
+     */
+    public static function deliverable(\stdClass $sideline, int $userid): bool {
+        global $DB;
+
+        $fresh = $DB->get_record('sideline', ['id' => $sideline->id]);
+        return $fresh && consent_manager::allows_processing($fresh, $userid);
+    }
+
+    /**
+     * The result for a learner whose consent does not (or no longer) allow processing.
+     *
+     * @param \stdClass $sideline Instance record.
+     * @param int $userid User id.
+     * @return array
+     */
+    private function consent_required(\stdClass $sideline, int $userid): array {
+        global $DB;
+
+        $fresh = $DB->get_record('sideline', ['id' => $sideline->id]) ?: $sideline;
+        return ['status' => self::STATUS_CONSENT_REQUIRED, 'consent' => consent_manager::status($fresh, $userid),
+            'commentary' => null, 'question' => null, 'persona' => ''];
+    }
+
+    /**
+     * The non-personal generic text, for a lock timeout or a repeated conflict. Nothing is stored.
+     *
+     * @param \stdClass $sideline Instance record.
+     * @param int $userid User id.
+     * @param string $consent Consent status.
+     * @param string $persona Persona key.
+     * @param string $lang Language.
+     * @return array
+     */
+    private function neutral(\stdClass $sideline, int $userid, string $consent, string $persona, string $lang): array {
+        if (!self::deliverable($sideline, $userid)) {
+            return $this->consent_required($sideline, $userid);
+        }
+        return [
+            'status' => self::STATUS_OK,
+            'consent' => $consent,
+            'commentary' => (new message_composer())->generic($persona, $lang),
+            'question' => null,
+            'persona' => $persona,
+        ];
     }
 
     /**

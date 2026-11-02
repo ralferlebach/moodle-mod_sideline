@@ -495,7 +495,7 @@ class rule_evaluator {
                 5 + $index,
                 recommendation::ACTION_NONE,
                 null,
-                array_intersect_key($fact, array_flip(['label', 'count', 'group', 'names']))
+                array_intersect_key($fact, array_flip(['label', 'band', 'event', 'outcome', 'group', 'names']))
             );
         }
         return $result;

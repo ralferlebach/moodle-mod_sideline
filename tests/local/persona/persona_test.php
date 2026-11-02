@@ -111,8 +111,14 @@ final class persona_test extends \advanced_testcase {
             \context_module::instance($instance->cmid),
             time()
         );
-        $this->assertSame(1, $fake->calls);
+        // Since 0.4.0 the style itself is checked before anything is sent (issue #4): an instruction aimed at
+        // the model never leaves the site. A style that slipped through would still meet the checks of the answer.
+        $this->assertSame(0, $fake->calls);
         $this->assertNotSame('ai', $result['commentary']['source']);
+        $guard = \mod_sideline\local\ai\prompt_text_guard::check(
+            \mod_sideline\local\ai\persona_registry::style_prompt('site_rogue')
+        );
+        $this->assertNotNull($guard);
     }
 
     public function test_learners_choose_only_offered_personas_and_nobody_else_sees_it(): void {

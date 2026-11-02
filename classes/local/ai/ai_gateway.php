@@ -49,6 +49,8 @@ class ai_gateway {
     public const STATUS_BUDGET = 'budget';
     /** @var string Status: the provider returned nothing. */
     public const STATUS_NO_RESPONSE = 'no_response';
+    /** @var string Status: configured free text contains identifiers, nothing was sent (issue #4). */
+    public const STATUS_UNSAFE_INPUT = 'unsafe_input';
 
     /** @var text_generator The seam to the AI subsystem. */
     private text_generator $generator;
@@ -56,13 +58,16 @@ class ai_gateway {
     /** @var string Outcome of the last phrase() call: a status constant or "invalid:<reason>". */
     private string $laststatus = '';
 
+    /** @var array What the last phrase() call exchanged, for the decision trace (issue #14): no real values. */
+    private array $lastexchange = [];
+
     /**
      * Constructor.
      *
      * @param text_generator|null $generator Generator, defaults to the Moodle AI subsystem.
      */
     public function __construct(?text_generator $generator = null) {
-        $this->generator = $generator ?? new core_text_generator();
+        $this->generator = $generator ?? (behat_text_generator::enabled() ? new behat_text_generator() : new core_text_generator());
     }
 
     /**
@@ -116,7 +121,8 @@ class ai_gateway {
      * @return bool
      */
     public static function language_supported(string $lang): bool {
-        return claim_checker::supports($lang) || language_detector::supports($lang);
+        // Only languages in which invented facts can be recognised (issue #13): elsewhere the template is served.
+        return claim_checker::supports($lang) && language_detector::supports($lang);
     }
 
     /**
@@ -142,6 +148,7 @@ class ai_gateway {
         int $sidelineid = 0,
         ?string $style = null,
     ): ?array {
+        $this->lastexchange = [];
         $purpose = $style === null ? ai_usage::GENERATE : ai_usage::PREVIEW;
         $target = language_detector::base_language($lang);
         if (!self::language_supported($target)) {
@@ -151,8 +158,21 @@ class ai_gateway {
         $genlang = claim_checker::supports($target) ? $lang : 'en';
 
         $format = get_string_manager()->get_string('strftimedatetimeshort', 'langconfig', null, $lang);
-        $request = new pseudonymizer($recommendations, (string) $user->firstname, $format, $now, $lang);
+        // Free text configured by teachers is checked against the names of the people of the course (issue #4).
+        $hasfreetext = (bool) array_filter($recommendations, static fn(recommendation $r): bool => !empty($r->facts['templates']));
+        $coursecontext = $context->get_course_context(false);
+        $names = $hasfreetext ? prompt_text_guard::names($coursecontext ? (int) $coursecontext->instanceid : 0, $user) : [];
+        $request = new pseudonymizer($recommendations, (string) $user->firstname, $format, $now, $lang, $names);
+        // The persona style is free text as well, written by administrators for the whole site: the same guard,
+        // without the names of one course (a style is no place for them, and common words would match).
+        $stylereason = prompt_text_guard::check($style ?? persona_registry::style_prompt($persona));
+        $unsafe = $request->unsafe() ?? $stylereason;
+        if ($unsafe !== null) {
+            // Nothing leaves the site: the caller serves the localised template text (static fallback).
+            return $this->status(self::STATUS_UNSAFE_INPUT . ':' . $unsafe);
+        }
         $prompt = (new prompt_builder())->build($request, $persona, $genlang, $style);
+        $this->lastexchange = ['prompt' => prompt_builder::VERSION, 'prompthash' => hash('sha256', $prompt), 'lang' => $genlang];
 
         $raw = $this->call($prompt, (int) $user->id, $context->id, $sidelineid, $purpose, $now);
         if ($raw === null) {
@@ -190,6 +210,8 @@ class ai_gateway {
             $status = self::STATUS_TRANSLATED;
         }
         $this->laststatus = $status;
+        // The validated texts with tokens in place: what the provider said, without any real value.
+        $this->lastexchange['response'] = $texts;
         // Resolve only after validation, locally.
         return array_map(static fn(string $text): string => $request->resolve($text), $texts);
     }
@@ -234,10 +256,12 @@ class ai_gateway {
         if ($languages === null || array_diff(array_unique($languages), [$target])) {
             return $this->status('invalid:translation_language');
         }
-        // Where statements can be checked in the target language, check them again. Other targets have no
-        // phrase lists: there the translation is trusted to keep the meaning of the checked source text,
-        // with identical tokens and numbers (documented limit of P-09 for such languages).
-        if (claim_checker::supports($target) && ($problem = claim_checker::check_all($translated, $recommendations))) {
+        // The translation is checked for invented facts again (issue #13). A target without phrase lists never
+        // gets this far (language_supported()), and is refused here as well: unchecked text is never delivered.
+        if (!claim_checker::supports($target)) {
+            return $this->status('invalid:translation_unverifiable');
+        }
+        if ($problem = claim_checker::check_all($translated, $recommendations)) {
             return $this->status('invalid:translation_claim:' . $problem);
         }
         return $translated;
@@ -280,8 +304,17 @@ class ai_gateway {
             $this->laststatus = self::STATUS_BUDGET;
             return null;
         }
-        $raw = $this->generator->generate($prompt, $userid, $contextid);
-        ai_usage::complete($reservation, $raw !== null, $this->generator->last_tokens(), $prompt, $raw);
+        $raw = null;
+        $tokens = null;
+        try {
+            $raw = $this->generator->generate($prompt, $userid, $contextid);
+            $tokens = $this->generator->last_tokens();
+        } catch (\Throwable $e) {
+            // A provider outage is a failed call: it is completed and counted, never left open or retried here.
+            $raw = null;
+        } finally {
+            ai_usage::complete($reservation, $raw !== null, $tokens, $prompt, $raw);
+        }
         return $raw;
     }
 
@@ -294,6 +327,15 @@ class ai_gateway {
     private function status(string $status): ?array {
         $this->laststatus = $status;
         return null;
+    }
+
+    /**
+     * What the last phrase() call sent and received, without real values (issue #14).
+     *
+     * @return array prompt version, prompt hash, generation language and the validated texts with tokens.
+     */
+    public function last_exchange(): array {
+        return $this->lastexchange;
     }
 
     /**

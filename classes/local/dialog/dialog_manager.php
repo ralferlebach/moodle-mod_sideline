@@ -259,8 +259,10 @@ class dialog_manager {
      */
     private static function display_value(\stdClass $question, string $stored): string {
         $value = json_decode($stored, true);
+        $options = $question->configdata['options'] ?? [];
+        $label = static fn($i): string => (string) ($options[(int) $i]['label'] ?? '');
         return match ($question->qtype) {
-            question_type::MC => (string) ($question->configdata['options'][(int) $value]['label'] ?? ''),
+            question_type::MC => is_array($value) ? implode(', ', array_map($label, $value)) : $label($value),
             question_type::SEMDIFF => is_array($value) ? implode(', ', $value) : '',
             default => (string) $value,
         };
@@ -343,6 +345,9 @@ class dialog_manager {
             'qtype' => (string) $question->qtype,
             'prompt' => format_string($question->prompt),
             'options' => array_map(static fn($o) => (string) $o['label'], $config['options'] ?? []),
+            'multiple' => !empty($config['multiple']),
+            'minselect' => (int) ($config['minselect'] ?? 1),
+            'maxselect' => (int) ($config['maxselect'] ?? 1),
             'min' => (int) ($config['min'] ?? 0),
             'max' => (int) ($config['max'] ?? 0),
             'step' => (int) ($config['step'] ?? 1),

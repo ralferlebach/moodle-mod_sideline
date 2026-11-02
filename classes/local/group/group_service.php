@@ -19,12 +19,27 @@ namespace mod_sideline\local\group;
 use mod_sideline\local\instance_config;
 
 /**
- * Prepares privacy-checked group statements for one recipient (G2 to G4, P-G01, P-G02, P-G04).
+ * Prepares privacy-checked group statements for one recipient (G2 to G4, P-G01 to P-G04).
  *
  * Decisions taken with the product owner: the open mode stays inside the course; events of other
- * people are published only after their active opt-in; only completions are used, never failed
- * attempts or other negative events; anonymous statements need at least groupminsize persons,
- * otherwise they are suppressed. No exact times are ever published, only "recently".
+ * people are published only after their active opt-in; only positive event types are used, never
+ * failed attempts, grades or other negative events. No exact times are ever published.
+ *
+ * Event types (issue #6), configured per instance: "viewed" (the activity was opened), "completed"
+ * (it counts as completed), "passed" (completed with a pass grade). An activity whose completion is
+ * not tracked has an unknown state for "completed" and "passed": nothing is said about it.
+ *
+ * Protection of aggregates (issue #12, docs/privacy/GRUPPENAGGREGATE.md):
+ * - Anonymous statements need at least groupminsize persons (never fewer than three) and give a
+ *   coarse band ("a few", "several", "many") instead of an exact number.
+ * - For anonymous statements the time window ends at the start of the current day: the statement
+ *   changes at most once a day, so comparing two visits does not reveal who has just done something.
+ *   Named statements are about people who agreed to be named, so their window ends now.
+ * - Only one statement per commentary, and only about activities the recipient can see.
+ *
+ * Cost (issue #7): one query for the recipient's groups, one for all groups of the course, and one
+ * query per configured event type that returns only sharing, consenting, actively enrolled members
+ * of the admitted circles with an event in the window. No query per group or per member.
  *
  * What a recipient may learn:
  * - Activities: only activities the recipient can see (the recipient's own scope).
@@ -40,12 +55,14 @@ use mod_sideline\local\instance_config;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class group_service {
-    /** @var int What counts as "recently". */
+    /** @var int Length of the window before the start of the current day. */
     public const RECENT = WEEKSECS;
     /** @var int Upper bound of names in one statement. */
     public const MAX_NAMES = 3;
     /** @var int Upper bound of statements per commentary. */
     public const MAX_STATEMENTS = 1;
+    /** @var string[] Event types in the order in which they are told: the most specific first. */
+    public const EVENT_ORDER = ['passed', 'completed', 'viewed'];
 
     /**
      * Group statements for a recipient.
@@ -82,35 +99,40 @@ class group_service {
             return [[], []];
         }
 
-        $members = [];
-        foreach ($circles as $circle) {
-            foreach ($circle['members'] as $userid) {
-                $members[$userid] = true;
-            }
-        }
-        unset($members[$recipientid]);
-        $sharing = sharing_manager::sharing_users($sideline, array_keys($members));
-        if (!$sharing) {
+        // Named statements: the last RECENT seconds. Anonymous statements: a window of the same length that
+        // ends at the start of today, stable within the day (issue #12).
+        $daystart = self::day_start($now);
+        $types = array_values(array_intersect(self::EVENT_ORDER, instance_config::group_events($sideline)));
+        $events = $this->events(
+            $sideline,
+            array_keys($visiblecms),
+            array_keys($circles),
+            $types,
+            min($now, $daystart) - self::RECENT,
+            $now + 1,
+            $recipientid
+        );
+        if (!$events) {
             return [[], []];
         }
-
-        $completions = $this->recent_completions(array_keys($visiblecms), array_keys($sharing), $now);
         $level = (string) $sideline->grouppublish;
-        $minsize = max(2, (int) $sideline->groupminsize);
+        $minsize = max(instance_config::MIN_GROUP_SIZE, (int) $sideline->groupminsize);
 
         $statements = [];
         $contributors = [];
-        foreach ($circles as $circle) {
+        foreach ($circles as $groupid => $circle) {
             foreach ($visiblecms as $cmid => $cm) {
-                $people = array_values(array_intersect($completions[$cmid] ?? [], $circle['members']));
-                $people = array_values(array_filter($people, static fn(int $u): bool => isset($sharing[$u])));
-                if (!$people) {
-                    continue;
-                }
-                $statement = $this->statement($circle, $cm, $people, $sharing, $level, $minsize);
-                if ($statement) {
-                    $statements[] = $statement;
-                    $contributors = array_merge($contributors, $statement['contributors']);
+                foreach ($types as $type) {
+                    $people = $events[$groupid][$cmid][$type] ?? [];
+                    if (!$people) {
+                        continue;
+                    }
+                    $statement = $this->statement($circle, $cm, $type, $people, $level, $minsize, $daystart, $now);
+                    if ($statement) {
+                        $statements[] = $statement;
+                        $contributors = array_merge($contributors, $statement['contributors']);
+                        break;
+                    }
                 }
                 if (count($statements) >= self::MAX_STATEMENTS) {
                     break 2;
@@ -124,49 +146,82 @@ class group_service {
     }
 
     /**
+     * Start of the day of a moment, in the server's time zone.
+     *
+     * @param int $now Unix time.
+     * @return int
+     */
+    public static function day_start(int $now): int {
+        return usergetmidnight($now, \core_date::get_server_timezone());
+    }
+
+    /**
+     * The coarse band of a number of people, never the number itself (issue #12).
+     *
+     * @param int $count Number of people, at least the minimum size.
+     * @return string few, several or many.
+     */
+    public static function band(int $count): string {
+        if ($count >= 12) {
+            return 'many';
+        }
+        return $count >= 6 ? 'several' : 'few';
+    }
+
+    /**
      * Build one statement at the strongest level the data and the decisions allow, or none.
      *
-     * @param array $circle Circle: own (bool), groupname (string|null), members.
+     * @param array $circle Circle: own (bool), groupname (string|null).
      * @param \cm_info $cm Activity.
-     * @param int[] $people Sharing people who recently completed it.
-     * @param array $sharing User id => named consent.
+     * @param string $type Event type.
+     * @param array $people User id => [named consent (bool), time of the event], sharing members with this event.
      * @param string $level Instance maximum level.
      * @param int $minsize Smallest anonymous aggregate.
+     * @param int $daystart Start of today: the end of the anonymous window.
+     * @param int $now Current time.
      * @return array|null
      */
-    private function statement(array $circle, \cm_info $cm, array $people, array $sharing, string $level, int $minsize): ?array {
+    private function statement(
+        array $circle,
+        \cm_info $cm,
+        string $type,
+        array $people,
+        string $level,
+        int $minsize,
+        int $daystart,
+        int $now,
+    ): ?array {
         $label = clean_param(format_string($cm->name, true, ['context' => $cm->context]), PARAM_NOTAGS);
-        $named = array_values(array_filter($people, static fn(int $u): bool => !empty($sharing[$u])));
-        $base = ['cmid' => (int) $cm->id, 'label' => $label];
+        $recent = array_filter($people, static fn(array $p): bool => $p['time'] >= $now - self::RECENT);
+        $named = array_keys(array_filter($recent, static fn(array $p): bool => $p['named']));
+        sort($named);
+        $base = ['cmid' => (int) $cm->id, 'label' => $label, 'event' => $type];
+        if ($type === 'passed') {
+            $base['outcome'] = 'passed';
+        }
 
         if (in_array($level, ['named', 'named_with_group'], true) && $named) {
-            $names = $this->names(array_slice($named, 0, self::MAX_NAMES));
+            $chosen = array_slice($named, 0, self::MAX_NAMES);
             if ($circle['own']) {
-                return $base + [
-                    'key' => 'group_named',
-                    'names' => $names,
-                    'contributors' => array_slice($named, 0, self::MAX_NAMES),
-                ];
+                return $base + ['key' => 'group_named', 'names' => $this->names($chosen), 'contributors' => $chosen];
             }
             if ($level === 'named_with_group' && $circle['groupname'] !== null) {
-                return $base + ['key' => 'group_named_with_group', 'names' => $names, 'group' => $circle['groupname'],
-                    'contributors' => array_slice($named, 0, self::MAX_NAMES)];
+                return $base + ['key' => 'group_named_with_group', 'names' => $this->names($chosen),
+                    'group' => $circle['groupname'], 'contributors' => $chosen];
             }
         }
-        // Anonymous statements: never about fewer than minsize people (P-G03, small aggregates).
-        if (count($people) < $minsize) {
+        // Anonymous statements: never about fewer than minsize people, never with an exact number, and only
+        // with events before today, so that two visits on one day see the same statement.
+        $ids = array_keys(array_filter($people, static fn(array $p): bool =>
+            $p['time'] < $daystart && $p['time'] >= $daystart - self::RECENT));
+        if (count($ids) < $minsize) {
             return null;
         }
+        $band = self::band(count($ids));
         if (!$circle['own'] && in_array($level, ['group_only', 'named_with_group'], true) && $circle['groupname'] !== null) {
-            return $base + [
-                'key' => 'group_only',
-                'count' => count($people),
-                'group' => $circle['groupname'],
-                'contributors' => $people,
-            ];
+            return $base + ['key' => 'group_only', 'band' => $band, 'group' => $circle['groupname'], 'contributors' => $ids];
         }
-        return $base + ['key' => $circle['own'] ? 'group_together' : 'group_others', 'count' => count($people),
-            'contributors' => $people];
+        return $base + ['key' => $circle['own'] ? 'group_together' : 'group_others', 'band' => $band, 'contributors' => $ids];
     }
 
     /**
@@ -175,81 +230,113 @@ class group_service {
      * @param \stdClass $sideline Instance record.
      * @param int $recipientid Recipient.
      * @param int $courseid Course id.
-     * @return array[] own, groupname, members (active enrolled user ids).
+     * @return array[] Group id => own (bool), groupname (string|null); own groups first.
      */
     private function circles(\stdClass $sideline, int $recipientid, int $courseid): array {
         $admitted = instance_config::admitted_group_ids((int) $sideline->id, $courseid);
         $own = array_map('intval', groups_get_user_groups($courseid, $recipientid)[0] ?? []);
-        $all = groups_get_all_groups($courseid);
         $context = \context_course::instance($courseid);
-        $active = array_map('intval', array_keys(get_enrolled_users($context, '', 0, 'u.id', null, 0, 0, true)));
 
-        $circles = [];
-        foreach ($all as $group) {
+        $owncircles = [];
+        $othercircles = [];
+        foreach (groups_get_all_groups($courseid) as $group) {
             $gid = (int) $group->id;
             if ($admitted !== null && !in_array($gid, $admitted, true)) {
                 continue;
             }
             $visibility = (int) ($group->visibility ?? GROUPS_VISIBILITY_ALL);
-            $isown = in_array($gid, $own, true);
-            if ($isown) {
+            if (in_array($gid, $own, true)) {
                 // Members may only learn about each other if membership is visible to members.
-                if (!in_array($visibility, [GROUPS_VISIBILITY_ALL, GROUPS_VISIBILITY_MEMBERS], true)) {
-                    continue;
+                if (in_array($visibility, [GROUPS_VISIBILITY_ALL, GROUPS_VISIBILITY_MEMBERS], true)) {
+                    $owncircles[$gid] = ['own' => true, 'groupname' => null];
                 }
-            } else {
-                if ($sideline->sharingmode !== instance_config::GROUP_OPEN || $visibility !== GROUPS_VISIBILITY_ALL) {
-                    continue;
-                }
-            }
-            $members = array_map('intval', array_keys(groups_get_members($gid, 'u.id')));
-            $members = array_values(array_intersect($members, $active));
-            if (!$members) {
-                continue;
-            }
-            $circles[] = [
-                'own' => $isown,
-                'groupname' => $isown ? null : clean_param(
+            } else if ($sideline->sharingmode === instance_config::GROUP_OPEN && $visibility === GROUPS_VISIBILITY_ALL) {
+                $othercircles[$gid] = ['own' => false, 'groupname' => clean_param(
                     format_string($group->name, true, ['context' => $context]),
                     PARAM_NOTAGS,
-                ),
-                'members' => $members,
-            ];
+                )];
+            }
         }
-        // Own groups first: they are the closest circle.
-        usort($circles, static fn(array $a, array $b): int => (int) $b['own'] <=> (int) $a['own']);
-        return $circles;
+        return $owncircles + $othercircles;
     }
 
     /**
-     * Recent positive completions of sharing users, in one query.
+     * Events of sharing members of the circles, set-based (issue #7).
      *
+     * One query per event type. It returns only members who are actively enrolled, publish under the
+     * current group version, whose consent allows processing, and who had the event in the window.
+     *
+     * @param \stdClass $sideline Instance record.
      * @param int[] $cmids Course module ids.
-     * @param int[] $userids Sharing users.
-     * @param int $now Current time.
-     * @return array cmid => user ids.
+     * @param int[] $groupids Circle group ids.
+     * @param string[] $types Event types.
+     * @param int $since Start of the window.
+     * @param int $until End of the window (exclusive).
+     * @param int $recipientid The recipient, never part of a statement about others.
+     * @return array groupid => cmid => type => [user id => [named (bool), time (int)]].
      */
-    private function recent_completions(array $cmids, array $userids, int $now): array {
+    private function events(
+        \stdClass $sideline,
+        array $cmids,
+        array $groupids,
+        array $types,
+        int $since,
+        int $until,
+        int $recipientid,
+    ): array {
         global $DB;
 
-        [$cmsql, $cmparams] = $DB->get_in_or_equal($cmids, SQL_PARAMS_NAMED, 'cm');
-        [$usql, $uparams] = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED, 'u');
-        // Completed or completed-pass only: failed attempts are never published (decision 3).
-        $rs = $DB->get_recordset_sql(
-            "SELECT id, coursemoduleid, userid FROM {course_modules_completion}
-              WHERE coursemoduleid $cmsql AND userid $usql
-                AND completionstate IN (:complete, :pass) AND timemodified >= :since",
-            $cmparams + $uparams + [
-                'complete' => COMPLETION_COMPLETE,
-                'pass' => COMPLETION_COMPLETE_PASS,
-                'since' => $now - self::RECENT,
-            ]
-        );
-        $result = [];
-        foreach ($rs as $row) {
-            $result[(int) $row->coursemoduleid][] = (int) $row->userid;
+        if (!$cmids || !$groupids || !$types) {
+            return [];
         }
-        $rs->close();
+        [$cmsql, $cmparams] = $DB->get_in_or_equal($cmids, SQL_PARAMS_NAMED, 'cm');
+        [$gsql, $gparams] = $DB->get_in_or_equal($groupids, SQL_PARAMS_NAMED, 'g');
+        [$esql, $eparams] = get_enrolled_sql(\context_course::instance((int) $sideline->course), '', 0, true);
+        [$consentsql, $consentparams] = \mod_sideline\local\consent\consent_manager::processing_sql($sideline, 'c');
+        $base = "FROM {groups_members} gm
+                 JOIN ($esql) je ON je.id = gm.userid
+                 JOIN {sideline_publish} p ON p.userid = gm.userid AND p.sidelineid = :sid
+                      AND p.publish = 1 AND p.infoversion >= :version
+            LEFT JOIN {sideline_consent} c ON c.userid = gm.userid AND c.sidelineid = :csid";
+        $params = $cmparams + $gparams + $eparams + $consentparams + [
+            'sid' => $sideline->id,
+            'csid' => $sideline->id,
+            'version' => (int) $sideline->groupversion,
+            'recipient' => $recipientid,
+            'since' => $since,
+            'until' => $until,
+        ];
+        $where = "gm.groupid $gsql AND gm.userid <> :recipient AND $consentsql";
+        $queries = [
+            'completed' => "SELECT gm.id, gm.groupid, gm.userid, x.coursemoduleid, x.timemodified AS eventtime, p.named $base
+                              JOIN {course_modules_completion} x ON x.userid = gm.userid
+                             WHERE $where AND x.coursemoduleid $cmsql AND x.completionstate IN (:complete, :pass)
+                                   AND x.timemodified >= :since AND x.timemodified < :until",
+            'passed' => "SELECT gm.id, gm.groupid, gm.userid, x.coursemoduleid, x.timemodified AS eventtime, p.named $base
+                           JOIN {course_modules_completion} x ON x.userid = gm.userid
+                          WHERE $where AND x.coursemoduleid $cmsql AND x.completionstate = :pass
+                                AND x.timemodified >= :since AND x.timemodified < :until",
+            'viewed' => "SELECT gm.id, gm.groupid, gm.userid, x.coursemoduleid, x.timecreated AS eventtime, p.named $base
+                           JOIN {course_modules_viewed} x ON x.userid = gm.userid
+                          WHERE $where AND x.coursemoduleid $cmsql
+                                AND x.timecreated >= :since AND x.timecreated < :until",
+        ];
+        $params += ['complete' => COMPLETION_COMPLETE, 'pass' => COMPLETION_COMPLETE_PASS];
+
+        $result = [];
+        foreach ($types as $type) {
+            $sql = $queries[$type];
+            // Named parameters must all be used: drop the ones a query does not contain.
+            $used = array_filter($params, static fn(string $name): bool => str_contains($sql, ':' . $name), ARRAY_FILTER_USE_KEY);
+            $rs = $DB->get_recordset_sql($sql, $used);
+            foreach ($rs as $row) {
+                $result[(int) $row->groupid][(int) $row->coursemoduleid][$type][(int) $row->userid] = [
+                    'named' => (bool) $row->named,
+                    'time' => (int) $row->eventtime,
+                ];
+            }
+            $rs->close();
+        }
         return $result;
     }
 

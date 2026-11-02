@@ -199,11 +199,11 @@ final class ai_integration_test extends \advanced_testcase {
         global $DB;
         \core_ai\manager::user_policy_accepted((int) $this->student->id, \context_module::instance($this->instance->cmid)->id);
         $this->mock_provider(200, 2);
-        // A learner whose language is French: there are no phrase lists for French (P-24).
+        // A French learner whose provider answers in English: the separate, checked translation step (P-24).
         $result = $this->get('fr');
 
-        $this->assertCount(2, $this->history, 'Generation in English, then the separate translation step (P-24)');
-        $this->assertSame('ai', $result['commentary']['source']);
+        $this->assertCount(2, $this->history, 'English answer, then the separate translation step (P-24)');
+        $this->assertSame('translated', $result['commentary']['source'], 'Labelled as translated (issue #17)');
         $this->assertStringContainsString('Très bien', json_encode($result['commentary'], JSON_UNESCAPED_UNICODE));
         $this->assertStringContainsString('Beta unit', json_encode($result['commentary']), 'Resolved locally after both steps');
         foreach ($this->history as $call) {

@@ -163,8 +163,9 @@ class scope_resolver {
     /**
      * Whether the teacher who added a source may still manage activities there.
      *
-     * Sources saved before 0.3.0 carry no teacher (0); they were authorised when saved and count until a
-     * teacher saves the settings again.
+     * Sources saved before 0.3.0 carry no teacher (0). Without a verifiable teacher there is no current
+     * authorisation, so they do not count (issue #5) until a teacher who may manage activities there
+     * confirms them by saving the settings (instance_config::save_sources records that teacher).
      *
      * @param int $editorid Teacher.
      * @param \context|false $context Course or category context, false when it no longer exists.
@@ -174,7 +175,7 @@ class scope_resolver {
         if (!$context) {
             return false;
         }
-        return $editorid === 0 || has_capability('moodle/course:manageactivities', $context, $editorid);
+        return $editorid > 0 && has_capability('moodle/course:manageactivities', $context, $editorid);
     }
 
     /**

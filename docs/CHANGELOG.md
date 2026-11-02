@@ -1,5 +1,62 @@
 # Changelog
 
+## 0.4.0 (beta)
+
+Nacharbeit aus dem Re-Audit vom 02.11.2026 (Issues #1 bis #18). Nachweise je Issue: `docs/ISSUE_NACHWEISE_0.4.0.md`.
+
+**CI (#1, #2, #15)**
+* PHP 8.1 läuft in keiner Testmatrix mehr: Main, Dev und Coverage nutzen 8.2 und 8.3. `version.php` bleibt unverändert.
+* `maturity-gate` („Release gate“) und `ecosystem-lockstep` sind entfernt, ersatzlos und ohne Umbenennung. „CI complete“ fasst nur die funktionalen Jobs zusammen.
+* Neu in der Main-CI auf demselben Commit:
+  * PHPUnit der Adapter-Suites;
+  * `--fail-on-skipped` und `--fail-on-incomplete`;
+  * echte Parallelprozess-Rennen (`tools/race/run.php`);
+  * Frontend-Job (ESLint, strikter TypeScript-Check, ESM- und AMD-Build, Jest mit axe für beide Panels);
+  * Upgrade-Job vom vorigen Release auf 4.5/pgsql und 5.3/mariadb mit Schema- und Datenprüfung.
+* Playwright bleibt auf ausdrücklichen Wunsch manuell (`playwright.yml`). Neu sind Journeys für Mehrfachauswahl per Tastatur und für Gruppenaussagen mit Widerruf.
+
+**Sicherheit und Datenschutz (#3, #4, #14, #18)**
+* **#4 (P0):**
+  * Freitexte von Lehrenden (Intent eigener Regeln) und Admins (Persona-Stil) prüft `prompt_text_guard`, bevor etwas an die KI geht: E-Mail, Links, Domains, Handles, IP, Telefon, genaue Daten und Uhrzeiten, Kennungen, fremde Tokens, Markup, Prompt-Injection sowie Namen aller Kursteilnehmenden.
+  * Bei einem Fund wird nichts gesendet; es gilt der lokale Vorlagentext.
+* **#3 (P0):**
+  * Widerruf, Cache und Auslieferung sind atomar: Schreiben, dann prüfen gegen Status schreiben, dann löschen.
+  * Ein gescheiterter Cache-Schreibvorgang (CAS) verwirft den Text, und die Berechnung läuft einmal neu.
+  * Vor jeder Auslieferung personenbezogener Inhalte läuft eine letzte Prüfung. Bei Sperr-Timeout gibt es nur den nicht personenbezogenen Grundtext.
+* **#14:**
+  * Die Privacy-Löschung entfernt alle Cachezeilen der Instanz, unabhängig vom Gruppenmodus.
+  * Entscheidungsprotokolle halten den tatsächlich ausgelieferten Text und den KI-Austausch nur mit Tokens.
+  * Der Debug-Export kennzeichnet die Live-Simulation und markiert Abweichungen.
+  * Datenregister und offene DSB-Entscheidungen: `docs/privacy/DATENSCHUTZ.md`.
+* **#18:**
+  * Der Import ist eine Rechte- und Zustimmungsgrenze: Fehlerhafte Dateien werden als Ganzes abgelehnt.
+  * Kurse und Kursbereiche werden nur mit Verwaltungsrecht übernommen, Persona-Definitionen nur von Admins und nur als Entwurf.
+  * Das Teilen wird nie stillschweigend für alle Gruppen eingeschaltet.
+
+**Zugriff und Cache (#5, #16)**
+* **#5:** Kursquellen ohne nachweisbare Lehrperson (vor 0.3.0) werden nicht mehr ausgewertet, bis eine berechtigte Lehrperson sie durch Speichern bestätigt. Das Formular zeigt die Zahl. Das Upgrade protokolliert die betroffenen Instanzen und verwirft deren Texte.
+* **#16:** Ereignisse in Kursen eines Kursbereichs, verschobene Kurse und Kursbereiche, Rollen- und Rechteänderungen markieren die betroffenen Caches. Der Fingerabdruck stellt zusätzlich sicher, dass die nächste Auslieferung dem aktuellen Stand entspricht.
+
+**Gruppenmodus (#6, #7, #9, #12)**
+* **#6:** Ereignisarten sind einstellbar: geöffnet, abgeschlossen, bestanden. Fehlversuche, Noten und andere negative Ereignisse werden nie erzählt. Die Matrix steht in `docs/privacy/GRUPPENAGGREGATE.md`.
+* **#7:** Mengenbasierte Abfragen: keine Abfrage je Gruppe oder Mitglied, Zustimmungen in einer Abfrage. Messwerkzeug: `tools/bench_groups.php`.
+* **#9:**
+  * Die Freigabe gilt für einen gespeicherten Freigabekreis. Wächst er, müssen Lernende neu entscheiden. Das gilt für neue Gruppen, erweiterte Gruppierungen, sichtbarer gewordene Gruppen und neue Ereignisarten, ebenso über Formular, Observer, Import und Wiederherstellung.
+  * Eine Wiederherstellung ohne die zugelassenen Gruppen schaltet das Teilen ab.
+* **#12:** Anonyme Aussagen brauchen mindestens drei Personen. Sie nennen Bänder statt Zahlen und verwenden ein Zeitfenster, das am Tagesbeginn endet. Es gibt höchstens eine Aussage je Kommentar.
+
+**KI-Kosten (#8)**
+* Die Reservierung ist websiteweit atomar (Sperre, fail closed) und rechnet mit dem schlechtesten Fall (Prompt plus maximale Antwort). Offene Reservierungen bleiben sichtbar und zählen weiter. Ein Anbieterausfall schließt die Reservierung als gescheitert ab.
+
+**Interview (#11)**
+* Multiple Choice mit Mehrfachauswahl: Mindest- und Höchstzahl, strenge Prüfung (keine Duplikate, keine unbekannten Optionen) und deterministische Verrechnung der Wirkungen. Unterstützt in beiden Panels, in den eigenen Antworten, beim Bearbeiten, Löschen, Export, Import und Backup.
+
+**Sprache (#13, #17)**
+* Prüfregeln für erfundene Fakten auch in Französisch, Spanisch, Italienisch, Niederländisch und Portugiesisch. KI-Text gibt es nur in Sprachen mit Prüfregeln; die Übersetzung wird immer erneut geprüft.
+* Das Panel kennzeichnet übersetzte Texte und Fallback-Sprache. Eine Vorlage erscheint nie als übersetzt. Matrix: `docs/SPRACHMATRIX.md`.
+
+**Datenbank:** `sideline.groupevents`, `sideline.groupcircle`, `sideline_aiusage.timecompleted`; Upgrade-Schritt 2026110300.
+
 ## 0.3.2 (beta)
 
 CI-Befunde behoben. Seit dieser Version läuft vor jeder Auslieferung moodle-plugin-ci lokal mit denselben Schritten wie auf GitHub (`tools/ci-local/`, `docs/environment-setup.md`).

@@ -281,7 +281,7 @@ final class custom_rules_test extends \advanced_testcase {
         $this->resetAfterTest();
         $old = config_transfer::migrate(['format' => config_transfer::FORMAT, 'version' => 1, 'settings' => ['persona' => 'mentor'],
             'scope' => []]);
-        $this->assertSame(2, $old['version']);
+        $this->assertSame(3, $old['version']);
         $this->assertSame([], $old['rules']);
         $this->expectException(\moodle_exception::class);
         config_transfer::migrate(['format' => 'something_else', 'version' => 1]);

@@ -35,6 +35,7 @@ define('CLI_SCRIPT', true);
 require(__DIR__ . '/../../../../config.php');
 require_once($CFG->libdir . '/clilib.php');
 require_once($CFG->libdir . '/testing/generator/lib.php');
+require_once($CFG->libdir . '/completionlib.php');
 // Moodle 4.5 keeps testing_util in this file; 5.x autoloads it.
 if (file_exists($CFG->libdir . '/testing/classes/util.php')) {
     require_once($CFG->libdir . '/testing/classes/util.php');
@@ -72,16 +73,46 @@ $gen->get_plugin_generator('mod_sideline')->create_question([
 ]);
 $typing = $gen->create_module('sideline', ['course' => $course->id, 'name' => 'Typing coach', 'display' => 'page',
     'typing' => 1]);
+// Several selections (issue #11) and the group mode with names (issues #6, #9, #12), each on its own page.
+$multi = $gen->create_module('sideline', ['course' => $course->id, 'name' => 'Multi coach', 'display' => 'page',
+    'typing' => 0, 'dialogenabled' => 1, 'dialogcooldown' => 0]);
+$gen->get_plugin_generator('mod_sideline')->create_question([
+    'sidelineid' => $multi->id,
+    'prompt' => 'What holds you back?',
+    'config' => ['options' => [['label' => 'Little time', 'effect' => 'focus_deadlines'],
+        ['label' => 'Tired', 'effect' => 'pause_ok'], ['label' => 'Nothing', 'effect' => 'none']],
+        'multiple' => 1, 'minselect' => 1, 'maxselect' => 2],
+]);
+$groupcoach = $gen->create_module('sideline', ['course' => $course->id, 'name' => 'Group coach', 'display' => 'page',
+    'typing' => 0, 'sharingmode' => 'closed', 'grouppublish' => 'named']);
 
 $exports = ['SL_BASE_URL' => $CFG->wwwroot, 'SL_COURSEID' => $course->id, 'SL_TYPING_CMID' => $typing->cmid,
-    'SL_PASSWORD' => $password];
+    'SL_MULTI_CMID' => $multi->cmid, 'SL_GROUP_CMID' => $groupcoach->cmid, 'SL_PASSWORD' => $password];
+$users = [];
 $roles = ['teacher' => 'editingteacher', 'student1' => 'student', 'student2' => 'student', 'student3' => 'student'];
 foreach ($roles as $key => $role) {
     $user = $gen->create_user(['username' => 'slpw' . $stamp . $key, 'password' => $password, 'firstname' => ucfirst($key),
         'lastname' => 'Test', 'policyagreed' => 1]);
     $gen->enrol_user($user->id, $course->id, $role);
     $exports['SL_' . strtoupper($key)] = $user->username;
+    $users[$key] = $user;
 }
+// Student1 and Student2 form a group; Student2 shares with name and completed "Unit one".
+$group = $gen->create_group(['courseid' => $course->id, 'name' => 'Red team']);
+foreach (['student1', 'student2'] as $key) {
+    $gen->create_group_member(['groupid' => $group->id, 'userid' => $users[$key]->id]);
+}
+$groupsideline = $DB->get_record('sideline', ['id' => $groupcoach->id]);
+\mod_sideline\local\group\sharing_manager::record(
+    $groupsideline,
+    (int) $users['student2']->id,
+    true,
+    true,
+    context_module::instance($groupcoach->cmid)->id,
+    time()
+);
+$unitone = get_coursemodule_from_instance('page', $DB->get_field('page', 'id', ['course' => $course->id, 'name' => 'Unit one']));
+(new completion_info($course))->update_state($unitone, COMPLETION_COMPLETE, $users['student2']->id, true);
 ob_end_clean();
 foreach ($exports as $name => $value) {
     echo "export $name='" . $value . "'\n";

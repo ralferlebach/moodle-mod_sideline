@@ -94,3 +94,47 @@ test('a teacher gets no view of learner data', async({page}) => {
         await expect(panel(page)).not.toContainText(name);
     }
 });
+
+test('a learner selects several options with the keyboard and sees both in the answers', async({page}) => {
+    await login(page, env.user('student3'));
+    await page.goto(`/mod/sideline/view.php?id=${env.multicmid}`);
+    const coach = panel(page);
+    await expect(coach.getByText('Select 1 to 2 options.')).toBeVisible();
+    await expectAccessible(page);
+    for (const name of ['Little time', 'Tired']) {
+        const box = coach.getByRole('checkbox', {name});
+        await box.focus();
+        await page.keyboard.press('Space');
+        await expect(box).toBeChecked();
+    }
+    // A third option would exceed the maximum: the answer cannot be sent then.
+    await coach.getByRole('checkbox', {name: 'Nothing'}).check();
+    await expect(coach.getByRole('button', {name: 'Answer', exact: true})).toBeDisabled();
+    await coach.getByRole('checkbox', {name: 'Nothing'}).uncheck();
+    await coach.getByRole('button', {name: 'Answer', exact: true}).focus();
+    await page.keyboard.press('Enter');
+    await coach.getByRole('button', {name: 'Show my answers'}).click();
+    await expect(coach.getByText('Little time, Tired')).toBeVisible();
+});
+
+test('a group member sees a named statement only while the other person shares', async({page}) => {
+    await login(page, env.user('student1'));
+    await page.goto(`/mod/sideline/view.php?id=${env.groupcmid}`);
+    await expect(panel(page).getByText('Student2 from your group recently completed "Unit one".').first()).toBeAttached();
+    await expectAccessible(page);
+
+    await page.context().clearCookies();
+    await login(page, env.user('student2'));
+    await page.goto(`/mod/sideline/view.php?id=${env.groupcmid}`);
+    const share = panel(page).getByRole('checkbox', {name: 'Share my completed activities with my group'});
+    await expect(share).toBeChecked();
+    await share.uncheck();
+    await panel(page).getByRole('button', {name: 'Save'}).click();
+    await expect(share).not.toBeChecked();
+
+    await page.context().clearCookies();
+    await login(page, env.user('student1'));
+    await page.goto(`/mod/sideline/view.php?id=${env.groupcmid}`);
+    await expect(panel(page).locator('[data-region="commentary"]')).toBeAttached();
+    await expect(panel(page)).not.toContainText('Student2');
+});

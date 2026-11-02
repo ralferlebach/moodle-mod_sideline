@@ -44,7 +44,8 @@ const keys: (keyof PanelStrings)[] = [
     'region', 'loading', 'error', 'retry', 'consentTitle', 'consentText', 'consentAccept', 'consentDecline', 'consentWithdraw',
     'consentDeclined', 'questionSubmit', 'questionSkip', 'questionTitle', 'answersShow', 'answersHide', 'answersEmpty',
     'answerDelete', 'answerEffect', 'personaLabel', 'personaDefault', 'sharingTitle', 'sharingText', 'sharingPublish',
-    'sharingNamed', 'sharingReconsent', 'sharingSave', 'sliderValue', 'textRemaining',
+    'sharingNamed', 'sharingReconsent', 'sharingSave', 'sliderValue', 'textRemaining', 'selectHint', 'translatedNote',
+    'languageFallback',
 ];
 // Every UI string is recognisable, so the tests can prove that no text is hard-coded.
 const strings = Object.fromEntries(keys.map((k) => [k, `«${k}»`])) as unknown as PanelStrings;
@@ -56,8 +57,8 @@ const ok = (extra: object = {}, blocks: object[] = [{key: 'smalltalk', text: 'He
 });
 
 const question = (q: Partial<Question>): Question => ({
-    id: 5, qtype: 'mc', prompt: 'How is it going?', options: [], min: 0, max: 10, step: 1, minlabel: 'low', maxlabel: 'high',
-    pairs: [], scale: 7, maxlength: 20, ...q,
+    id: 5, qtype: 'mc', prompt: 'How is it going?', options: [], multiple: false, minselect: 1, maxselect: 1, min: 0, max: 10,
+    step: 1, minlabel: 'low', maxlabel: 'high', pairs: [], scale: 7, maxlength: 20, ...q,
 });
 
 const renderPanel = async(typing = false) => {
@@ -168,6 +169,47 @@ describe('CommentaryPanel', () => {
         expect(mockFetchOne).toHaveBeenCalledWith({methodname: 'mod_sideline_answer_question',
             args: {cmid: 7, questionid: 5, value: '1', skip: false}});
         expect(document.activeElement?.getAttribute('role')).toBe('region');
+    });
+
+    it('selects several options within the allowed number and sends them as a list', async() => {
+        mockFetchOne
+            .mockResolvedValueOnce(ok({question: [question({options: ['A', 'B', 'C'], multiple: true, minselect: 1,
+                maxselect: 2})]}))
+            .mockResolvedValueOnce({saved: true})
+            .mockResolvedValueOnce(ok());
+        await renderPanel();
+        const submit = screen.getByRole('button', {name: '«questionSubmit»'});
+        expect(screen.getAllByRole('checkbox')).toHaveLength(3);
+        expect(screen.getByLabelText('A')).toHaveAttribute('aria-describedby');
+        expect(submit).toBeDisabled();
+        await click(screen.getByLabelText('C'));
+        await click(screen.getByLabelText('A'));
+        await click(screen.getByLabelText('B'));
+        expect(submit).toBeDisabled();
+        await click(screen.getByLabelText('B'));
+        expect(submit).toBeEnabled();
+        await click(submit);
+        expect(mockFetchOne).toHaveBeenCalledWith({methodname: 'mod_sideline_answer_question',
+            args: {cmid: 7, questionid: 5, value: '[0,2]', skip: false}});
+    });
+
+    itAxe('has no detectable accessibility violations with several options', async() => {
+        mockFetchOne.mockResolvedValueOnce(ok({question: [question({options: ['A', 'B'], multiple: true, maxselect: 2})]}));
+        const container = await renderPanel();
+        const results = await axe.axe(container);
+        expect(results.violations.map((v: {id: string; help: string}) => `${v.id}: ${v.help}`)).toEqual([]);
+    });
+
+    it('labels a translated text and a text in a fallback language, never a template as translated', async() => {
+        mockFetchOne.mockResolvedValueOnce(ok({source: 'translated', locale: 'fr'}));
+        const translated = await renderPanel();
+        expect(screen.getByText('«translatedNote»')).toBeInTheDocument();
+        expect(translated.querySelector('[data-region="commentary"]')).toHaveAttribute('lang', 'fr');
+        translated.remove();
+        mockFetchOne.mockResolvedValueOnce(ok({source: 'template', locale: 'en', langfallback: true}));
+        await renderPanel();
+        expect(screen.getByText('«languageFallback»')).toBeInTheDocument();
+        expect(screen.queryByText('«translatedNote»')).toBeNull();
     });
 
     it('lets the learner skip', async() => {

@@ -43,3 +43,19 @@ Moodle 5.3, PostgreSQL 17, PHP 8.3, eingebauter Server mit 8 Workern auf **2 CPU
 | Race: 20 Sitzungen derselben Person gleichzeitig | alle beantwortet, längste 545 ms; danach genau eine aktuelle Cache-Zeile (`verify_load.php`: OK) |
 
 Bei Cache-Treffer und Neuerzeugung liegen die Zeiten nah beieinander. Die Antwortzeit wird vom Moodle-Bootstrap je Anfrage und von den zwei CPU-Kernen bestimmt, nicht vom Plugin. Ohne HTTP misst `tools/bench.php` 9 ms (Treffer) und 36 ms (Erzeugung), siehe `docs/TRACEABILITY.md`.
+
+## Gruppenpfad (Issue #7)
+
+`seed_load.php --groups=N` verteilt die Lernenden auf N Gruppen im geschlossenen Gruppenmodus. Alle teilen, und jede zweite Person hat einen Abschluss vom Vortag. So läuft jede Anfrage durch `group_service`.
+
+Messung vom 03.11.2026: Moodle 5.3, PHP 8.3, eingebauter Server mit 8 Workern auf 2 CPU-Kernen, 50 Lernende in 5 Gruppen, 20 Aktivitäten, 20 gleichzeitige Lernende für 60 s, danach das Race.
+
+| Messgröße | PostgreSQL 17 | MariaDB 11.4 |
+|---|---|---|
+| Anfragen / Fehler | 2182 / 0 | 3915 / 0 |
+| Kommentar aus dem Cache, p95 | 652 ms | 226 ms |
+| Kommentar nach Zustandswechsel, p95 | 693 ms | 266 ms |
+| Race: 20 Sitzungen derselben Person | max. 613 ms, `verify_load.php` OK | max. 434 ms, `verify_load.php` OK |
+| Cachezeilen mit Gruppenaussage | 16 von 21 | 16 von 21 |
+
+Ohne HTTP misst `tools/bench_groups.php` den Gruppenpfad allein. Für 100, 1000 und 5000 Personen mit 0, 10, 50 und 200 Gruppen bleibt er bei höchstens 7 Lesezugriffen (warm) und höchstens 32 ms; die Werte stehen in `docs/ISSUE_NACHWEISE_0.4.0.md`.

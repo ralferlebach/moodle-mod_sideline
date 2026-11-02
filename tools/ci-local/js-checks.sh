@@ -5,6 +5,7 @@
 # type-check, Jest for both panels and a rebuild of the ESM bundle that must match the committed one.
 #
 # Usage: tools/ci-local/js-checks.sh [MOODLE_ROOT]   (default: $CI_WORK/503-pgsql-8.3/moodle)
+# The GitHub frontend job runs the same script (SRC=checkout, MPCI=runner temp directory).
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC=${SRC:-$(cd "$HERE/../.." && pwd)}
@@ -35,6 +36,11 @@ step jest-react npx jest $P/js/esm/tests
 # The AMD tests need a newer Babel than Moodle's own (7.17): own toolchain from setup.sh, run from SRC so that
 # Node does not find Moodle's node_modules in a parent directory first.
 J=${MPCI:-/opt/mpci}/jest-amd/node_modules
+if [[ ! -x $J/.bin/jest ]]; then
+    mkdir -p "${J%/node_modules}" && (cd "${J%/node_modules}" && npm init -y > /dev/null && npm install --no-progress \
+        --no-audit --no-fund jest@30 jest-environment-jsdom@30 babel-jest@30 @babel/core@7 @babel/preset-env@7 jest-axe@10 \
+        > /dev/null 2>&1)
+fi
 step jest-amd bash -c "cd '$SRC/tests/js' && NODE_PATH=$J $J/.bin/jest --config jest.config.js"
 npx grunt amd --root=$P > /dev/null 2>&1
 step amd-build-current diff -r "$SRC/amd" "$P/amd"

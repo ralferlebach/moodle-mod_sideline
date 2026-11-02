@@ -33,8 +33,10 @@ use mod_sideline\local\model\recommendation;
  * Negated phrases ("not passed", "noch nicht geöffnet") are matched before their positive forms
  * and removed from the text, so that the positive form is not found inside them.
  *
- * Supported languages are those with phrase lists. For other languages the gateway generates in
- * English, checks the English text here, and translates it in a separate, checked step (P-24).
+ * Supported languages are those with phrase lists: English and German here, French, Spanish,
+ * Italian, Dutch and Portuguese in claim_patterns (issue #13). AI text is only ever delivered in a
+ * supported language, after the check in that language; for any other language the localised
+ * template is served (P-24).
  *
  * @package    mod_sideline
  * @copyright  2026 Ralf Erlebach
@@ -339,13 +341,22 @@ class claim_checker {
     ];
 
     /**
+     * Phrase patterns of every supported language.
+     *
+     * @return array Language family to claim patterns.
+     */
+    private static function patterns(): array {
+        return self::PATTERNS + claim_patterns::PATTERNS;
+    }
+
+    /**
      * Whether claims can be checked in this language.
      *
      * @param string $lang Moodle language code or family.
      * @return bool
      */
     public static function supports(string $lang): bool {
-        return isset(self::PATTERNS[language_detector::base_language($lang)]);
+        return isset(self::patterns()[language_detector::base_language($lang)]);
     }
 
     /**
@@ -356,7 +367,7 @@ class claim_checker {
      * @return string[] Claim constants, unique.
      */
     public static function claims(string $text, string $lang): array {
-        $patterns = self::PATTERNS[language_detector::base_language($lang)] ?? null;
+        $patterns = self::patterns()[language_detector::base_language($lang)] ?? null;
         if ($patterns === null) {
             return [];
         }
@@ -396,8 +407,9 @@ class claim_checker {
             $allowed[] = self::ACTION;
             $allowed[] = self::UNLOCKED;
         }
-        if (str_starts_with($rec->key, 'group_')) {
-            // Others completed something; the learner's own state is not part of a group statement.
+        if (str_starts_with($rec->key, 'group_') && ($rec->facts['event'] ?? 'completed') !== 'viewed') {
+            // Others completed something; the learner's own state is not part of a group statement. Somebody
+            // who only opened an activity has not completed it (issue #6).
             $allowed[] = self::DONE;
             $allowed[] = self::SUCCESS;
         }
@@ -421,7 +433,7 @@ class claim_checker {
      * @return string|null Null when every text is plausible, otherwise the first offending claim as "key:claim".
      */
     public static function check_all(array $texts, array $recommendations): ?string {
-        foreach (array_keys(self::PATTERNS) as $lang) {
+        foreach (array_keys(self::patterns()) as $lang) {
             if ($problem = self::check($texts, $recommendations, $lang)) {
                 return $problem;
             }

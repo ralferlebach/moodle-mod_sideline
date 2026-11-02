@@ -11,13 +11,60 @@ import { useId, useState } from "react";
 const QuestionForm = /* @__PURE__ */ __name(({ question, strings, onSubmit }) => {
   const id = useId();
   const [choice, setChoice] = useState(null);
+  const [choices, setChoices] = useState([]);
   const [text, setText] = useState("");
   const [slider, setSlider] = useState(question.min);
   const [ratings, setRatings] = useState(question.pairs.map(() => null));
   let control;
   let value = "";
   let complete = false;
-  if (question.qtype === "mc") {
+  if (question.qtype === "mc" && question.multiple) {
+    const toggle = /* @__PURE__ */ __name((index) => setChoices(
+      choices.includes(index) ? choices.filter((c) => c !== index) : [...choices, index].sort((a, b) => a - b)
+    ), "toggle");
+    control = /* @__PURE__ */ jsxDEV(Fragment, { children: [
+      question.options.map((label, index) => /* @__PURE__ */ jsxDEV("div", { className: "form-check", children: [
+        /* @__PURE__ */ jsxDEV(
+          "input",
+          {
+            className: "form-check-input",
+            type: "checkbox",
+            id: `${id}-mc-${index}`,
+            "aria-describedby": `${id}-hint`,
+            checked: choices.includes(index),
+            onChange: () => toggle(index)
+          },
+          void 0,
+          false,
+          {
+            fileName: "public/mod/sideline/js/esm/src/QuestionForm.tsx",
+            lineNumber: 54,
+            columnNumber: 25
+          }
+        ),
+        /* @__PURE__ */ jsxDEV("label", { className: "form-check-label", htmlFor: `${id}-mc-${index}`, children: label }, void 0, false, {
+          fileName: "public/mod/sideline/js/esm/src/QuestionForm.tsx",
+          lineNumber: 56,
+          columnNumber: 25
+        })
+      ] }, index, true, {
+        fileName: "public/mod/sideline/js/esm/src/QuestionForm.tsx",
+        lineNumber: 53,
+        columnNumber: 21
+      })),
+      /* @__PURE__ */ jsxDEV("small", { id: `${id}-hint`, className: "form-text d-block", children: strings.selectHint.replace("{min}", String(question.minselect)).replace("{max}", String(question.maxselect)) }, void 0, false, {
+        fileName: "public/mod/sideline/js/esm/src/QuestionForm.tsx",
+        lineNumber: 59,
+        columnNumber: 17
+      })
+    ] }, void 0, true, {
+      fileName: "public/mod/sideline/js/esm/src/QuestionForm.tsx",
+      lineNumber: 51,
+      columnNumber: 13
+    });
+    value = JSON.stringify(choices);
+    complete = choices.length >= question.minselect && choices.length <= question.maxselect;
+  } else if (question.qtype === "mc") {
     control = question.options.map((label, index) => /* @__PURE__ */ jsxDEV("div", { className: "form-check", children: [
       /* @__PURE__ */ jsxDEV(
         "input",
@@ -33,18 +80,18 @@ const QuestionForm = /* @__PURE__ */ __name(({ question, strings, onSubmit }) =>
         false,
         {
           fileName: "public/mod/sideline/js/esm/src/QuestionForm.tsx",
-          lineNumber: 47,
+          lineNumber: 69,
           columnNumber: 17
         }
       ),
       /* @__PURE__ */ jsxDEV("label", { className: "form-check-label", htmlFor: `${id}-mc-${index}`, children: label }, void 0, false, {
         fileName: "public/mod/sideline/js/esm/src/QuestionForm.tsx",
-        lineNumber: 49,
+        lineNumber: 71,
         columnNumber: 17
       })
     ] }, index, true, {
       fileName: "public/mod/sideline/js/esm/src/QuestionForm.tsx",
-      lineNumber: 46,
+      lineNumber: 68,
       columnNumber: 13
     }));
     value = choice === null ? "" : String(choice);
@@ -68,7 +115,7 @@ const QuestionForm = /* @__PURE__ */ __name(({ question, strings, onSubmit }) =>
         false,
         {
           fileName: "public/mod/sideline/js/esm/src/QuestionForm.tsx",
-          lineNumber: 58,
+          lineNumber: 80,
           columnNumber: 17
         }
       ),
@@ -78,12 +125,12 @@ const QuestionForm = /* @__PURE__ */ __name(({ question, strings, onSubmit }) =>
         strings.textRemaining
       ] }, void 0, true, {
         fileName: "public/mod/sideline/js/esm/src/QuestionForm.tsx",
-        lineNumber: 60,
+        lineNumber: 82,
         columnNumber: 17
       })
     ] }, void 0, true, {
       fileName: "public/mod/sideline/js/esm/src/QuestionForm.tsx",
-      lineNumber: 57,
+      lineNumber: 79,
       columnNumber: 13
     });
     value = text;
@@ -92,7 +139,7 @@ const QuestionForm = /* @__PURE__ */ __name(({ question, strings, onSubmit }) =>
     control = /* @__PURE__ */ jsxDEV("div", { className: "d-flex align-items-center gap-2", children: [
       /* @__PURE__ */ jsxDEV("span", { "aria-hidden": "true", children: question.minlabel }, void 0, false, {
         fileName: "public/mod/sideline/js/esm/src/QuestionForm.tsx",
-        lineNumber: 68,
+        lineNumber: 90,
         columnNumber: 17
       }),
       /* @__PURE__ */ jsxDEV(
@@ -112,23 +159,23 @@ const QuestionForm = /* @__PURE__ */ __name(({ question, strings, onSubmit }) =>
         false,
         {
           fileName: "public/mod/sideline/js/esm/src/QuestionForm.tsx",
-          lineNumber: 69,
+          lineNumber: 91,
           columnNumber: 17
         }
       ),
       /* @__PURE__ */ jsxDEV("span", { "aria-hidden": "true", children: question.maxlabel }, void 0, false, {
         fileName: "public/mod/sideline/js/esm/src/QuestionForm.tsx",
-        lineNumber: 72,
+        lineNumber: 94,
         columnNumber: 17
       }),
       /* @__PURE__ */ jsxDEV("output", { "aria-live": "polite", children: slider }, void 0, false, {
         fileName: "public/mod/sideline/js/esm/src/QuestionForm.tsx",
-        lineNumber: 73,
+        lineNumber: 95,
         columnNumber: 17
       })
     ] }, void 0, true, {
       fileName: "public/mod/sideline/js/esm/src/QuestionForm.tsx",
-      lineNumber: 67,
+      lineNumber: 89,
       columnNumber: 13
     });
     value = String(slider);
@@ -141,13 +188,13 @@ const QuestionForm = /* @__PURE__ */ __name(({ question, strings, onSubmit }) =>
         pair.right
       ] }, void 0, true, {
         fileName: "public/mod/sideline/js/esm/src/QuestionForm.tsx",
-        lineNumber: 81,
+        lineNumber: 103,
         columnNumber: 17
       }),
       /* @__PURE__ */ jsxDEV("div", { className: "d-flex gap-2 align-items-center", children: [
         /* @__PURE__ */ jsxDEV("span", { "aria-hidden": "true", children: pair.left }, void 0, false, {
           fileName: "public/mod/sideline/js/esm/src/QuestionForm.tsx",
-          lineNumber: 83,
+          lineNumber: 105,
           columnNumber: 21
         }),
         Array.from({ length: question.scale }, (_, i) => i + 1).map((point) => /* @__PURE__ */ jsxDEV(
@@ -164,23 +211,23 @@ const QuestionForm = /* @__PURE__ */ __name(({ question, strings, onSubmit }) =>
           false,
           {
             fileName: "public/mod/sideline/js/esm/src/QuestionForm.tsx",
-            lineNumber: 85,
+            lineNumber: 107,
             columnNumber: 25
           }
         )),
         /* @__PURE__ */ jsxDEV("span", { "aria-hidden": "true", children: pair.right }, void 0, false, {
           fileName: "public/mod/sideline/js/esm/src/QuestionForm.tsx",
-          lineNumber: 90,
+          lineNumber: 112,
           columnNumber: 21
         })
       ] }, void 0, true, {
         fileName: "public/mod/sideline/js/esm/src/QuestionForm.tsx",
-        lineNumber: 82,
+        lineNumber: 104,
         columnNumber: 17
       })
     ] }, p, true, {
       fileName: "public/mod/sideline/js/esm/src/QuestionForm.tsx",
-      lineNumber: 80,
+      lineNumber: 102,
       columnNumber: 13
     }));
     value = JSON.stringify(ratings);
@@ -199,28 +246,28 @@ const QuestionForm = /* @__PURE__ */ __name(({ question, strings, onSubmit }) =>
         question.prompt
       ] }, void 0, true, {
         fileName: "public/mod/sideline/js/esm/src/QuestionForm.tsx",
-        lineNumber: 106,
+        lineNumber: 128,
         columnNumber: 17
       }),
       control
     ] }, void 0, true, {
       fileName: "public/mod/sideline/js/esm/src/QuestionForm.tsx",
-      lineNumber: 105,
+      lineNumber: 127,
       columnNumber: 13
     }),
     /* @__PURE__ */ jsxDEV("button", { type: "submit", className: "btn btn-primary btn-sm me-2 mt-2", disabled: !complete, children: strings.questionSubmit }, void 0, false, {
       fileName: "public/mod/sideline/js/esm/src/QuestionForm.tsx",
-      lineNumber: 109,
+      lineNumber: 131,
       columnNumber: 13
     }),
     /* @__PURE__ */ jsxDEV("button", { type: "button", className: "btn btn-link btn-sm mt-2", onClick: () => onSubmit("", true), children: strings.questionSkip }, void 0, false, {
       fileName: "public/mod/sideline/js/esm/src/QuestionForm.tsx",
-      lineNumber: 112,
+      lineNumber: 134,
       columnNumber: 13
     })
   ] }, void 0, true, {
     fileName: "public/mod/sideline/js/esm/src/QuestionForm.tsx",
-    lineNumber: 99,
+    lineNumber: 121,
     columnNumber: 9
   });
 }, "QuestionForm");

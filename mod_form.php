@@ -90,6 +90,16 @@ class mod_sideline_mod_form extends moodleform_mod {
                 'requiredcapabilities' => ['moodle/course:manageactivities'],
             ]);
             $mform->addHelpButton('sourcecourses', 'sourcecourses', 'mod_sideline');
+            // Sources from before 0.3.0 without a verifiable teacher count only after a confirmation (issue #5).
+            $unconfirmed = empty($this->current->instance) ? 0 : instance_config::count_unconfirmed_sources(
+                (int) $this->current->instance
+            );
+            if ($unconfirmed) {
+                $mform->addElement('static', 'unconfirmedsources', '', \html_writer::div(
+                    get_string('sources_unconfirmed', 'mod_sideline', $unconfirmed),
+                    'alert alert-warning'
+                ));
+            }
             // Course branches: only categories in which the teacher may manage activities (L-19, P-43).
             $categories = \core_course_category::make_categories_list('moodle/course:manageactivities');
             if ($categories) {
@@ -154,6 +164,15 @@ class mod_sideline_mod_form extends moodleform_mod {
         $mform->setDefault('groupminsize', 3);
         $mform->addHelpButton('groupminsize', 'groupminsize', 'mod_sideline');
         $mform->hideIf('groupminsize', 'sharingmode', 'eq', instance_config::GROUP_INDIVIDUAL);
+        // Which events of others may be told (issue #6): only positive ones, never failures or grades.
+        $events = [];
+        foreach (instance_config::GROUP_EVENTS as $type) {
+            $events[$type] = get_string('groupevent_' . $type, 'mod_sideline');
+        }
+        $mform->addElement('autocomplete', 'groupevents', get_string('groupevents', 'mod_sideline'), $events, ['multiple' => true]);
+        $mform->setDefault('groupevents', ['completed']);
+        $mform->addHelpButton('groupevents', 'groupevents', 'mod_sideline');
+        $mform->hideIf('groupevents', 'sharingmode', 'eq', instance_config::GROUP_INDIVIDUAL);
         [$groups, $groupings] = $this->group_options();
         $mform->addElement('autocomplete', 'groupids', get_string('groupids', 'mod_sideline'), $groups, ['multiple' => true]);
         $mform->hideIf('groupids', 'sharingmode', 'eq', instance_config::GROUP_INDIVIDUAL);
@@ -191,6 +210,9 @@ class mod_sideline_mod_form extends moodleform_mod {
             [$groups, $groupings] = instance_config::get_groups($id);
             $defaultvalues['groupids'] = $groups;
             $defaultvalues['groupingids'] = $groupings;
+            if (isset($defaultvalues['groupevents']) && is_string($defaultvalues['groupevents'])) {
+                $defaultvalues['groupevents'] = array_filter(explode(',', $defaultvalues['groupevents']));
+            }
             if (isset($defaultvalues['personas']) && is_string($defaultvalues['personas'])) {
                 $defaultvalues['personas'] = array_filter(explode(',', $defaultvalues['personas']));
             }
@@ -212,7 +234,7 @@ class mod_sideline_mod_form extends moodleform_mod {
             $errors['grouppublish'] = get_string('err_grouppublish', 'mod_sideline');
         }
         $min = (int) ($data['groupminsize'] ?? 3);
-        if ($mode !== instance_config::GROUP_INDIVIDUAL && ($min < 2 || $min > 50)) {
+        if ($mode !== instance_config::GROUP_INDIVIDUAL && ($min < instance_config::MIN_GROUP_SIZE || $min > 50)) {
             $errors['groupminsize'] = get_string('err_groupminsize', 'mod_sideline');
         }
         return $errors;

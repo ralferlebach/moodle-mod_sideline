@@ -58,6 +58,63 @@ class consent_manager {
     }
 
     /**
+     * The same decision as allows_processing() as an SQL condition, for set-based queries (issue #7).
+     *
+     * The query must LEFT JOIN {sideline_consent} under the given alias on user and instance.
+     *
+     * @param \stdClass $sideline Instance record.
+     * @param string $alias Alias of the joined consent table.
+     * @return array [SQL condition, named parameters]
+     */
+    public static function processing_sql(\stdClass $sideline, string $alias): array {
+        if (!empty($sideline->consentrequired)) {
+            return [
+                "($alias.status = :cpaccepted AND $alias.infoversion >= :cpversion)",
+                ['cpaccepted' => self::ACCEPTED, 'cpversion' => (int) $sideline->consentversion],
+            ];
+        }
+        return [
+            "($alias.id IS NULL OR $alias.status NOT IN (:cpdeclined, :cpwithdrawn))",
+            ['cpdeclined' => self::DECLINED, 'cpwithdrawn' => self::WITHDRAWN],
+        ];
+    }
+
+    /**
+     * Which of the given users currently allow processing, in one query (issue #7).
+     *
+     * @param \stdClass $sideline Instance record.
+     * @param int[] $userids Users.
+     * @return int[] The users among them whose consent allows processing.
+     */
+    public static function users_allowing_processing(\stdClass $sideline, array $userids): array {
+        global $DB;
+
+        $userids = array_values(array_unique(array_map('intval', $userids)));
+        if (!$userids) {
+            return [];
+        }
+        [$insql, $params] = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED);
+        $rows = $DB->get_records_select(
+            'sideline_consent',
+            "sidelineid = :sid AND userid $insql",
+            $params + ['sid' => $sideline->id],
+            '',
+            'userid, status, infoversion'
+        );
+        $result = [];
+        foreach ($userids as $userid) {
+            $status = self::status_of($sideline, $rows[$userid] ?? null);
+            $allowed = empty($sideline->consentrequired)
+                ? !in_array($status, [self::DECLINED, self::WITHDRAWN], true)
+                : $status === self::ACCEPTED;
+            if ($allowed) {
+                $result[] = $userid;
+            }
+        }
+        return $result;
+    }
+
+    /**
      * The current consent status of a user, taking a changed information version into account.
      *
      * @param \stdClass $sideline Instance record.
@@ -67,7 +124,20 @@ class consent_manager {
     public static function status(\stdClass $sideline, int $userid): string {
         global $DB;
 
-        $row = $DB->get_record('sideline_consent', ['sidelineid' => $sideline->id, 'userid' => $userid]);
+        return self::status_of(
+            $sideline,
+            $DB->get_record('sideline_consent', ['sidelineid' => $sideline->id, 'userid' => $userid]) ?: null
+        );
+    }
+
+    /**
+     * The status a consent row stands for.
+     *
+     * @param \stdClass $sideline Instance record.
+     * @param \stdClass|null $row Consent row, null when there is none.
+     * @return string One of the status constants.
+     */
+    private static function status_of(\stdClass $sideline, ?\stdClass $row): string {
         if (!$row) {
             return self::NOT_REQUESTED;
         }
@@ -85,9 +155,17 @@ class consent_manager {
      * @param bool $accept True to accept, false to decline or withdraw.
      * @param int $contextid Module context id, stored as evidence of where the decision was made.
      * @param int $now Current time.
+     * @param \core\lock\lock_factory|null $locks Lock factory, injectable for tests.
      * @return string The new status.
      */
-    public static function record_decision(\stdClass $sideline, int $userid, bool $accept, int $contextid, int $now): string {
+    public static function record_decision(
+        \stdClass $sideline,
+        int $userid,
+        bool $accept,
+        int $contextid,
+        int $now,
+        ?\core\lock\lock_factory $locks = null,
+    ): string {
         global $DB;
 
         $current = self::status($sideline, $userid);
@@ -124,15 +202,17 @@ class consent_manager {
             'timecreated' => $now,
         ]);
 
-        // Any decision other than accept removes what was generated about the person (P-47). The
-        // generation lock is taken first, so a generation that is in flight has either stored its text
-        // already (and it is deleted here) or will see the new status before it stores anything.
+        // Any decision other than accept removes what was generated about the person (P-47). The new
+        // status is written above, before the rows are deleted here; a generation writes its row before it
+        // reads the status again (commentary_service, write then check). So a generation in flight either
+        // sees this decision and deletes its own row, or its row is deleted here. The lock only shortens the
+        // window; if it cannot be obtained in time, the rows are deleted all the same (issue #3).
         if ($new !== self::ACCEPTED) {
             // No processing means no publication either: group sharing ends with the consent (L-G06).
             if ($DB->record_exists('sideline_publish', ['sidelineid' => $sideline->id, 'userid' => $userid, 'publish' => 1])) {
                 \mod_sideline\local\group\sharing_manager::record($sideline, $userid, false, false, $contextid, $now);
             }
-            $lock = \core\lock\lock_config::get_lock_factory('mod_sideline')
+            $lock = ($locks ?? \core\lock\lock_config::get_lock_factory('mod_sideline'))
                 ->get_lock('gen_' . $sideline->id . '_' . $userid, 10);
             try {
                 commentary_cache::invalidate_user((int) $sideline->id, $userid);

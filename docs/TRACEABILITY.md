@@ -1,10 +1,19 @@
-# Abdeckungsmatrix mod_sideline 0.3.2
+# Abdeckungsmatrix mod_sideline 0.4.0
 
-Stand: 02.11.2026. Jede Zeile nennt die Umsetzung und den **ausgeführten** Nachweis. Ausgeführt heißt: lokal im Container gelaufen, nicht in GitHub-CI (siehe P-37).
+Stand: 03.11.2026. Jede Zeile nennt die Umsetzung und den **ausgeführten** Nachweis. Ausgeführt heißt: lokal im Container gelaufen, nicht in GitHub-CI (siehe P-37).
 
 Legende: ✔ umgesetzt und getestet · ◐ teilweise / mit benannter Lücke · ✘ offen
 
 Testorte: `tests/**/*_test.php` (PHPUnit, mod_sideline_testsuite), `adapter/*/tests` (slcmod-Suites), `tests/behat/sideline.feature` (Behat), `js/esm/tests` (Jest).
+Läufe (0.4.0, 03.11.2026), alle auf dem entpackten Auslieferungs-ZIP, mit moodle-plugin-ci 4.5.11 lokal:
+- CI-Matrix 8/8 Zellen grün (4.5/8.2/pgsql, 4.5/8.3/mariadb, 5.0/8.2/pgsql, 5.0/8.3/mariadb, 5.1/8.3/pgsql, 5.2/8.3/mariadb, 5.3/8.3/pgsql, 5.3/8.3/mariadb), je 14 Schritte;
+- PHPUnit 421/421 ohne Skips; Adapter-Suites grün; Behat 17/17 Szenarien, 225 Schritte; Races 5/5 (PG und MariaDB);
+- Frontend: ESLint, `eslint:react`, `tsc` strict je 0 Befunde, Jest React 23/23, AMD 19/19, Bundles aktuell;
+- Playwright 6/6 auf 5.3 und 4.5;
+- Upgrade 0.3.2 → 0.4.0 auf 4.5/pgsql und 5.3/mariadb ohne Schemaabweichung, Datenprüfung 9/9;
+- Gruppenpfad: Abfrageprofil 12/12 im Budget, k6 auf PG und MariaDB ohne Fehler.
+Nachweise je Issue: `docs/ISSUE_NACHWEISE_0.4.0.md`.
+
 Läufe (0.3.2, 02.11.2026), alle auf dem entpackten Auslieferungs-ZIP, mit moodle-plugin-ci 4.5.11 lokal (`tools/ci-local/ci.sh`, gleiche Schritte und Optionen wie `moodle-plugin-ci-main.yml`):
 - CI-Matrix 8/8 Zellen grün:
   - 4.5/PHP 8.1/pgsql, 4.5/8.3/mariadb, 5.0/8.2/pgsql, 5.0/8.3/mariadb, 5.1/8.3/pgsql, 5.2/8.3/mariadb, 5.3/8.3/pgsql, 5.3/8.3/mariadb;
@@ -74,7 +83,7 @@ Läufe (0.3.0, 29.10.2026):
 | P-11–P-13 Persona-Grenzen | ✔ | Stilvorgaben, Validator | `ai_pipeline_test` |
 | P-14 Custom-Personas | ✔ | versioniert, Freigabe, Prüfregeln; Vorschau für Entwurf, freigegebene und eingebaute Personas mit erfundenen Daten (Vorlagen, Prompt, KI-Beispiel mit denselben Prüfungen) | `persona_test`, `persona_preview_test`, Behat |
 | P-15 Überspringen, Häufigkeit begrenzt | ✔ | Instanz- und Fragen-Cooldown | `dialog_test` |
-| P-16 Fragetypen | ✔ | MC, Freitext, Slider, semantisches Differenzial | `dialog_test`, Jest |
+| P-16 Fragetypen | ✔ | MC als Einfach- und Mehrfachauswahl (Mindest-/Höchstzahl, Verrechnung der Wirkungen), Freitext, Slider, semantisches Differenzial (0.4.0, #11) | `dialog_test`, `multiple_choice_test`, Jest (React, AMD), Behat „Learners select several options“, Playwright |
 | P-17 Antworten, Aufbewahrung, Freitext nie an KI | ✔ | `answerretentiondays`, Freitext ohne Wirkung | `dialog_test`, `debug_export_test` |
 | P-18 Nur erklärbare Wirkungen | ✔ | geschlossene Effektliste, Anzeige der Wirkung | `dialog_test`, Behat |
 | P-19 Bearbeiten/Löschen | ✔ | `answer_question`, `delete_answer` | `dialog_test`, Jest, Behat |
@@ -83,15 +92,15 @@ Läufe (0.3.0, 29.10.2026):
 | P-22 Nichts Identifizierendes an Provider | ✔ | Allowlist, Tokens | `ai_integration_test` prüft den HTTP-Body |
 | P-23 Rückauflösung nach Validierung | ✔ | Auflösung nach Validator und Teilnehmer-Recheck | `group_mode_test` |
 | P-24 Übersetzungsschritt | ✔ | Direkt in der Nutzersprache, wo die Aussagenprüfung die Sprache kennt (de, en). Sonst auf Englisch erzeugen und prüfen, dann gesonderter Übersetzungsschritt ohne Fakten. Platzhalter und Zahlen müssen identisch bleiben, die Zielsprache wird geprüft. Unbekannte Sprache bekommt die Vorlage | `ai_language_test`, `ai_integration_test` |
-| P-25 Policy, Ausfall, Limits | ✔ | Policy, Capability, Stundenlimit, Fehler | `ai_integration_test`, `commentary_service_test` |
+| P-25 Policy, Ausfall, Limits | ✔ | Policy, Capability, Stundenlimit, Fehler; websiteweit atomare Reservierung mit schlechtestem Fall (0.4.0, #8) | `ai_integration_test`, `commentary_service_test`, `ai_budget_test`, `tools/race/run.php` (20 Prozesse) |
 | P-26 Core-/Provider-Protokolle prüfen | ✔ / ◐ | Technisch geprüft für 4.5 bis 5.3: Core speichert Prompt und Antwort mit Platzhaltern unbefristet. Löschung über Privacy API oder Datenregister (`docs/adr/ADR-AI-02.md`) | `ai_integration_test` (beide Aufrufe, Löschung durch `core_ai\privacy\provider`). Offen: rechtliche Bewertung |
 | P-27 Cache-Key | ✔ | Fingerprint über Nutzer, Instanz, Konfiguration, Regeln, Persona-Version, Sprache, Empfehlungen | `commentary_service_test` |
 | P-28 Invalidierung | ✔ | Completion, Grade, Versuche/Abgaben (Adapter), Struktur, Rollen, Einschreibung, Gruppen, Zeit | `cache_concurrency_test` |
-| P-29 Observer nur markieren; atomare Versionskontrolle | ✔ | `stamp`, bedingtes UPDATE | `cache_concurrency_test` |
+| P-29 Observer nur markieren; atomare Versionskontrolle | ✔ | `stamp`, bedingtes UPDATE; Kursbereiche, verschobene Kurse und Kategorien, Rollen der autorisierenden Lehrperson (0.4.0, #16) | `cache_concurrency_test`, `source_authority_test` |
 | P-30 Keine Neuerzeugung, nie geteilt | ✔ | | `commentary_service_test` |
 | P-31 Admin-Einstellungen | ✔ | KI, Kursverbund, Personas, Aufrufe pro Stunde, Token-Budget pro Tag, Retention, Tracing; Interview-Richtlinie (an/aus, Fragetypen, Mindestabstand, Fragen pro Woche) als Obergrenze für jede Aktivität | `interview_policy_test`, `ai_language_test` (Kosten), Behat |
 | P-32 Lehrende: Scope, Regeln, Templates, Persona, Dialoge | ✔ | Formular, `rules.php`, `questions.php` | Behat |
-| P-33 Transfer mit Version, Vorschau, Konflikten, Mapping | ✔ | `config_transfer` | `custom_rules_test` |
+| P-33 Transfer mit Version, Vorschau, Konflikten, Mapping | ✔ | `config_transfer` Version 3: Kursverbund, Gruppen, Personas; keine stille Erstzuordnung; Rechte- und Strukturprüfung (0.4.0, #10, #18) | `custom_rules_test`, `config_transfer_test` |
 | P-34 Backup/Restore, Privacy | ✔ | `backup/moodle2` (Konfiguration, Scope, Gruppen, Regeln, Fragen) | `backup_restore_test`, `debug_export_test`; Restore einer 4.5-Sicherung auf einer anderen 5.3-Website: Referenzen umgeschrieben, keine Personendaten (`tools/foreign_restore_*.php`) |
 | P-35 Tests je Zustand, Regel, Persona, Dialogtyp, Subplugin, Recht | ✔ / ◐ | siehe Testorte; Property-Test der Regeln | Lücke wie L-15 |
 | P-36 Negativtests | ✔ | | `access_security_test`, `state_model_test`, `rule_evaluator_test` |
@@ -101,11 +110,11 @@ Läufe (0.3.0, 29.10.2026):
 | P-40 Keine Lehrenden-Einsicht | ✔ | | `external_test` |
 | P-41 Debug-Export | ✔ | | `debug_export_test` |
 | P-42 Persona-Policy | ✔ | | `persona_test` |
-| P-43 Kursverbünde | ✔ | Rechteentzug stoppt die Auswertung | `scope_test`, `course_branch_test` |
+| P-43 Kursverbünde | ✔ | Rechteentzug stoppt die Auswertung; Quellen ohne nachweisbare Lehrperson werden nicht ausgewertet, bis sie bestätigt sind (0.4.0, #5) | `scope_test`, `course_branch_test`, `source_authority_test`, Upgrade-Job |
 | P-44 Moodle AI Policy | ✔ | | `ai_integration_test` |
 | P-45 Einwilligung vor Verarbeitung | ✔ | | `commentary_service_test` |
 | P-46 Protokollierung | ✔ | `sideline_consent_log` mit Art (Analyse, Freigabe, Name) | `group_mode_test`, `commentary_service_test` |
-| P-47 Widerruf | ✔ | Sperre plus Recheck | `access_security_test`, `group_mode_test` |
+| P-47 Widerruf | ✔ | Status schreiben, dann löschen; Erzeugung schreibt, dann prüft; CAS-Konflikt verwirft den Text; letzte Prüfung vor jeder Auslieferung (0.4.0, #3) | `delivery_atomicity_test`, `access_security_test`, `group_mode_test`, `tools/race/run.php`, Behat „A withdrawal in another tab“ |
 | P-48 Privacy API | ✔ | alle 9 personenbezogenen Tabellen | `debug_export_test`, `provider_test` |
 | P-49 Testabnahme | ✔ | | wie oben |
 
@@ -125,8 +134,8 @@ Entscheidungen (vom Auftraggeber mit „Alle umsetzen“ übernommen): nur inner
 | L-G08 Nichtteilnahme ohne Nachteil | ✔ | eigener Kommentar unabhängig von der Freigabe |
 | P-G01 Mitgliedschaften, Wechsel, unsichtbare Gruppen | ✔ | `group_mode_test` 4, 5 |
 | P-G02 Stufen als Obergrenze | ✔ | `group_mode_test` 2, 3 |
-| P-G03 Versionierte Entscheidungen, kleine Aggregate, Interviews privat | ✔ | `group_mode_test` 6, 7, 8 |
-| P-G04 Nur Abschlüsse, keine Ranglisten | ✔ | `group_mode_test` 7 |
+| P-G03 Versionierte Entscheidungen, kleine Aggregate, Interviews privat | ✔ | Freigabekreis mit Version (#9), Mindestgröße 3, Bänder, tagesstabiles Fenster (#12) | `group_mode_test` 6, 7, 8, `group_privacy_test`; Restrisiken: `docs/privacy/GRUPPENAGGREGATE.md` |
+| P-G04 Positive Ereignisarten, keine Ranglisten | ✔ | geöffnet, abgeschlossen, bestanden, einstellbar; nie Fehlversuche oder Noten (0.4.0, #6) | `group_mode_test` 7, `group_privacy_test`; Matrix zur Freigabe: `docs/privacy/GRUPPENAGGREGATE.md` |
 | P-G05 Cache | ✔ | `group_mode_test` 6 |
 | P-G06 KI nur Tokens | ✔ | `group_mode_test` 9 |
 

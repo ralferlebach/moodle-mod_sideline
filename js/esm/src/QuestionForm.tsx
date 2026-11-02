@@ -34,6 +34,7 @@ interface Props {
 const QuestionForm = ({question, strings, onSubmit}: Props) => {
     const id = useId();
     const [choice, setChoice] = useState<number | null>(null);
+    const [choices, setChoices] = useState<number[]>([]);
     const [text, setText] = useState('');
     const [slider, setSlider] = useState(question.min);
     const [ratings, setRatings] = useState<(number | null)[]>(question.pairs.map(() => null));
@@ -41,7 +42,28 @@ const QuestionForm = ({question, strings, onSubmit}: Props) => {
     let control;
     let value = '';
     let complete = false;
-    if (question.qtype === 'mc') {
+    if (question.qtype === 'mc' && question.multiple) {
+        // Several options: checkboxes, a hint on how many, a JSON list of the selected indexes (issue #11).
+        const toggle = (index: number) => setChoices(
+            choices.includes(index) ? choices.filter((c) => c !== index) : [...choices, index].sort((a, b) => a - b)
+        );
+        control = (
+            <>
+                {question.options.map((label, index) => (
+                    <div className="form-check" key={index}>
+                        <input className="form-check-input" type="checkbox" id={`${id}-mc-${index}`}
+                            aria-describedby={`${id}-hint`} checked={choices.includes(index)} onChange={() => toggle(index)} />
+                        <label className="form-check-label" htmlFor={`${id}-mc-${index}`}>{label}</label>
+                    </div>
+                ))}
+                <small id={`${id}-hint`} className="form-text d-block">
+                    {strings.selectHint.replace('{min}', String(question.minselect)).replace('{max}', String(question.maxselect))}
+                </small>
+            </>
+        );
+        value = JSON.stringify(choices);
+        complete = choices.length >= question.minselect && choices.length <= question.maxselect;
+    } else if (question.qtype === 'mc') {
         control = question.options.map((label, index) => (
             <div className="form-check" key={index}>
                 <input className="form-check-input" type="radio" name={`${id}-mc`} id={`${id}-mc-${index}`}

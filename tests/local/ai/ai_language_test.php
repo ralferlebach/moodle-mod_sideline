@@ -246,8 +246,9 @@ final class ai_language_test extends \advanced_testcase {
             'custom_grade:pass',
             claim_checker::check(['custom_grade' => 'You passed [anonmod1].'], [$custom], 'en')
         );
-        // Unsupported languages make no claims (they are checked in English before translation).
-        $this->assertSame([], claim_checker::claims('Tu as réussi', 'fr'));
+        // French has its own phrase lists since 0.4.0 (issue #13): an invented pass is recognised there too.
+        $this->assertSame(['pass'], claim_checker::claims('Tu as réussi', 'fr'));
+        $this->assertSame([], claim_checker::claims('Tu as réussi', 'zh'));
     }
 
     /**
@@ -362,7 +363,18 @@ final class ai_language_test extends \advanced_testcase {
         $this->assertSame($status, $gateway->last_status());
     }
 
-    public function test_french_learner_gets_english_generation_then_french_translation(): void {
+    public function test_french_learner_gets_french_generation_checked_in_french(): void {
+        [$gateway, $fake, $user] = $this->gateway(self::responder(
+            'Salut [anonuser1], tu dois rendre [anonmod1] pour le [anondate1], tu es sur la bonne voie.'
+        ));
+        $texts = $gateway->phrase(self::recs(), $user, \context_system::instance(), 'mentor', 'fr', self::NOW);
+        $this->assertSame(ai_gateway::STATUS_OK, $gateway->last_status());
+        $this->assertStringContainsString('Physics lab', $texts['deadline_soon']);
+        $this->assertSame(1, $fake->calls);
+        $this->assertStringContainsString('LANGUAGE: write in French (fr).', $fake->prompts[0]);
+    }
+
+    public function test_an_english_answer_for_a_french_learner_is_translated_and_checked_again(): void {
         [$gateway, $fake, $user] = $this->gateway(self::responder(
             'Hi [anonuser1], [anonmod1] is due on [anondate1].',
             'Salut [anonuser1], tu dois rendre [anonmod1] pour le [anondate1], tu es sur la bonne voie.'
@@ -370,7 +382,6 @@ final class ai_language_test extends \advanced_testcase {
         $texts = $gateway->phrase(self::recs(), $user, \context_system::instance(), 'mentor', 'fr', self::NOW);
         $this->assertSame(ai_gateway::STATUS_TRANSLATED, $gateway->last_status());
         $this->assertStringContainsString('Physics lab', $texts['deadline_soon']);
-        $this->assertStringContainsString('LANGUAGE: write in English (en).', $fake->prompts[0]);
         $this->assertStringContainsString('Translate each text into French (fr).', $fake->prompts[1]);
     }
 
@@ -500,7 +511,7 @@ final class ai_language_test extends \advanced_testcase {
         // Estimated from the length of prompt and response: never zero.
         $this->assertGreaterThan(100, (int) $rows[0]->tokens);
         $this->assertSame(
-            ['callshour' => 2, 'tokensday' => (int) $rows[0]->tokens + (int) $rows[1]->tokens],
+            ['open' => 0, 'callshour' => 2, 'tokensday' => (int) $rows[0]->tokens + (int) $rows[1]->tokens],
             ai_usage::summary(self::NOW)
         );
 
@@ -523,7 +534,8 @@ final class ai_language_test extends \advanced_testcase {
         set_config('aihourlycap', 3, 'mod_sideline');
         $id = ai_usage::reserve(0, ai_usage::GENERATE, str_repeat('x', 400), self::NOW);
         $this->assertNotNull($id);
-        $this->assertSame(100, (int) $DB->get_field('sideline_aiusage', 'tokens', ['id' => $id]), 'Estimate from the prompt');
+        // Until it completes, the worst case counts: the prompt estimate plus the largest answer (issue #8).
+        $this->assertSame(100 + ai_usage::MAX_RESPONSE_TOKENS, (int) $DB->get_field('sideline_aiusage', 'tokens', ['id' => $id]));
         $this->assertNull(ai_usage::reserve(0, ai_usage::GENERATE, 'x', self::NOW), 'Cap of 3 reached by the reservation');
         ai_usage::complete($id, true, 42, 'x', 'y');
         $this->assertSame(42, (int) $DB->get_field('sideline_aiusage', 'tokens', ['id' => $id]));

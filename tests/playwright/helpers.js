@@ -27,6 +27,8 @@ const AxeBuilder = require('@axe-core/playwright').default;
 const env = {
     courseid: process.env.SL_COURSEID,
     typingcmid: process.env.SL_TYPING_CMID,
+    multicmid: process.env.SL_MULTI_CMID,
+    groupcmid: process.env.SL_GROUP_CMID,
     password: process.env.SL_PASSWORD,
     user: (name) => process.env['SL_' + name.toUpperCase()],
 };

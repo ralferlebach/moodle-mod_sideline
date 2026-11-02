@@ -30,6 +30,9 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class restore_sideline_activity_structure_step extends restore_activity_structure_step {
+    /** @var bool Whether an admitted group or grouping could not be restored. */
+    private bool $droppedgroups = false;
+
     #[\Override]
     protected function define_structure() {
         return $this->prepare_activity_structure([
@@ -52,6 +55,10 @@ class restore_sideline_activity_structure_step extends restore_activity_structur
         $data = (object) $data;
         $oldid = $data->id;
         $data->course = $this->get_courseid();
+        // Backups of older versions: the same minimum as the form (issue #12), completions as event type.
+        $data->groupminsize = max(\mod_sideline\local\instance_config::MIN_GROUP_SIZE, (int) ($data->groupminsize ?? 3));
+        $data->groupevents = $data->groupevents ?? 'completed';
+        $data->groupcircle = null;
         // Whatever was generated elsewhere is stale here: start the configuration version afresh.
         $data->configversion = (int) $data->configversion + 1;
         $newid = $DB->insert_record('sideline', $data);
@@ -86,6 +93,9 @@ class restore_sideline_activity_structure_step extends restore_activity_structur
         $data->groupingid = $data->groupingid ? (int) $this->get_mappingid('grouping', $data->groupingid) : 0;
         if ($data->groupid || $data->groupingid) {
             $DB->insert_record('sideline_group', $data);
+        } else {
+            // The admitted group was not restored. An empty list would admit every group (issue #9, #18).
+            $this->droppedgroups = true;
         }
     }
 
@@ -129,6 +139,12 @@ class restore_sideline_activity_structure_step extends restore_activity_structur
         // than kept as foreign ids. Restoring into a course with the Sideline activity placed before
         // its targets is covered by tests/backup/backup_restore_test.php.
         $newid = $this->get_task()->get_activityid();
+        // Admitted groups that could not be restored: sharing is switched off rather than widened to all groups.
+        if ($this->droppedgroups && !$DB->record_exists('sideline_group', ['sidelineid' => $newid])) {
+            $DB->set_field('sideline', 'sharingmode', \mod_sideline\local\instance_config::GROUP_INDIVIDUAL, ['id' => $newid]);
+        }
+        // The restored circle becomes the reference for later changes (issue #9).
+        \mod_sideline\local\instance_config::refresh_group_circle((int) $newid);
         // Custom rules: activity references follow the restored course modules; a rule whose reference
         // cannot be mapped is disabled rather than pointed at a wrong activity.
         foreach ($DB->get_records('sideline_rule', ['sidelineid' => $newid]) as $row) {

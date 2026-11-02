@@ -17,6 +17,7 @@
 namespace mod_sideline\local;
 
 use mod_sideline\local\cache\commentary_cache;
+use mod_sideline\local\instance_config;
 
 /**
  * Observers: mark cached commentary dirty, nothing else (P-29).
@@ -60,6 +61,94 @@ class observer {
     public static function group_changed(\core\event\base $event): void {
         if ((int) $event->courseid > 0) {
             commentary_cache::mark_course_dirty((int) $event->courseid);
+        }
+    }
+
+    /**
+     * Groups, groupings or their visibility changed: the release circle may have grown (issue #9).
+     *
+     * @param \core\event\base $event The event.
+     */
+    public static function circle_changed(\core\event\base $event): void {
+        global $DB;
+
+        $courseid = (int) $event->courseid;
+        if ($courseid <= 0) {
+            return;
+        }
+        commentary_cache::mark_course_dirty($courseid);
+        $ids = $DB->get_fieldset_select(
+            'sideline',
+            'id',
+            'course = ? AND sharingmode <> ?',
+            [$courseid, instance_config::GROUP_INDIVIDUAL]
+        );
+        foreach ($ids as $id) {
+            instance_config::refresh_group_circle((int) $id);
+        }
+    }
+
+    /**
+     * A course was updated or deleted: its category may have changed (issue #16).
+     *
+     * @param \core\event\base $event The event.
+     */
+    public static function course_moved(\core\event\base $event): void {
+        global $DB;
+
+        $courseid = (int) ($event->courseid ?: $event->objectid);
+        if ($courseid <= 0) {
+            return;
+        }
+        commentary_cache::mark_course_dirty($courseid);
+        // The new category is known, the old one is not: every instance with a course branch could have
+        // lost the course. Only instances with branches are touched (bounded, no site-wide clearing).
+        $DB->execute('UPDATE {sideline_cache} SET dirty = 1, stamp = stamp + 1
+                       WHERE sidelineid IN (SELECT sidelineid FROM {sideline_sourcecat})');
+    }
+
+    /**
+     * A category was moved, changed or deleted (issue #16).
+     *
+     * @param \core\event\base $event The event.
+     */
+    public static function category_changed(\core\event\base $event): void {
+        if ((int) $event->objectid > 0) {
+            commentary_cache::mark_category_dirty((int) $event->objectid);
+        }
+    }
+
+    /**
+     * Role definitions changed: the authority of teachers over course sources may be gone (issue #5, #16).
+     *
+     * @param \core\event\base $event The event.
+     */
+    public static function roles_changed(\core\event\base $event): void {
+        global $DB;
+
+        $DB->execute('UPDATE {sideline_cache} SET dirty = 1, stamp = stamp + 1
+                       WHERE sidelineid IN (SELECT sidelineid FROM {sideline_source})
+                          OR sidelineid IN (SELECT sidelineid FROM {sideline_sourcecat})');
+    }
+
+    /**
+     * A role was assigned or unassigned: the user's own texts, and the texts of every instance that
+     * relies on this user as the teacher who authorised a course source (issue #5).
+     *
+     * @param \core\event\base $event The event.
+     */
+    public static function role_changed(\core\event\base $event): void {
+        global $DB;
+
+        self::user_changed($event);
+        $userid = (int) $event->relateduserid;
+        if ($userid > 0) {
+            $DB->execute(
+                'UPDATE {sideline_cache} SET dirty = 1, stamp = stamp + 1
+                  WHERE sidelineid IN (SELECT sidelineid FROM {sideline_source} WHERE usermodified = :u1)
+                     OR sidelineid IN (SELECT sidelineid FROM {sideline_sourcecat} WHERE usermodified = :u2)',
+                ['u1' => $userid, 'u2' => $userid]
+            );
         }
     }
 

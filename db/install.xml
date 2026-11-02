@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<XMLDB PATH="mod/sideline/db" VERSION="20261025" COMMENT="XMLDB file for Moodle mod_sideline"
+<XMLDB PATH="mod/sideline/db" VERSION="20261103" COMMENT="XMLDB file for Moodle mod_sideline"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd"
 >
@@ -31,6 +31,8 @@
         <FIELD NAME="grouppublish" TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="general" SEQUENCE="false" COMMENT="Highest publication level: named, named_with_group, group_only or general"/>
         <FIELD NAME="groupminsize" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="3" SEQUENCE="false" COMMENT="Smallest anonymous aggregate that may be published"/>
         <FIELD NAME="groupversion" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="1" SEQUENCE="false" COMMENT="Version of the group sharing information"/>
+        <FIELD NAME="groupevents" TYPE="char" LENGTH="100" NOTNULL="true" DEFAULT="completed" SEQUENCE="false" COMMENT="Comma separated event types published in group mode: viewed, completed, passed"/>
+        <FIELD NAME="groupcircle" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="JSON list of the groups learners decided to publish for (release circle)"/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
@@ -345,8 +347,9 @@
         <FIELD NAME="sidelineid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="0 for persona previews"/>
         <FIELD NAME="purpose" TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="generate" SEQUENCE="false" COMMENT="generate, translate or preview"/>
         <FIELD NAME="success" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
-        <FIELD NAME="tokens" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Prompt plus completion tokens, estimated when the provider reports none"/>
+        <FIELD NAME="tokens" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Prompt plus completion tokens, estimated when the provider reports none; the worst case while the call is open"/>
         <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timecompleted" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="0 while the reservation is open"/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>

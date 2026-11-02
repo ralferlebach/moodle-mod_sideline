@@ -28,7 +28,8 @@ const {init} = require('../../amd/src/panel');
 const keys = ['region', 'loading', 'error', 'retry', 'consentTitle', 'consentText', 'consentAccept', 'consentDecline',
     'consentWithdraw', 'consentDeclined', 'questionSubmit', 'questionSkip', 'questionTitle', 'answersShow', 'answersHide',
     'answersEmpty', 'answerDelete', 'answerEffect', 'personaLabel', 'personaDefault', 'sharingTitle', 'sharingText',
-    'sharingPublish', 'sharingNamed', 'sharingReconsent', 'sharingSave', 'sliderValue', 'textRemaining'];
+    'sharingPublish', 'sharingNamed', 'sharingReconsent', 'sharingSave', 'sliderValue', 'textRemaining', 'selectHint',
+    'translatedNote', 'languageFallback'];
 const strings = Object.fromEntries(keys.map((k) => [k, `«${k}»`]));
 
 let axe = null;
@@ -44,8 +45,8 @@ const ok = (extra = {}, blocks = [{key: 'smalltalk', text: 'Hello', actionlabel:
     dialogenabled: false, sharingmode: 'individual', grouplevel: '', sharepublish: false, sharenamed: false,
     sharereconsent: false, ...extra,
 });
-const question = (q) => ({id: 5, qtype: 'mc', prompt: 'How is it going?', options: [], min: 0, max: 10, step: 1,
-    minlabel: 'low', maxlabel: 'high', pairs: [], scale: 7, maxlength: 20, ...q});
+const question = (q) => ({id: 5, qtype: 'mc', prompt: 'How is it going?', options: [], multiple: false, minselect: 1,
+    maxselect: 1, min: 0, max: 10, step: 1, minlabel: 'low', maxlabel: 'high', pairs: [], scale: 7, maxlength: 20, ...q});
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 const settle = async() => {
@@ -154,6 +155,36 @@ describe('AMD panel', () => {
         expect(global.mockCall).toHaveBeenCalledWith({methodname: 'mod_sideline_answer_question',
             args: {cmid: 7, questionid: 5, value: '1', skip: false}});
         expect(document.activeElement.getAttribute('role')).toBe('region');
+    });
+
+    it('selects several options within the allowed number and sends them as a list', async() => {
+        respond(ok({question: [question({options: ['A', 'B', 'C'], multiple: true, minselect: 1, maxselect: 2})]}),
+            {saved: true}, ok());
+        await mount();
+        const submit = byText('button', '«questionSubmit»');
+        const boxes = document.querySelectorAll('input[type="checkbox"]');
+        expect(boxes).toHaveLength(3);
+        expect(submit.disabled).toBe(true);
+        boxes[0].click();
+        boxes[1].click();
+        boxes[2].click();
+        expect(submit.disabled).toBe(true);
+        boxes[1].click();
+        expect(submit.disabled).toBe(false);
+        await click(submit);
+        expect(global.mockCall).toHaveBeenCalledWith({methodname: 'mod_sideline_answer_question',
+            args: {cmid: 7, questionid: 5, value: '[0,2]', skip: false}});
+    });
+
+    it('labels a translated text and a text in a fallback language', async() => {
+        respond(ok({source: 'translated', locale: 'fr'}));
+        await mount();
+        expect(byText('p', '«translatedNote»')).toBeTruthy();
+        expect(document.querySelector('[data-region="commentary"]').getAttribute('lang')).toBe('fr');
+        respond(ok({source: 'template', locale: 'en', langfallback: true}));
+        await mount();
+        expect(byText('p', '«languageFallback»')).toBeTruthy();
+        expect(byText('p', '«translatedNote»')).toBeFalsy();
     });
 
     it('lets the learner skip', async() => {

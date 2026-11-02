@@ -26,6 +26,8 @@
 
 require_once(__DIR__ . '/../../../../lib/behat/behat_base.php');
 
+use Behat\Mink\Exception\ExpectationException;
+
 /**
  * Behat context of mod_sideline.
  *
@@ -49,5 +51,50 @@ class behat_mod_sideline extends behat_base {
             throw new Exception('Unknown mod_sideline page type "' . $type . '"');
         }
         return new moodle_url('/mod/sideline/' . $pages[$key] . '.php', ['id' => $cm->id]);
+    }
+
+    /**
+     * Use the deterministic stand-in of the AI provider (issue #4): texts start with "Simulated coach:".
+     *
+     * @Given /^the Sideline AI is simulated$/
+     */
+    public function the_sideline_ai_is_simulated(): void {
+        set_config('aienabled', 1, 'mod_sideline');
+        set_config('behatfakeai', 1, 'mod_sideline');
+        set_config('behatfakeaicalls', 0, 'mod_sideline');
+    }
+
+    /**
+     * Check how many prompts the simulated provider received.
+     *
+     * @Then /^the simulated Sideline AI should have received (\d+) prompts?$/
+     * @param int $count Expected number.
+     */
+    public function the_simulated_sideline_ai_should_have_received(int $count): void {
+        $calls = (int) get_config('mod_sideline', 'behatfakeaicalls');
+        if ($calls !== $count) {
+            throw new ExpectationException("The simulated AI received $calls prompts, expected $count", $this->getSession());
+        }
+    }
+
+    /**
+     * A learner withdraws consent in another browser tab or device while the panel is open (issue #3).
+     *
+     * @Given /^"(?P<username>[^"]*)" withdraws the consent for "(?P<activity>[^"]*)" elsewhere$/
+     * @param string $username User name.
+     * @param string $activity Activity name or idnumber.
+     */
+    public function withdraws_the_consent_elsewhere(string $username, string $activity): void {
+        global $DB;
+        $cm = $this->get_cm_by_activity_name('sideline', $activity);
+        $sideline = $DB->get_record('sideline', ['id' => $cm->instance], '*', MUST_EXIST);
+        $userid = (int) $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
+        \mod_sideline\local\consent\consent_manager::record_decision(
+            $sideline,
+            $userid,
+            false,
+            \context_module::instance($cm->id)->id,
+            time()
+        );
     }
 }

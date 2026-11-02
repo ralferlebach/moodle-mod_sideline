@@ -230,18 +230,19 @@ class commentary_cache {
     /**
      * Mark all cached commentary of a user in a course dirty. Observers call this and nothing else (P-29).
      *
+     * Affected are the instances of the course itself, those that name the course as a further source,
+     * and those whose course branch (category with subcategories) contains the course (issue #16).
+     *
      * @param int $courseid Course id.
      * @param int $userid User id.
      */
     public static function mark_user_dirty(int $courseid, int $userid): void {
         global $DB;
 
+        [$where, $params] = self::instances_observing($courseid);
         $DB->execute(
-            "UPDATE {sideline_cache} SET dirty = 1, stamp = stamp + 1
-              WHERE userid = :userid
-                AND (sidelineid IN (SELECT id FROM {sideline} WHERE course = :courseid)
-                     OR sidelineid IN (SELECT sidelineid FROM {sideline_source} WHERE courseid = :sourceid))",
-            ['userid' => $userid, 'courseid' => $courseid, 'sourceid' => $courseid]
+            "UPDATE {sideline_cache} SET dirty = 1, stamp = stamp + 1 WHERE userid = :userid AND ($where)",
+            $params + ['userid' => $userid]
         );
     }
 
@@ -253,12 +254,62 @@ class commentary_cache {
     public static function mark_course_dirty(int $courseid): void {
         global $DB;
 
+        [$where, $params] = self::instances_observing($courseid);
+        $DB->execute("UPDATE {sideline_cache} SET dirty = 1, stamp = stamp + 1 WHERE $where", $params);
+    }
+
+    /**
+     * Mark the cached commentary of every instance with a course branch at or below a category dirty.
+     *
+     * For moved, renamed or deleted categories: the courses of a branch are resolved dynamically.
+     *
+     * @param int $categoryid Category id.
+     */
+    public static function mark_category_dirty(int $categoryid): void {
+        global $DB;
+
+        $path = (string) $DB->get_field('course_categories', 'path', ['id' => $categoryid]);
+        $concat = $DB->sql_concat('cat.path', "'/%'");
+        $params = ['catid' => $categoryid];
+        $below = '';
+        if ($path !== '') {
+            // Branches above the category contain it; branches below it moved with it.
+            $below = " OR :path1 LIKE $concat OR cat.path LIKE :path2";
+            $params += ['path1' => $path, 'path2' => $path . '/%'];
+        }
         $DB->execute(
             "UPDATE {sideline_cache} SET dirty = 1, stamp = stamp + 1
-              WHERE sidelineid IN (SELECT id FROM {sideline} WHERE course = :courseid)
-                 OR sidelineid IN (SELECT sidelineid FROM {sideline_source} WHERE courseid = :sourceid)",
-            ['courseid' => $courseid, 'sourceid' => $courseid]
+              WHERE sidelineid IN (SELECT sc.sidelineid FROM {sideline_sourcecat} sc
+                                     JOIN {course_categories} cat ON cat.id = sc.categoryid
+                                    WHERE sc.categoryid = :catid$below)",
+            $params
         );
+    }
+
+    /**
+     * SQL condition on sideline_cache.sidelineid: instances that observe a course.
+     *
+     * @param int $courseid Course id.
+     * @return array [condition, named parameters]
+     */
+    private static function instances_observing(int $courseid): array {
+        global $DB;
+
+        $where = "sidelineid IN (SELECT id FROM {sideline} WHERE course = :courseid)
+                  OR sidelineid IN (SELECT sidelineid FROM {sideline_source} WHERE courseid = :sourceid)";
+        $params = ['courseid' => $courseid, 'sourceid' => $courseid];
+        $path = $DB->get_field_sql(
+            'SELECT cc.path FROM {course} c JOIN {course_categories} cc ON cc.id = c.category WHERE c.id = ?',
+            [$courseid]
+        );
+        if ($path) {
+            $concat = $DB->sql_concat('cat.path', "'/%'");
+            $where .= " OR sidelineid IN (SELECT sc.sidelineid FROM {sideline_sourcecat} sc
+                                           JOIN {course_categories} cat ON cat.id = sc.categoryid
+                                          WHERE cat.path = :cpath OR :cpath2 LIKE $concat)";
+            $params += ['cpath' => $path, 'cpath2' => $path];
+        }
+        return [$where, $params];
     }
 
     /**

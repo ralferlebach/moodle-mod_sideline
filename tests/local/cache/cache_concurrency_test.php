@@ -100,7 +100,7 @@ final class cache_concurrency_test extends \advanced_testcase {
         $this->assertFalse($DB->record_exists('sideline_cache', ['sidelineid' => $instance->id]));
     }
 
-    public function test_an_event_during_ai_generation_leaves_the_entry_stale(): void {
+    public function test_an_event_during_ai_generation_discards_the_text(): void {
         global $DB;
         set_config('aienabled', 1, 'mod_sideline');
         $instance = $this->getDataGenerator()->create_module('sideline', ['course' => $this->course->id, 'aienabled' => 1]);
@@ -115,11 +115,13 @@ final class cache_concurrency_test extends \advanced_testcase {
             return $echo($prompt);
         };
         $result = $this->get($instance, $fake);
-        $this->assertSame('ai', $result['commentary']['source'], 'The answer itself is still delivered');
+        // Since 0.4.0 (issue #3) a text whose state was invalidated while it was generated is never delivered:
+        // it is computed again, and when that is invalidated as well, only the generic text is shown.
+        $this->assertSame('generic', $result['commentary']['source']);
         $this->assertEquals(
             1,
             $DB->get_field('sideline_cache', 'dirty', ['sidelineid' => $instance->id]),
-            'but not stored as fresh',
+            'and nothing is stored as fresh',
         );
     }
 

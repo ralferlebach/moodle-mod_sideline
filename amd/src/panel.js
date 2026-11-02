@@ -142,7 +142,22 @@ const renderQuestion = (q, s, submit) => {
         submitButton.disabled = !complete();
     };
 
-    if (q.qtype === 'mc') {
+    if (q.qtype === 'mc' && q.multiple) {
+        // Several options: checkboxes, a hint on how many, a JSON list of the selected indexes.
+        const hint = el('small', {id: id + '-hint', className: 'form-text d-block',
+            text: s.selectHint.replace('{min}', q.minselect).replace('{max}', q.maxselect)});
+        fieldset.setAttribute('aria-describedby', id + '-hint');
+        q.options.forEach((label, index) => {
+            const input = el('input', {className: 'form-check-input', type: 'checkbox', name: id, id: id + '-' + index,
+                value: index, on: {change: update}});
+            fieldset.append(el('div', {className: 'form-check'}, [input,
+                el('label', {className: 'form-check-label', "for": id + '-' + index, text: label})]));
+        });
+        fieldset.append(hint);
+        const checked = () => Array.from(fieldset.querySelectorAll('input:checked')).map((i) => Number(i.value));
+        value = () => JSON.stringify(checked());
+        complete = () => checked().length >= q.minselect && checked().length <= q.maxselect;
+    } else if (q.qtype === 'mc') {
         q.options.forEach((label, index) => {
             const input = el('input', {className: 'form-check-input', type: 'radio', name: id, id: id + '-' + index, value: index,
                 on: {change: update}});
@@ -262,23 +277,42 @@ export const init = (rootid) => {
 
     const renderAnswers = (container) => call('get_my_answers', {cmid}).then((result) => answerList(container, result.answers));
 
+    const renderConsent = (data) => {
+        const nodes = [el('h3', {className: 'h5', text: s.consentTitle}), el('p', {text: s.consentText})];
+        if (data.consent === 'declined' || data.consent === 'withdrawn') {
+            nodes.push(el('p', {text: s.consentDeclined}));
+        }
+        nodes.push(el('button', {type: 'button', className: 'btn btn-primary btn-sm ' + GAP, text: s.consentAccept,
+            on: {click: () => act(call('set_consent', {cmid, accept: true}))}}));
+        if (data.consent === 'not_requested' || data.consent === 'reconsent_required') {
+            nodes.push(el('button', {type: 'button', className: 'btn btn-secondary btn-sm', text: s.consentDecline,
+                on: {click: () => act(call('set_consent', {cmid, accept: false}))}}));
+        }
+        show(el('div', {'data-region': 'consent'}, nodes));
+    };
+
+    // The message blocks, labelled when translated or in a fallback language (issue #17).
+    const renderCommentary = (data) => {
+        const commentary = el('div', {'data-region': 'commentary'}, data.blocks.map((b) => renderBlock(b, !!props.typing)));
+        if (data.locale) {
+            commentary.setAttribute('lang', data.locale);
+        }
+        const nodes = [commentary];
+        if (data.source === 'translated') {
+            nodes.push(el('p', {className: 'small text-muted mb-1', 'data-region': 'translated', text: s.translatedNote}));
+        }
+        if (data.langfallback) {
+            nodes.push(el('p', {className: 'small text-muted mb-1', 'data-region': 'langfallback', text: s.languageFallback}));
+        }
+        return nodes;
+    };
+
     const render = (data) => {
         if (data.status === 'consent_required') {
-            const nodes = [el('h3', {className: 'h5', text: s.consentTitle}), el('p', {text: s.consentText})];
-            if (data.consent === 'declined' || data.consent === 'withdrawn') {
-                nodes.push(el('p', {text: s.consentDeclined}));
-            }
-            nodes.push(el('button', {type: 'button', className: 'btn btn-primary btn-sm ' + GAP, text: s.consentAccept,
-                on: {click: () => act(call('set_consent', {cmid, accept: true}))}}));
-            if (data.consent === 'not_requested' || data.consent === 'reconsent_required') {
-                nodes.push(el('button', {type: 'button', className: 'btn btn-secondary btn-sm', text: s.consentDecline,
-                    on: {click: () => act(call('set_consent', {cmid, accept: false}))}}));
-            }
-            show(el('div', {'data-region': 'consent'}, nodes));
+            renderConsent(data);
             return;
         }
-
-        const nodes = [el('div', {'data-region': 'commentary'}, data.blocks.map((b) => renderBlock(b, !!props.typing)))];
+        const nodes = renderCommentary(data);
         const question = (data.question || [])[0];
         if (question) {
             nodes.push(renderQuestion(question, s, (value, skip) =>

@@ -82,8 +82,18 @@ class debug_exporter {
             [$sideline->id, $userid, $from, $to],
             'timecreated'
         );
+        // The simulation shows what the learner would get now, as template text without AI. Every trace
+        // shows what was actually delivered then; whether it differs from the simulation is marked (issue #14).
+        $simulated = array_map(static fn(array $b): string => (string) $b['text'], $result['commentary']['blocks'] ?? []);
         foreach ($rows as $row) {
-            $traces[] = ['time' => (int) $row->timecreated, 'trace' => json_decode($row->trace, true)];
+            $trace = json_decode($row->trace, true) ?: [];
+            $delivered = array_map(static fn(array $b): string => (string) ($b['text'] ?? ''), $trace['output'] ?? []);
+            $traces[] = [
+                'time' => (int) $row->timecreated,
+                'trace' => $trace,
+                'output_recorded' => isset($trace['output']),
+                'differs_from_simulation' => isset($trace['output']) ? $delivered !== $simulated : null,
+            ];
         }
 
         return [
@@ -107,6 +117,9 @@ class debug_exporter {
             'answers' => dialog_manager::my_answers($sideline, $userid),
             'inputs_and_decision' => $result['debug'] ?? null,
             'output' => $result['commentary'],
+            // The live output above is a simulation (template text, no AI, nothing written); the delivered
+            // texts of the past are in the traces.
+            'output_kind' => 'simulation',
             'question_due' => $result['question'],
             'cache' => $DB->get_record(
                 'sideline_cache',

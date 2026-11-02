@@ -97,8 +97,12 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         provider::delete_data_for_user($list);
         foreach (['sideline_cache', 'sideline_consent', 'sideline_consent_log'] as $table) {
             $this->assertSame(0, $DB->count_records($table, ['userid' => $this->users[0]->id]), $table);
+        }
+        foreach (['sideline_consent', 'sideline_consent_log'] as $table) {
             $this->assertGreaterThan(0, $DB->count_records($table, ['userid' => $this->users[1]->id]), $table);
         }
+        // Cached texts of others may mention the deleted user: they are derived data and all dropped (issue #14).
+        $this->assertSame(0, $DB->count_records('sideline_cache', ['userid' => $this->users[1]->id]));
     }
 
     public function test_users_in_context_and_delete_for_users(): void {
@@ -108,8 +112,23 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $this->assertEqualsCanonicalizing([$this->users[0]->id, $this->users[1]->id], $userlist->get_userids());
 
         provider::delete_data_for_users(new approved_userlist($this->context, 'mod_sideline', [$this->users[1]->id]));
-        $this->assertSame(0, $DB->count_records('sideline_cache', ['userid' => $this->users[1]->id]));
-        $this->assertSame(1, $DB->count_records('sideline_cache', ['userid' => $this->users[0]->id]));
+        $this->assertSame(0, $DB->count_records('sideline_consent', ['userid' => $this->users[1]->id]));
+        $this->assertSame(1, $DB->count_records('sideline_consent', ['userid' => $this->users[0]->id]));
+        $this->assertSame(
+            0,
+            $DB->count_records('sideline_cache', ['sidelineid' => $this->sideline->id]),
+            'Cached texts are derived data: all of the instance are dropped (issue #14)'
+        );
+    }
+
+    public function test_deletion_after_switching_group_mode_off_still_drops_texts_naming_the_user(): void {
+        global $DB;
+        // The user published while group mode was on; then the mode was switched off and the rows are gone.
+        $DB->set_field('sideline', 'sharingmode', 'individual', ['id' => $this->sideline->id]);
+        $DB->delete_records('sideline_publish', ['sidelineid' => $this->sideline->id]);
+        $this->assertGreaterThan(0, $DB->count_records('sideline_cache', ['sidelineid' => $this->sideline->id]));
+        provider::delete_data_for_users(new approved_userlist($this->context, 'mod_sideline', [$this->users[1]->id]));
+        $this->assertSame(0, $DB->count_records('sideline_cache', ['sidelineid' => $this->sideline->id]));
     }
 
     public function test_delete_for_all_users_in_context(): void {

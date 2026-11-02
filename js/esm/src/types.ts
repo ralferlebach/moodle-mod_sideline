@@ -51,6 +51,9 @@ export interface PanelStrings {
     sharingSave: string;
     sliderValue: string;
     textRemaining: string;
+    selectHint: string;
+    translatedNote: string;
+    languageFallback: string;
 }
 
 /** Props the PHP side passes in through data-react-props. */
@@ -75,6 +78,9 @@ export interface Question {
     qtype: 'mc' | 'text' | 'slider' | 'semdiff';
     prompt: string;
     options: string[];
+    multiple?: boolean;
+    minselect: number;
+    maxselect: number;
     min: number;
     max: number;
     step: number;
@@ -90,6 +96,8 @@ export interface CommentaryResponse {
     status: 'ok' | 'consent_required';
     consent: string;
     source: string;
+    locale?: string;
+    langfallback?: boolean;
     persona: string;
     blocks: CommentaryBlock[];
     question?: Question[];

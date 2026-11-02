@@ -63,11 +63,39 @@ $observers = [
     ],
     [
         'eventname' => '\core\event\role_assigned',
-        'callback' => '\mod_sideline\local\observer::user_changed',
+        'callback' => '\mod_sideline\local\observer::role_changed',
     ],
     [
         'eventname' => '\core\event\role_unassigned',
-        'callback' => '\mod_sideline\local\observer::user_changed',
+        'callback' => '\mod_sideline\local\observer::role_changed',
+    ],
+    [
+        'eventname' => '\core\event\role_capabilities_updated',
+        'callback' => '\mod_sideline\local\observer::roles_changed',
+    ],
+    [
+        'eventname' => '\core\event\course_updated',
+        'callback' => '\mod_sideline\local\observer::course_moved',
+    ],
+    [
+        'eventname' => '\core\event\course_deleted',
+        'callback' => '\mod_sideline\local\observer::course_moved',
+    ],
+    [
+        'eventname' => '\core\event\course_category_updated',
+        'callback' => '\mod_sideline\local\observer::category_changed',
+    ],
+    [
+        'eventname' => '\core\event\course_category_deleted',
+        'callback' => '\mod_sideline\local\observer::category_changed',
+    ],
+    [
+        'eventname' => '\core\event\group_created',
+        'callback' => '\mod_sideline\local\observer::circle_changed',
+    ],
+    [
+        'eventname' => '\core\event\grouping_updated',
+        'callback' => '\mod_sideline\local\observer::circle_changed',
     ],
     [
         'eventname' => '\core\event\group_member_added',
@@ -79,19 +107,19 @@ $observers = [
     ],
     [
         'eventname' => '\core\event\group_updated',
-        'callback' => '\mod_sideline\local\observer::course_changed',
+        'callback' => '\mod_sideline\local\observer::circle_changed',
     ],
     [
         'eventname' => '\core\event\group_deleted',
-        'callback' => '\mod_sideline\local\observer::course_changed',
+        'callback' => '\mod_sideline\local\observer::circle_changed',
     ],
     [
         'eventname' => '\core\event\grouping_group_assigned',
-        'callback' => '\mod_sideline\local\observer::course_changed',
+        'callback' => '\mod_sideline\local\observer::circle_changed',
     ],
     [
         'eventname' => '\core\event\grouping_group_unassigned',
-        'callback' => '\mod_sideline\local\observer::course_changed',
+        'callback' => '\mod_sideline\local\observer::circle_changed',
     ],
     [
         'eventname' => '\core\event\course_completed',

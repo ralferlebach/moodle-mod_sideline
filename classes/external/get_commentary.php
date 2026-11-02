@@ -92,6 +92,9 @@ class get_commentary extends external_api {
             'status' => $result['status'],
             'consent' => $result['consent'],
             'source' => $commentary['source'] ?? '',
+            // The language the text is in, and whether it differs from the learner's (missing pack, issue #17).
+            'locale' => (string) ($commentary['locale'] ?? ''),
+            'langfallback' => !empty($commentary['locale']) && $commentary['locale'] !== current_language(),
             'persona' => $result['persona'] ?? '',
             'blocks' => $blocks,
             'question' => $result['question'] ? [$result['question']] : [],
@@ -114,7 +117,9 @@ class get_commentary extends external_api {
         return new external_single_structure([
             'status' => new external_value(PARAM_ALPHAEXT, 'ok or consent_required'),
             'consent' => new external_value(PARAM_ALPHAEXT, 'Consent status of the calling user'),
-            'source' => new external_value(PARAM_ALPHA, 'ai, template or generic, empty when none'),
+            'source' => new external_value(PARAM_ALPHA, 'ai, translated, template or generic, empty when none'),
+            'locale' => new external_value(PARAM_LANG, 'Language of the text, empty when none', VALUE_DEFAULT, ''),
+            'langfallback' => new external_value(PARAM_BOOL, 'The text is not in the learner\'s language', VALUE_DEFAULT, false),
             'persona' => new external_value(PARAM_ALPHANUMEXT, 'Persona key'),
             'blocks' => new external_multiple_structure(
                 new external_single_structure([
@@ -149,6 +154,9 @@ class get_commentary extends external_api {
             'qtype' => new external_value(PARAM_ALPHA, 'mc, text, slider or semdiff'),
             'prompt' => new external_value(PARAM_TEXT, 'Question text'),
             'options' => new external_multiple_structure(new external_value(PARAM_TEXT, 'Option label')),
+            'multiple' => new external_value(PARAM_BOOL, 'Multiple choice: several options may be selected'),
+            'minselect' => new external_value(PARAM_INT, 'Multiple choice: fewest options to select'),
+            'maxselect' => new external_value(PARAM_INT, 'Multiple choice: most options to select'),
             'min' => new external_value(PARAM_INT, 'Slider minimum'),
             'max' => new external_value(PARAM_INT, 'Slider maximum'),
             'step' => new external_value(PARAM_INT, 'Slider step'),

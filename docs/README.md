@@ -8,7 +8,12 @@ Werkzeuge, Pipelines und Testinfrastruktur. Fachliche Dokumentation: `DOCUMENTAT
 - `make test-amd`: Jest-Tests des AMD-Panels (Moodle 4.5 bis 5.2).
 - `tools/mirror.sh [MOODLE_ROOT]`: spiegelt die Arbeitskopie in einen Moodle-Baum. Erkennt das Layout mit und ohne `public/`.
 - `tools/bench.php`: Messung von Cache und Erzeugung ohne HTTP.
-- `tools/ci-local/`: moodle-plugin-ci lokal mit denselben Schritten wie die CI (`setup.sh`, `ci.sh`) und die Frontend-Prüfungen (`js-checks.sh`). Pflicht vor jeder Auslieferung, siehe `environment-setup.md`.
+- `tools/bench_groups.php`: Abfrageprofil des Gruppenpfads für 100/1000/5000 Personen und 0/10/50/200 Gruppen (Issue #7).
+- `tools/race/run.php`: Rennen mit echten Parallelprozessen: KI-Kontingent, Widerruf und Invalidierung während einer Erzeugung (Issues #3, #8). Läuft in jeder CI-Zelle.
+- `tools/ci/upgrade_seed.php`, `tools/ci/upgrade_verify.php`: Daten des vorigen Releases anlegen und nach dem Upgrade prüfen (CI-Job „upgrade“).
+- `tools/ci-local/`: moodle-plugin-ci lokal mit denselben Schritten wie die CI (`setup.sh`, `ci.sh`), die Frontend-Prüfungen (`js-checks.sh`) und der Upgrade-Job (`upgrade.sh`). Pflicht vor jeder Auslieferung, siehe `environment-setup.md`.
+- `docs/privacy/`: Datenregister, KI-Protokolle, offene DSB-Entscheidungen; Gruppenaggregate und Ereignismatrix.
+- `docs/SPRACHMATRIX.md`, `docs/ISSUE_NACHWEISE_0.4.0.md`: Sprachunterstützung; Nachweise je Issue.
 
 ## Pipelines (`.github/workflows/`)
 - `moodle-plugin-ci-dev.yml`: schnelle Rückmeldung auf dem Entwicklungszweig (Moodle 4.5 und 5.3).

@@ -57,6 +57,12 @@ class instance_config {
     /** @var int Upper bound of courses observed for one learner through course branches (N-02). */
     public const MAX_BRANCH_COURSES = 20;
 
+    /** @var string[] Event types that group mode may publish (issue #6): none of them is negative. */
+    public const GROUP_EVENTS = ['viewed', 'completed', 'passed'];
+
+    /** @var int Smallest anonymous aggregate (issue #12: two people are never enough). */
+    public const MIN_GROUP_SIZE = 3;
+
     /**
      * Bring submitted form data into the shape the table expects.
      *
@@ -100,7 +106,8 @@ class instance_config {
         if (!in_array($data->grouppublish ?? '', $levels, true)) {
             $data->grouppublish = 'general';
         }
-        $data->groupminsize = min(50, max(2, (int) ($data->groupminsize ?? 3)));
+        $data->groupminsize = min(50, max(self::MIN_GROUP_SIZE, (int) ($data->groupminsize ?? 3)));
+        $data->groupevents = implode(',', self::group_events($data));
         return $data;
     }
 
@@ -125,7 +132,89 @@ class instance_config {
         $wider = array_search($new->grouppublish, $levels) > array_search($old->grouppublish, $levels)
             || ($modes[$new->sharingmode] ?? 0) > ($modes[$old->sharingmode] ?? 0)
             || (int) $new->groupminsize < (int) $old->groupminsize;
+        // A new event type tells recipients more about the same people (issue #6, #9).
+        $wider = $wider || array_diff(self::group_events($new), self::group_events($old));
         $new->groupversion = (int) $old->groupversion + ($wider ? 1 : 0);
+    }
+
+    /**
+     * The event types published in group mode, as configured (only known types, default: completions).
+     *
+     * @param \stdClass $sideline Instance record or form data.
+     * @return string[]
+     */
+    public static function group_events(\stdClass $sideline): array {
+        $value = $sideline->groupevents ?? 'completed';
+        $types = is_array($value) ? $value : explode(',', (string) $value);
+        $types = array_values(array_intersect(self::GROUP_EVENTS, array_map('trim', array_map('strval', $types))));
+        return $types ?: ['completed'];
+    }
+
+    /**
+     * The release circle of the group mode: which groups may be recipients or sources (issue #9).
+     *
+     * Every admitted group whose membership is visible to members ("m") can be a learner's own circle;
+     * in open mode every admitted group visible to everybody ("p") can be another circle. The circle is
+     * the set of these entries; learners decide about publishing for exactly this circle.
+     *
+     * @param \stdClass $sideline Instance record (id, course, sharingmode).
+     * @return string[] Sorted entries "groupid:m" and "groupid:p".
+     */
+    public static function group_circle(\stdClass $sideline): array {
+        if (($sideline->sharingmode ?? self::GROUP_INDIVIDUAL) === self::GROUP_INDIVIDUAL) {
+            return [];
+        }
+        $admitted = self::admitted_group_ids((int) $sideline->id, (int) $sideline->course);
+        $entries = [];
+        foreach (groups_get_all_groups((int) $sideline->course) as $group) {
+            $gid = (int) $group->id;
+            if ($admitted !== null && !in_array($gid, $admitted, true)) {
+                continue;
+            }
+            $visibility = (int) ($group->visibility ?? GROUPS_VISIBILITY_ALL);
+            if (in_array($visibility, [GROUPS_VISIBILITY_ALL, GROUPS_VISIBILITY_MEMBERS], true)) {
+                $entries[] = $gid . ':m';
+            }
+            if ($sideline->sharingmode === self::GROUP_OPEN && $visibility === GROUPS_VISIBILITY_ALL) {
+                $entries[] = $gid . ':p';
+            }
+        }
+        sort($entries);
+        return $entries;
+    }
+
+    /**
+     * Compare the release circle with the stored one and raise the group version when it grew (issue #9).
+     *
+     * Called after every change of admitted groups (form, import, restore) and by the observers of
+     * group, grouping and visibility changes. Only a growth needs new decisions: a group that leaves the
+     * circle narrows it, which applies at once. Either way the stored circle is updated and cached
+     * texts of the instance are dropped when anything changed.
+     *
+     * @param int $sidelineid Instance id.
+     * @return bool Whether the group version was raised.
+     */
+    public static function refresh_group_circle(int $sidelineid): bool {
+        global $DB;
+
+        $sideline = $DB->get_record('sideline', ['id' => $sidelineid]);
+        if (!$sideline) {
+            return false;
+        }
+        $old = json_decode((string) ($sideline->groupcircle ?? ''), true);
+        $new = self::group_circle($sideline);
+        if (is_array($old) && $old === $new) {
+            return false;
+        }
+        // Without a stored circle (instances from before 0.4.0) the current one becomes the reference.
+        $grown = is_array($old) && array_diff($new, $old);
+        $update = (object) ['id' => $sidelineid, 'groupcircle' => json_encode($new)];
+        if ($grown) {
+            $update->groupversion = (int) $sideline->groupversion + 1;
+        }
+        $DB->update_record('sideline', $update);
+        \mod_sideline\local\cache\commentary_cache::invalidate_instance($sidelineid);
+        return (bool) $grown;
     }
 
     /**
@@ -230,7 +319,20 @@ class instance_config {
     }
 
     /**
-     * Further courses with the teacher whose rights authorise them (0 for sources saved before 0.3.0).
+     * Number of course sources and course branches that wait for a teacher's confirmation (issue #5).
+     *
+     * @param int $sidelineid Instance id.
+     * @return int
+     */
+    public static function count_unconfirmed_sources(int $sidelineid): int {
+        global $DB;
+
+        return $DB->count_records('sideline_source', ['sidelineid' => $sidelineid, 'usermodified' => 0])
+            + $DB->count_records('sideline_sourcecat', ['sidelineid' => $sidelineid, 'usermodified' => 0]);
+    }
+
+    /**
+     * Further courses with the teacher whose rights authorise them (0: unconfirmed, not evaluated).
      *
      * @param int $sidelineid Instance id.
      * @return int[] Course id to user id.
@@ -329,8 +431,9 @@ class instance_config {
      * @param int $courseid Course id; groups of other courses are ignored.
      * @param int[] $groupids Group ids.
      * @param int[] $groupingids Grouping ids.
+     * @return bool Whether the release circle grew, so that learners have to decide again.
      */
-    public static function save_groups(int $sidelineid, int $courseid, array $groupids, array $groupingids): void {
+    public static function save_groups(int $sidelineid, int $courseid, array $groupids, array $groupingids): bool {
         global $DB;
 
         $DB->delete_records('sideline_group', ['sidelineid' => $sidelineid]);
@@ -344,6 +447,7 @@ class instance_config {
                 $DB->insert_record('sideline_group', (object) ['sidelineid' => $sidelineid, 'groupid' => 0, 'groupingid' => $id]);
             }
         }
+        return self::refresh_group_circle($sidelineid);
     }
 
     /**
