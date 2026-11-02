@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.2 (beta)
+
+CI-Befunde behoben. Seit dieser Version läuft vor jeder Auslieferung moodle-plugin-ci lokal mit denselben Schritten wie auf GitHub (`tools/ci-local/`, `docs/environment-setup.md`).
+
+* **Installation brach auf allen Versionen ab:** Die Spalte `sideline_pref.persona` war `CHAR NOT NULL` mit `DEFAULT=""`. XMLDB gibt dazu eine Debug-Meldung aus, und moodle-plugin-ci bricht bei jeder Debug-Meldung ab. Der Default ist entfernt. Bestehende Datenbanken haben die Spalte bereits ohne Default (XMLDB hatte das beim Anlegen korrigiert), daher ist kein Upgrade-Schritt nötig.
+* **Code Checker (`--max-warnings 0`):**
+  * Auf Moodle 4.5 erkennt moodle-cs die Coverage-Attribute nicht und erwartet `@covers` im Docblock direkt vor der Klasse. Die Attribute stehen jetzt vor dem Docblock: 4.5 (PHPUnit 9) liest `@covers`, ab 5.0 gelten die Attribute.
+  * 21 Testklassen lagen nicht im Verzeichnis ihres Namensraums. Sie liegen jetzt unter `tests/local/…` bzw. `tests/form/`.
+  * `tools/` wird von moodle-plugin-ci mitgeprüft; zwei Skripte dort sind korrigiert. `.phpcsignore` ist entfernt, weil die CI sie nicht beachtet.
+* **PHPDoc Checker:** fehlende `@param`-Angabe in einem Test.
+* **grunt:** Das AMD-Bundle ist mit Moodles grunt neu gebaut (auf 4.5 und 5.3 byte-gleich). `tools/amd-build.js` ist entfernt.
+* **React-Panel:** vier zu lange Zeilen und eine zu hohe Komplexität (ESLint `max-len`, `complexity`) behoben, dazu ein fehlender Swizzle-Eintrag für `QuestionForm`. Einwilligung und Antwortliste sind eigene Komponenten.
+* Test- und Playwright-Skripte sind jetzt ebenfalls ESLint-sauber nach Moodles Regeln.
+* Die verschobenen und entfernten Dateien stehen in `db/removed_files.txt`.
+
 ## 0.3.1 (beta)
 
 CI repariert, keine Änderung am Verhalten des Plugins:

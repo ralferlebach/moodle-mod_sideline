@@ -19,6 +19,10 @@ namespace mod_sideline\local\service;
 use mod_sideline\local\model\activity_state;
 use mod_sideline\local\model\recommendation;
 
+#[\PHPUnit\Framework\Attributes\CoversClass(rule_evaluator::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(activity_state::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(recommendation::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(evaluation_context::class)]
 /**
  * Property tests for the rules (blueprint L): invariants over many random state combinations.
  *
@@ -42,10 +46,6 @@ use mod_sideline\local\model\recommendation;
  * @covers \mod_sideline\local\model\recommendation
  * @covers \mod_sideline\local\service\evaluation_context
  */
-#[\PHPUnit\Framework\Attributes\CoversClass(rule_evaluator::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(activity_state::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(recommendation::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(evaluation_context::class)]
 final class rule_property_test extends \advanced_testcase {
     /** @var int Fixed time. */
     private const NOW = 1800000000;

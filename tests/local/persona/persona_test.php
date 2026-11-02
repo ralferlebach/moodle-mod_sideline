@@ -26,8 +26,12 @@ use mod_sideline\tests\fake_text_generator;
 
 defined('MOODLE_INTERNAL') || die();
 
-require_once(__DIR__ . '/fixtures/fake_text_generator.php');
+global $CFG;
+require_once($CFG->dirroot . '/mod/sideline/tests/fixtures/fake_text_generator.php');
 
+#[\PHPUnit\Framework\Attributes\CoversClass(persona_manager::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(persona_resolver::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(persona_registry::class)]
 /**
  * Site personas, approval, revocation and learner choice (P1-07).
  *
@@ -38,9 +42,6 @@ require_once(__DIR__ . '/fixtures/fake_text_generator.php');
  * @covers \mod_sideline\local\persona\persona_resolver
  * @covers \mod_sideline\local\ai\persona_registry
  */
-#[\PHPUnit\Framework\Attributes\CoversClass(persona_manager::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(persona_resolver::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(persona_registry::class)]
 final class persona_test extends \advanced_testcase {
     #[\Override]
     protected function setUp(): void {

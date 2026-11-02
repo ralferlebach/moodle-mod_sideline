@@ -16,6 +16,8 @@
 
 namespace slcmod_quiz;
 
+#[\PHPUnit\Framework\Attributes\CoversClass(adapter::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\state_collector::class)]
 /**
  * Quiz adapter: times and attempts after user and group overrides.
  *
@@ -25,8 +27,6 @@ namespace slcmod_quiz;
  * @covers \slcmod_quiz\adapter
  * @covers \mod_sideline\local\service\state_collector
  */
-#[\PHPUnit\Framework\Attributes\CoversClass(adapter::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\state_collector::class)]
 final class adapter_test extends \advanced_testcase {
     public function test_attempts_and_overrides(): void {
         global $DB;

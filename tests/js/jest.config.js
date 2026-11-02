@@ -1,6 +1,7 @@
 // Jest configuration for the AMD panel (Moodle 4.5 to 5.2). Run from this directory with a
 // toolchain providing jest, jest-environment-jsdom, babel-jest and @babel/preset-env (see
 // docs/environment-setup.md). The React panel of Moodle 5.3 is tested by Moodle's own Jest setup.
+/* eslint-env node */
 module.exports = {
     rootDir: '../..',
     testEnvironment: 'jsdom',

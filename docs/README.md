@@ -7,8 +7,8 @@ Werkzeuge, Pipelines und Testinfrastruktur. Fachliche Dokumentation: `DOCUMENTAT
 - `make fix`: automatische Stil- und PHPDoc-Korrekturen.
 - `make test-amd`: Jest-Tests des AMD-Panels (Moodle 4.5 bis 5.2).
 - `tools/mirror.sh [MOODLE_ROOT]`: spiegelt die Arbeitskopie in einen Moodle-Baum. Erkennt das Layout mit und ohne `public/`.
-- `tools/amd-build.js`: AMD-Build wie `grunt amd`, auch ohne vollständige Grunt-Umgebung.
 - `tools/bench.php`: Messung von Cache und Erzeugung ohne HTTP.
+- `tools/ci-local/`: moodle-plugin-ci lokal mit denselben Schritten wie die CI (`setup.sh`, `ci.sh`) und die Frontend-Prüfungen (`js-checks.sh`). Pflicht vor jeder Auslieferung, siehe `environment-setup.md`.
 
 ## Pipelines (`.github/workflows/`)
 - `moodle-plugin-ci-dev.yml`: schnelle Rückmeldung auf dem Entwicklungszweig (Moodle 4.5 und 5.3).
@@ -25,6 +25,9 @@ Werkzeuge, Pipelines und Testinfrastruktur. Fachliche Dokumentation: `DOCUMENTAT
 - `tests/coverage.php` legt den Umfang der Abdeckungsmessung fest, `tools/coverage_gate.php` erzwingt die Untergrenze.
 
 ## Was Pipelines schon rot gemacht hat
+- **Debug-Meldungen bei der Installation.** moodle-plugin-ci bricht bei jeder `debugging()`-Ausgabe ab, etwa wenn XMLDB ein `CHAR NOT NULL` mit `DEFAULT=""` meldet. Die Entwicklungs-Site zeigt die Meldung nur an. Darum wird vor jeder Auslieferung mit moodle-plugin-ci selbst geprüft (`tools/ci-local/ci.sh`).
+- **moodle-cs prüft je nach Moodle-Version anders.** Auf 4.5 zählt für die Coverage nur `@covers` im Docblock direkt vor der Klasse. Darum stehen die Attribute vor dem Docblock. Testklassen liegen im Verzeichnis ihres Namensraums.
+- **`tools/` wird mitgeprüft.** moodle-plugin-ci beachtet weder `phpcs.xml`-Ausnahmen noch `.phpcsignore`.
 - **Im Moodle-Baum prüfen.** Einige Regeln von moodle-cs greifen nur, wenn das Plugin in einem Moodle-Baum liegt.
 - **Die Werkzeugversion der CI verwenden.** Ein älteres lokales `moodle-cs` akzeptiert, was die CI ablehnt.
 - **Kein `DEFAULT=""` bei `CHAR NOT NULL`.** XMLDB gibt dann eine Debug-Meldung aus, und moodle-plugin-ci wertet jede Debug-Meldung bei der PHPUnit-Initialisierung als Fehler.

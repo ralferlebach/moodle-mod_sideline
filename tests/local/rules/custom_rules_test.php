@@ -26,8 +26,16 @@ use mod_sideline\tests\fake_text_generator;
 
 defined('MOODLE_INTERNAL') || die();
 
-require_once(__DIR__ . '/fixtures/fake_text_generator.php');
+global $CFG;
+require_once($CFG->dirroot . '/mod/sideline/tests/fixtures/fake_text_generator.php');
 
+#[\PHPUnit\Framework\Attributes\CoversClass(rule_schema::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(rule_store::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(rule_preview::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(config_transfer::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\rule_evaluator::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\message_composer::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\ai\pseudonymizer::class)]
 /**
  * Custom rules, templates, cooldowns, preview and configuration transfer (P1-09).
  *
@@ -42,13 +50,6 @@ require_once(__DIR__ . '/fixtures/fake_text_generator.php');
  * @covers \mod_sideline\local\service\message_composer
  * @covers \mod_sideline\local\ai\pseudonymizer
  */
-#[\PHPUnit\Framework\Attributes\CoversClass(rule_schema::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(rule_store::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(rule_preview::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(config_transfer::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\rule_evaluator::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\message_composer::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\ai\pseudonymizer::class)]
 final class custom_rules_test extends \advanced_testcase {
     /** @var int Fixed time. */
     private const NOW = 1800000000;

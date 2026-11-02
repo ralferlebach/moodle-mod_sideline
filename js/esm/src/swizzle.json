@@ -2,5 +2,9 @@
   "CommentaryPanel": {
     "eject": "prohibited",
     "wrap": "risky"
+  },
+  "QuestionForm": {
+    "eject": "prohibited",
+    "wrap": "risky"
   }
 }

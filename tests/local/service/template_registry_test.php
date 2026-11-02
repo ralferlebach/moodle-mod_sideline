@@ -19,6 +19,9 @@ namespace mod_sideline\local\service;
 use mod_sideline\local\model\recommendation;
 use mod_sideline\local\rules\rule_store;
 
+#[\PHPUnit\Framework\Attributes\CoversClass(template_registry::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(message_composer::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(rule_store::class)]
 /**
  * Template versions and variable schemas (P-07).
  *
@@ -29,9 +32,6 @@ use mod_sideline\local\rules\rule_store;
  * @covers \mod_sideline\local\service\message_composer
  * @covers \mod_sideline\local\rules\rule_store
  */
-#[\PHPUnit\Framework\Attributes\CoversClass(template_registry::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(message_composer::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(rule_store::class)]
 final class template_registry_test extends \advanced_testcase {
     /**
      * Strings of the plugin in a language.

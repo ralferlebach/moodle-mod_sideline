@@ -18,6 +18,9 @@ namespace mod_sideline\local\service;
 
 use mod_sideline\local\model\activity_state;
 
+#[\PHPUnit\Framework\Attributes\CoversClass(availability_analyser::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(state_collector::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(rule_evaluator::class)]
 /**
  * Full state model: availability trees, lock reasons, usage, course completion, time zones (P1-04).
  *
@@ -28,9 +31,6 @@ use mod_sideline\local\model\activity_state;
  * @covers \mod_sideline\local\service\state_collector
  * @covers \mod_sideline\local\service\rule_evaluator
  */
-#[\PHPUnit\Framework\Attributes\CoversClass(availability_analyser::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(state_collector::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(rule_evaluator::class)]
 final class state_model_test extends \advanced_testcase {
     /** @var int Fixed time. */
     private const NOW = 1800000000;

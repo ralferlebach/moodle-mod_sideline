@@ -22,8 +22,12 @@ use mod_sideline\tests\fake_text_generator;
 
 defined('MOODLE_INTERNAL') || die();
 
-require_once(__DIR__ . '/fixtures/fake_text_generator.php');
+global $CFG;
+require_once($CFG->dirroot . '/mod/sideline/tests/fixtures/fake_text_generator.php');
 
+#[\PHPUnit\Framework\Attributes\CoversClass(persona_preview::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\ai\persona_registry::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\message_composer::class)]
 /**
  * Persona preview with invented data (P-14).
  *
@@ -34,9 +38,6 @@ require_once(__DIR__ . '/fixtures/fake_text_generator.php');
  * @covers \mod_sideline\local\ai\persona_registry
  * @covers \mod_sideline\local\service\message_composer
  */
-#[\PHPUnit\Framework\Attributes\CoversClass(persona_preview::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\ai\persona_registry::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\message_composer::class)]
 final class persona_preview_test extends \advanced_testcase {
     /** @var int Fixed time. */
     private const NOW = 1800000000;

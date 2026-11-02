@@ -31,7 +31,6 @@ jest.mock('@moodle/lms/core/ajax', () => ({
 }));
 
 // Optional: automatic WCAG checks when jest-axe is installed (it is not a Moodle core dependency).
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const axe = (() => {
     try {
         return require('jest-axe');
@@ -118,7 +117,8 @@ describe('CommentaryPanel', () => {
     });
 
     it('does not render an action link that leaves the site', async() => {
-        mockFetchOne.mockResolvedValue(ok({}, [{key: 'x', text: 'Go', actionlabel: 'Open', actionurl: 'https://evil.example/phish'}]));
+        const phishing = {key: 'x', text: 'Go', actionlabel: 'Open', actionurl: 'https://evil.example/phish'};
+        mockFetchOne.mockResolvedValue(ok({}, [phishing]));
         await renderPanel(false);
         expect(screen.queryByRole('link', {name: 'Open'})).toBeNull();
     });
@@ -211,7 +211,9 @@ describe('CommentaryPanel', () => {
     it('shows, explains and deletes the learner own answers', async() => {
         mockFetchOne
             .mockResolvedValueOnce(ok({dialogenabled: true}))
-            .mockResolvedValueOnce({answers: [{questionid: 5, prompt: 'Q?', answer: 'Busy', skipped: false, effect: 'Deadlines first'}]})
+            .mockResolvedValueOnce({
+                answers: [{questionid: 5, prompt: 'Q?', answer: 'Busy', skipped: false, effect: 'Deadlines first'}],
+            })
             .mockResolvedValueOnce({deleted: true})
             .mockResolvedValueOnce(ok({dialogenabled: true}))
             .mockResolvedValueOnce({answers: []});

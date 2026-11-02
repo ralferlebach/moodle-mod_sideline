@@ -19,8 +19,11 @@
  * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+/* eslint-env jest, node */
+// The tests build resolved and pending native promises to stand in for core/ajax.
+/* eslint-disable promise/no-native, promise/avoid-new */
 
-import {init} from '../../amd/src/panel';
+const {init} = require('../../amd/src/panel');
 
 const keys = ['region', 'loading', 'error', 'retry', 'consentTitle', 'consentText', 'consentAccept', 'consentDecline',
     'consentWithdraw', 'consentDeclined', 'questionSubmit', 'questionSkip', 'questionTitle', 'answersShow', 'answersHide',
@@ -30,7 +33,6 @@ const strings = Object.fromEntries(keys.map((k) => [k, `«${k}»`]));
 
 let axe = null;
 try {
-    // eslint-disable-next-line global-require
     axe = require('jest-axe');
 } catch (e) {
     axe = null;
@@ -207,14 +209,18 @@ describe('AMD panel', () => {
     });
 
     it('chooses a persona with a labelled select', async() => {
-        respond(ok({personas: [{key: 'mentor', name: 'Mentor'}, {key: 'reporter', name: 'Reporter'}]}), {persona: 'reporter'}, ok());
+        const personas = [{key: 'mentor', name: 'Mentor'}, {key: 'reporter', name: 'Reporter'}];
+        respond(ok({personas}), {persona: 'reporter'}, ok());
         await mount();
         const select = document.querySelector('select');
         expect(document.querySelector(`label[for="${select.id}"]`).textContent).toBe('«personaLabel»');
         select.value = 'reporter';
         select.dispatchEvent(new Event('change'));
         await settle();
-        expect(global.mockCall).toHaveBeenCalledWith({methodname: 'mod_sideline_set_persona', args: {cmid: 7, persona: 'reporter'}});
+        expect(global.mockCall).toHaveBeenCalledWith({
+            methodname: 'mod_sideline_set_persona',
+            args: {cmid: 7, persona: 'reporter'},
+        });
     });
 
     it('opts in to sharing; the name needs sharing first', async() => {

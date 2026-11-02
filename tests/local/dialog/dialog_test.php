@@ -28,9 +28,16 @@ use mod_sideline\tests\fake_text_generator;
 defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
-require_once(__DIR__ . '/fixtures/fake_text_generator.php');
+require_once($CFG->dirroot . '/mod/sideline/tests/fixtures/fake_text_generator.php');
 require_once($CFG->dirroot . '/webservice/tests/helpers.php');
 
+#[\PHPUnit\Framework\Attributes\CoversClass(question_type::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(dialog_manager::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(answer_question::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(get_my_answers::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\rule_evaluator::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\commentary_service::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\cache\commentary_cache::class)]
 /**
  * Dialog and interview engine (P1-08).
  *
@@ -45,13 +52,6 @@ require_once($CFG->dirroot . '/webservice/tests/helpers.php');
  * @covers \mod_sideline\local\service\commentary_service
  * @covers \mod_sideline\local\cache\commentary_cache
  */
-#[\PHPUnit\Framework\Attributes\CoversClass(question_type::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(dialog_manager::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(answer_question::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(get_my_answers::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\rule_evaluator::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\commentary_service::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\cache\commentary_cache::class)]
 final class dialog_test extends \advanced_testcase {
     /** @var \stdClass Course. */
     private \stdClass $course;

@@ -2,7 +2,6 @@
     <ruleset name="mod_sideline">
         <description>PHPCS configuration for mod_sideline.</description>
         <rule ref="moodle"/>
-        <exclude-pattern>*/tools/*</exclude-pattern>
         <exclude-pattern>*/vendor/*</exclude-pattern>
         <exclude-pattern>*/tests/load/*</exclude-pattern>
         <exclude-pattern>*/tests/playwright/node_modules/*</exclude-pattern>

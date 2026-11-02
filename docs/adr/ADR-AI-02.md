@@ -24,7 +24,7 @@ Für Kontext und Person ist die Zuordnung weiterhin möglich: Das Register verbi
 - **Kein Löschen durch Sideline:** Sideline löscht Core-Daten nicht selbst (P-48: „referenzierte Core-Daten nicht unberechtigt löschen“). Sein eigenes Kostenbuch `sideline_aiusage` enthält keine Person, keinen Kontext und keinen Text und wird nach 31 Tagen gelöscht.
 
 ## Nachweis (automatisiert)
-`tests/ai_integration_test.php` läuft mit dem echten OpenAI-Provider von Core und gemocktem HTTP-Endpunkt:
+`tests/local/ai/ai_integration_test.php` läuft mit dem echten OpenAI-Provider von Core und gemocktem HTTP-Endpunkt:
 - Der HTTP-Body enthält keinen Namen, keine E-Mail-Adresse, keinen Aktivitäts- oder Kursnamen und keine URL. Das gilt auch für die zwei Aufrufe mit Übersetzungsschritt.
 - `ai_action_generate_text` enthält nur Platzhalter.
 - Core registriert beide Aufrufe. Sideline übernimmt die vom Provider gemeldeten Tokenzahlen in sein Kostenbuch.

@@ -18,6 +18,8 @@ namespace mod_sideline\local\service;
 
 use mod_sideline\local\instance_config;
 
+#[\PHPUnit\Framework\Attributes\CoversClass(scope_resolver::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(instance_config::class)]
 /**
  * Scope: sections with nested subsections, explicit activities and course unions (P1-05).
  *
@@ -27,8 +29,6 @@ use mod_sideline\local\instance_config;
  * @covers \mod_sideline\local\service\scope_resolver
  * @covers \mod_sideline\local\instance_config
  */
-#[\PHPUnit\Framework\Attributes\CoversClass(scope_resolver::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(instance_config::class)]
 final class scope_test extends \advanced_testcase {
     /**
      * Names of the resolved activities.

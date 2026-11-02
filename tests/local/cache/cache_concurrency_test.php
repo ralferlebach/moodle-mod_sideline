@@ -22,8 +22,12 @@ use mod_sideline\tests\fake_text_generator;
 
 defined('MOODLE_INTERNAL') || die();
 
-require_once(__DIR__ . '/fixtures/fake_text_generator.php');
+global $CFG;
+require_once($CFG->dirroot . '/mod/sideline/tests/fixtures/fake_text_generator.php');
 
+#[\PHPUnit\Framework\Attributes\CoversClass(commentary_cache::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\observer::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\commentary_service::class)]
 /**
  * Cache correctness, compare and swap, invalidating events and query budgets (P1-13).
  *
@@ -34,9 +38,6 @@ require_once(__DIR__ . '/fixtures/fake_text_generator.php');
  * @covers \mod_sideline\local\observer
  * @covers \mod_sideline\local\service\commentary_service
  */
-#[\PHPUnit\Framework\Attributes\CoversClass(commentary_cache::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\observer::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\commentary_service::class)]
 final class cache_concurrency_test extends \advanced_testcase {
     /** @var \stdClass Course. */
     private \stdClass $course;

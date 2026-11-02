@@ -32,13 +32,17 @@ require($argv[1] . '/config.php');
 $course = $DB->get_record_select('course', 'fullname = ?', ['Foreign source'], '*', IGNORE_MULTIPLE);
 $modinfo = get_fast_modinfo($course);
 $cms = [];
-foreach ($modinfo->get_cms() as $cm) { $cms[$cm->name] = $cm; }
+foreach ($modinfo->get_cms() as $cm) {
+    $cms[$cm->name] = $cm;
+}
 $sideline = $DB->get_record('sideline', ['id' => $cms['Coach']->instance]);
 $scope = $DB->get_fieldset_select('sideline_scope', 'cmid', 'sidelineid = ?', [$sideline->id]);
 $rule = json_decode($DB->get_field('sideline_rule', 'definition', ['sidelineid' => $sideline->id]), true);
 $out = [
   'site' => $CFG->wwwroot . ' ' . $CFG->release,
-  'persona' => $sideline->persona, 'dialog' => (int) $sideline->dialogenabled, 'consentrequired' => (int) $sideline->consentrequired,
+  'persona' => $sideline->persona,
+  'dialog' => (int) $sideline->dialogenabled,
+  'consentrequired' => (int) $sideline->consentrequired,
   'scope_remapped' => array_map('intval', $scope) === [(int) $cms['Lab report']->id],
   'rule_cmid_remapped' => (int) $rule['conditions'][0]['cmid'] === (int) $cms['Lab report']->id,
   'rule_templates' => $rule['templates'], 'rule_templateversion' => $rule['templateversion'] ?? null,

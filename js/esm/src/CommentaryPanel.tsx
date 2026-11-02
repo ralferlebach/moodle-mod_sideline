@@ -31,7 +31,7 @@ import {
 } from './repository';
 import {useTypewriter} from './useTypewriter';
 import QuestionForm from './QuestionForm';
-import type {Answer, CommentaryBlock, CommentaryResponse, PanelProps} from './types';
+import type {Answer, CommentaryBlock, CommentaryResponse, PanelProps, PanelStrings} from './types';
 
 /**
  * Only links that stay on this site are rendered as links. The server resolves the URL; this is
@@ -62,6 +62,54 @@ const Block = ({block, typing}: {block: CommentaryBlock; typing: boolean}) => {
         </div>
     );
 };
+
+/**
+ * The consent gate: shown until the learner has agreed.
+ *
+ * @param props consent state, localised strings and the decision callback.
+ */
+const ConsentGate = ({consent, strings, onDecide}: {
+    consent: string;
+    strings: PanelStrings;
+    onDecide: (accept: boolean) => void;
+}) => (
+    <div data-region="consent">
+        <h3 className="h5">{strings.consentTitle}</h3>
+        <p>{strings.consentText}</p>
+        {consent === 'declined' || consent === 'withdrawn' ? <p>{strings.consentDeclined}</p> : null}
+        <button type="button" className="btn btn-primary btn-sm me-2" onClick={() => onDecide(true)}>
+            {strings.consentAccept}
+        </button>
+        {consent === 'not_requested' || consent === 'reconsent_required' ? (
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => onDecide(false)}>
+                {strings.consentDecline}
+            </button>
+        ) : null}
+    </div>
+);
+
+/**
+ * The learner's own answers with their effect, each deletable.
+ *
+ * @param props answers, localised strings and the delete callback.
+ */
+const AnswerList = ({answers, strings, onDelete}: {
+    answers: Answer[];
+    strings: PanelStrings;
+    onDelete: (questionid: number) => void;
+}) => (answers.length === 0 ? <p className="small">{strings.answersEmpty}</p> : (
+    <ul className="list-unstyled small">
+        {answers.map((a) => (
+            <li key={a.questionid} className="mb-2">
+                <strong>{a.prompt}</strong> {a.skipped ? '–' : a.answer}
+                <br /><span>{strings.answerEffect}: {a.effect}</span>{' '}
+                <button type="button" className="btn btn-link btn-sm p-0" onClick={() => onDelete(a.questionid)}>
+                    {strings.answerDelete}
+                </button>
+            </li>
+        ))}
+    </ul>
+));
 
 /**
  * The panel.
@@ -127,21 +175,7 @@ const CommentaryPanel = ({cmid, typing, strings}: PanelProps) => {
     } else if (data === null) {
         body = <p role="status">{strings.loading}</p>;
     } else if (data.status === 'consent_required') {
-        body = (
-            <div data-region="consent">
-                <h3 className="h5">{strings.consentTitle}</h3>
-                <p>{strings.consentText}</p>
-                {data.consent === 'declined' || data.consent === 'withdrawn' ? <p>{strings.consentDeclined}</p> : null}
-                <button type="button" className="btn btn-primary btn-sm me-2" onClick={() => act(() => setConsent(cmid, true))}>
-                    {strings.consentAccept}
-                </button>
-                {data.consent === 'not_requested' || data.consent === 'reconsent_required' ? (
-                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => act(() => setConsent(cmid, false))}>
-                        {strings.consentDecline}
-                    </button>
-                ) : null}
-            </div>
-        );
+        body = <ConsentGate consent={data.consent} strings={strings} onDecide={(accept) => act(() => setConsent(cmid, accept))} />;
     } else {
         const question = data.question?.[0];
         const personas = data.personas ?? [];
@@ -161,7 +195,8 @@ const CommentaryPanel = ({cmid, typing, strings}: PanelProps) => {
                 {personas.length > 1 ? (
                     <div className="mt-3" data-region="persona">
                         <label htmlFor={`${id}-persona`} className="form-label me-2">{strings.personaLabel}</label>
-                        <select id={`${id}-persona`} className="form-select form-select-sm d-inline-block w-auto" value={data.persona}
+                        <select id={`${id}-persona`} className="form-select form-select-sm d-inline-block w-auto"
+                            value={data.persona}
                             onChange={(e) => act(() => setPersona(cmid, e.target.value))}>
                             {personas.map((p) => <option key={p.key} value={p.key}>{p.name}</option>)}
                         </select>
@@ -202,27 +237,18 @@ const CommentaryPanel = ({cmid, typing, strings}: PanelProps) => {
                         </button>
                     ) : null}
                     {data.consent === 'accepted' ? (
-                        <button type="button" className="btn btn-link btn-sm p-0" onClick={() => act(() => setConsent(cmid, false))}>
+                        <button type="button" className="btn btn-link btn-sm p-0"
+                            onClick={() => act(() => setConsent(cmid, false))}>
                             {strings.consentWithdraw}
                         </button>
                     ) : null}
                 </div>
                 {answers !== null ? (
                     <div id={`${id}-answers`} data-region="answers" className="mt-2">
-                        {answers.length === 0 ? <p className="small">{strings.answersEmpty}</p> : (
-                            <ul className="list-unstyled small">
-                                {answers.map((a) => (
-                                    <li key={a.questionid} className="mb-2">
-                                        <strong>{a.prompt}</strong> {a.skipped ? '–' : a.answer}
-                                        <br /><span>{strings.answerEffect}: {a.effect}</span>{' '}
-                                        <button type="button" className="btn btn-link btn-sm p-0" onClick={async() => {
-                                            await act(() => deleteAnswer(cmid, a.questionid));
-                                            setAnswers((await getMyAnswers(cmid)).answers);
-                                        }}>{strings.answerDelete}</button>
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
+                        <AnswerList answers={answers} strings={strings} onDelete={async(questionid) => {
+                            await act(() => deleteAnswer(cmid, questionid));
+                            setAnswers((await getMyAnswers(cmid)).answers);
+                        }} />
                     </div>
                 ) : null}
             </>

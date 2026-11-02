@@ -50,6 +50,11 @@ $p->create_rule($DB->get_record('sideline', ['id' => $sl->id]), ['key' => 'custo
     'field' => 'completion', 'is' => 'no']], 'templates' => ['en' => 'Finish {label}.', 'de' => 'Schließe {label} ab.']]);
 // Personal data that must NOT travel.
 $sideline = $DB->get_record('sideline', ['id' => $sl->id]);
-\mod_sideline\local\consent\consent_manager::record_decision($sideline, (int) $student->id, true,
-    context_module::instance($sl->cmid)->id, time());
+\mod_sideline\local\consent\consent_manager::record_decision(
+    $sideline,
+    (int) $student->id,
+    true,
+    context_module::instance($sl->cmid)->id,
+    time()
+);
 echo $course->id, ' ', $quiz->cmid, ' ', $course->shortname, "\n";

@@ -18,6 +18,7 @@ namespace mod_sideline\local\service;
 
 use mod_sideline\local\model\activity_state;
 
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\rule_evaluator::class)]
 /**
  * Tests for the rule evaluator: precedence, unknown handling, transitions.
  *
@@ -26,7 +27,6 @@ use mod_sideline\local\model\activity_state;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @covers \mod_sideline\local\service\rule_evaluator
  */
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\rule_evaluator::class)]
 final class rule_evaluator_test extends \advanced_testcase {
     /** @var int A fixed "now" so no test depends on the wall clock. */
     private const NOW = 1800000000;

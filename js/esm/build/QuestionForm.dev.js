@@ -215,7 +215,7 @@ const QuestionForm = /* @__PURE__ */ __name(({ question, strings, onSubmit }) =>
     }),
     /* @__PURE__ */ jsxDEV("button", { type: "button", className: "btn btn-link btn-sm mt-2", onClick: () => onSubmit("", true), children: strings.questionSkip }, void 0, false, {
       fileName: "public/mod/sideline/js/esm/src/QuestionForm.tsx",
-      lineNumber: 110,
+      lineNumber: 112,
       columnNumber: 13
     })
   ] }, void 0, true, {

@@ -1,19 +1,13 @@
-# environment-setup.md
+# environment-setup.md – Entwicklungs- und Prüfumgebung für mod_sideline
 
-## Setup der Test- & Laufzeitumgebung für mod_sideline
+Diese Anleitung baut die Umgebung auf, in der `mod_sideline` entwickelt und **vor jeder Auslieferung** geprüft wird.
 
-Anleitung, um die Verifikationsumgebung für `mod_sideline` im Container von Grund auf aufzusetzen:
-Moodle 5.3, PHP 8.3, PostgreSQL 17, PHPUnit, Code-Style (phpcs/moodle-cs).
+Grundsatz: Geprüft wird mit denselben Werkzeugen und Optionen wie auf GitHub, nicht mit Nachbauten. Kern ist **moodle-plugin-ci 4**, lokal ausgeführt (Abschnitt 4). Dazu kommen die Frontend-Prüfungen, die moodle-plugin-ci nicht abdeckt (Abschnitt 5), und die Abnahme des ausgelieferten ZIP (Abschnitt 8).
 
 > **Konvention:** QUELLE = `/home/claude/work/moodle-mod_sideline` (Arbeitskopie, wird ausgeliefert).
-> SPIEGEL = `/home/claude/moodle/public/mod/sideline` (Wegwerf-Kopie im Moodle-Baum, gegen die
-> getestet wird). Nie im Spiegel entwickeln – `tools/mirror.sh` überschreibt ihn bei jedem Lauf.
-
-> **Verifikationsstand (25.10.2026, Version 0.2.1):** Alle Abschnitte wurden im Container ausgeführt, die Versionsmatrix 4.5–5.3 in Abschnitt 8d.
-> PHPUnit 172/172 auf PostgreSQL 17.11 und MariaDB 11.4.13, Behat 11/11 (davon 4 in Headless-Chrome 153),
-> Jest 20/20 aus dem Moodle-Root, `grunt esm`-äquivalenter Build mit Moodles eigenem esbuild-Skript,
-> phpcs 0 Fehler/0 Warnungen, Upgrade 0.1.0 → 0.2.0 gegen eine echte 0.1.0-Datenbank.
-> Nicht ausgeführt: GitHub-CI, `local_moodlecheck` (PHPDoc-Prüfer; Installation aus GitHub im Container nicht erlaubt).
+> Moodle-Bäume unter `/home/claude/moodle*` sind Entwicklungs-Sites. `tools/mirror.sh [ROOT]` spiegelt die Quelle hinein.
+> Nie im Spiegel entwickeln: Er wird bei jedem Lauf überschrieben.
+> CI-Läufe legen eigene Wegwerf-Bäume unter `/home/claude/ci/<version>-<db>-<php>/` an.
 
 ---
 
@@ -21,283 +15,26 @@ Moodle 5.3, PHP 8.3, PostgreSQL 17, PHPUnit, Code-Style (phpcs/moodle-cs).
 
 | Komponente | Wert |
 |---|---|
-| Moodle | 5.3, Branch `MOODLE_503_STABLE` (Version 2026100500.06), Webroot `public/` |
-| PHP | ≥ 8.3.0 (verifiziert mit 8.3.x) |
-| DB | PostgreSQL **17** (Moodle 5.3 verlangt PG 17 / MariaDB 11.4), `dbname=moodle`, `prefix=mdl_` |
-| PHPUnit | 11.5 (aus dem Core-Composer; Attribute `#[CoversClass]`, `#[DataProvider]`) |
-| Moodle-Pfad | `/home/claude/moodle` |
-| dataroot | `/home/claude/moodledata`, `phpunit_dataroot=/home/claude/moodledata_phpu`, `phpunit_prefix=phpu_` |
-| phpcs | `/tmp/moodlecs`, `moodlehq/moodle-cs ^3.7` |
+| Moodle | 4.5, 5.0, 5.1, 5.2, 5.3 (Branches `MOODLE_405_STABLE` … `MOODLE_503_STABLE`) |
+| PHP | 8.3 (Standard), 8.1 und 8.2 parallel für die Matrix |
+| Datenbanken | PostgreSQL 17 (Port 5432), MariaDB 11.4 (Port 3307) |
+| moodle-plugin-ci | 4.5.x unter `/opt/mpci/ci`, mit Wrappern unter `/opt/mpci/wrap` |
+| Browser | Chromium 153 aus Playwright (`/opt/pw-browsers`), ChromeDriver 153, Xvfb |
+| Node.js | 22 (`/opt/node22`) |
+| Speicher | Die Plattensumme ist begrenzt (etwa 40 GB). Ein CI-Lauf belegt mit den Wrappern etwa 1,5 GB. |
 
-Plugin-Pfad in 5.3: **`public/mod/sideline`** (nicht mehr `mod/sideline`).
+Layout: Ab Moodle 5.1 liegt das Plugin unter `public/mod/sideline`, in 4.5 und 5.0 unter `mod/sideline`.
 
-## 1. Systempakete
+## 1. Systempakete und PHP
 
 ```bash
 apt-get update -qq
-apt-get install -y -qq php8.3-cli php8.3-xml php8.3-mbstring php8.3-curl php8.3-zip \
-    php8.3-gd php8.3-intl php8.3-pgsql php8.3-soap php8.3-xmlrpc composer locales
+apt-get install -y -qq php8.3-cli php8.3-{xml,mbstring,curl,zip,gd,intl,pgsql,mysql,soap,xmlrpc,pcov} \
+    composer locales xvfb openjdk-17-jre-headless
+locale-gen en_AU.UTF-8 && update-locale          # PHPUnit-Init braucht en_AU.UTF-8
 ```
 
-**Stolperstein Locale:** Der PHPUnit-Init braucht `en_AU.UTF-8`:
-
-```bash
-locale-gen en_AU.UTF-8 && update-locale
-```
-
-**Stolperstein max_input_vars:** Moodle verlangt ≥ 5000. Das `-d`-Flag erreicht den Init-Subprozess
-nicht, daher dauerhaft setzen:
-
-```bash
-echo "max_input_vars=6000" > /etc/php/8.3/cli/conf.d/99-moodle.ini
-```
-
-## 2. PostgreSQL 17
-
-Die Distributionsversion (16) reicht nicht („version 17 is required“). PGDG-Repository einbinden:
-
-```bash
-apt-get install -y -qq postgresql-common
-/usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
-apt-get install -y -qq postgresql-17
-```
-
-Der Cluster muss auf Port 5432 laufen (ggf. `port` in `postgresql.conf` anpassen, falls ein 16er-Cluster
-den Port belegt). Rolle und Datenbank:
-
-```bash
-su postgres -c "psql -c \"CREATE USER moodle WITH PASSWORD 'moodle';\""
-su postgres -c "psql -c \"CREATE DATABASE moodle OWNER moodle ENCODING 'UTF8';\""
-```
-
-`tools/mirror.sh` startet den Cluster, falls er nicht online ist.
-
-## 3. Moodle 5.3
-
-```bash
-git clone --depth 1 -b MOODLE_503_STABLE https://github.com/moodle/moodle.git /home/claude/moodle
-cd /home/claude/moodle && composer install --no-interaction
-mkdir -p /home/claude/moodledata /home/claude/moodledata_phpu
-php admin/cli/install.php --lang=en --wwwroot=http://localhost:8080 \
-  --dataroot=/home/claude/moodledata --dbtype=pgsql --dbhost=localhost --dbname=moodle \
-  --dbuser=moodle --dbpass=moodle --fullname=Dev --shortname=dev \
-  --adminuser=admin --adminpass='Admin-123!' --agree-license --non-interactive
-```
-
-In `config.php` ergänzen (vor `require_once(__DIR__ . '/lib/setup.php')`):
-
-```php
-$CFG->phpunit_prefix = 'phpu_';
-$CFG->phpunit_dataroot = '/home/claude/moodledata_phpu';
-```
-
-## 4. Plugin einspielen (Spiegel)
-
-```bash
-/home/claude/work/moodle-mod_sideline/tools/mirror.sh
-cd /home/claude/moodle && php admin/cli/upgrade.php --non-interactive
-```
-
-## 5. PHPUnit
-
-```bash
-cd /home/claude/moodle
-php public/admin/tool/phpunit/cli/init.php
-vendor/bin/phpunit --testsuite mod_sideline_testsuite
-```
-
-Erwartet: `OK (169 tests, …)` für mod_sideline, dazu `slcmod_assign_testsuite` (2) und `slcmod_quiz_testsuite` (1).
-
-Nach jeder Codeänderung: `tools/mirror.sh`, danach `init.php` erneut (baut die Testsuite-Konfiguration
-neu), dann phpunit.
-
-**Stolpersteine beim Init:**
-
-- *„Can not use database for testing“*: Ein abgebrochener Init hinterlässt `phpu_`-Tabellen. Alle Tabellen
-  mit Präfix `phpu_` per SQL droppen und neu initialisieren.
-- *„dataroot not empty“*: Im phpunit-dataroot liegt eine versteckte `.htaccess`. Leeren mit
-  `find /home/claude/moodledata_phpu -mindepth 1 -delete`.
-
-## 6. Code-Style (phpcs)
-
-```bash
-mkdir -p /tmp/moodlecs && cd /tmp/moodlecs
-composer require --dev --no-interaction "moodlehq/moodle-cs:^3.7"
-P="$(pwd)/vendor/moodlehq/moodle-cs/moodle"
-for d in Universal Modernize NormalizedArrays; do P="$P,$(pwd)/vendor/phpcsstandards/phpcsextra/$d"; done
-./vendor/bin/phpcs --config-set installed_paths "$P"
-
-cd /home/claude/work/moodle-mod_sideline
-/tmp/moodlecs/vendor/bin/phpcs --standard=moodle --extensions=php .
-/tmp/moodlecs/vendor/bin/phpcbf --standard=moodle --extensions=php .   # Auto-Fix
-```
-
-Stand: 0 Fehler, 0 Warnungen (die CI läuft mit `--max-warnings 0`).
-
-## 7. Frontend (React/TypeScript/ESM)
-
-Moodle 5.3 baut ESM-Quellen unter `js/esm/src` mit `grunt esm` (esbuild). Im Container scheitert
-`npm install` im Moodle-Root an einer GitHub-Tarball-Abhängigkeit (shifter, 403). Umgehung, verifiziert:
-
-```bash
-# Werkzeugkette separat installieren und als node_modules des Moodle-Roots verlinken.
-mkdir -p /tmp/fe && cd /tmp/fe && npm init -y
-npm install react@19 react-dom@19 typescript@5 @types/react@19 @types/react-dom@19 jest@30 \
-    jest-environment-jsdom@30 ts-jest@29 @testing-library/react@16 @testing-library/dom \
-    @testing-library/jest-dom@6 jest-axe@10 esbuild@0.25 glob@10 chalk@4 @xmldom/xmldom xpath
-ln -sfn /tmp/fe/node_modules /home/claude/moodle/node_modules
-
-# Moodles eigener ESM-Build (das, was grunt esm aufruft).
-cat > /tmp/buildesm.mjs <<'X'
-process.chdir('/home/claude/moodle');
-const {generateAliases} = await import('/home/claude/moodle/.esbuild/generate-aliases.mjs');
-const {buildPluginComponents} = await import('/home/claude/moodle/.esbuild/plugin/plugincomponents.mjs');
-generateAliases();
-await buildPluginComponents();
-X
-node /tmp/buildesm.mjs
-# Das Bundle gehört zum Plugin: zurück in die Arbeitskopie kopieren.
-rm -rf /home/claude/work/moodle-mod_sideline/js/esm/build
-cp -r /home/claude/moodle/public/mod/sideline/js/esm/build /home/claude/work/moodle-mod_sideline/js/esm/
-
-# Jest aus dem Moodle-Root (nutzt jest.config.js des Cores).
-cd /home/claude/moodle && npx jest public/mod/sideline/js/esm/tests
-```
-
-Erwartet: `114 components built`, `Tests: 20 passed`. Mit vollem Netzzugang reicht `npm install && npx grunt esm`.
-Wichtig: erst `tools/mirror.sh`, dann bauen, sonst entsteht das Bundle aus alten Quellen.
-
-## 8. Behat (mit Headless-Chrome)
-
-Chromium liegt unter `/opt/pw-browsers/chromium-1243/chrome-linux64/chrome` (Version 153). Der vorinstallierte
-ChromeDriver ist 147 und passt nicht; passend herunterladen:
-
-```bash
-mkdir -p /tmp/cd && cd /tmp/cd && npx -y @puppeteer/browsers install chromedriver@153.0.8010.12
-```
-
-`config.php` ergänzen:
-
-```php
-$CFG->behat_wwwroot  = 'http://127.0.0.1:8090';
-$CFG->behat_dataroot = '/home/claude/moodledata_bht';
-$CFG->behat_prefix   = 'bht_';
-$CFG->behat_profiles = ['default' => [
-    'browser' => 'chrome',
-    'wd_host' => 'http://127.0.0.1:9515',
-    'capabilities' => ['extra_capabilities' => ['goog:chromeOptions' => [
-        'binary' => '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome',
-        'args' => ['--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--window-size=1600,1200'],
-    ]]],
-]];
-```
-
-```bash
-mkdir -p /home/claude/moodledata_bht
-php public/admin/tool/behat/cli/init.php
-php -S 127.0.0.1:8090 -t /home/claude/moodle/public &          # Webserver
-/tmp/cd/chromedriver/linux-153.0.8010.12/chromedriver-linux64/chromedriver --port=9515 &
-vendor/bin/behat --config /home/claude/moodledata_bht/behatrun/behat/behat.yml --tags @mod_sideline
-```
-
-Erwartet: `11 scenarios (11 passed)`. Nach Codeänderungen: `tools/mirror.sh`, ggf. ESM neu bauen, dann
-`php public/admin/tool/behat/cli/util.php --enable`. Szenarien mit axe-Prüfung brauchen das Tag `@accessibility`.
-
-## 8a. MariaDB 11.4 (zweite Datenbank)
-
-Die Distribution hat nur MariaDB 10.11; Moodle 5.3 verlangt 11.4. Das Binärarchiv von archive.mariadb.org ist erreichbar:
-
-```bash
-curl -O https://archive.mariadb.org/mariadb-11.4.13/bintar-linux-systemd-x86_64/mariadb-11.4.13-linux-systemd-x86_64.tar.gz
-tar xzf mariadb-11.4.13-linux-systemd-x86_64.tar.gz -C /opt && ln -sfn /opt/mariadb-11.4.13-linux-systemd-x86_64 /opt/mariadb
-apt-get install -y php8.3-mysql
-/opt/mariadb/scripts/mariadb-install-db --basedir=/opt/mariadb --datadir=/home/claude/mariadb-data --user=root
-/opt/mariadb/bin/mariadbd --basedir=/opt/mariadb --datadir=/home/claude/mariadb-data --user=root --port=3307 \
-    --socket=/tmp/mariadb.sock --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci &
-/opt/mariadb/bin/mariadb -uroot --socket=/tmp/mariadb.sock -e "CREATE DATABASE moodle DEFAULT CHARACTER SET utf8mb4 \
-    COLLATE utf8mb4_unicode_ci; CREATE USER 'moodle'@'127.0.0.1' IDENTIFIED BY 'moodle'; GRANT ALL ON moodle.* TO 'moodle'@'127.0.0.1';"
-```
-
-`config.php` schaltet per Umgebungsvariable um (eigener dataroot und phpunit_dataroot):
-
-```php
-if (getenv('MOODLE_DB') === 'mariadb') {
-    $CFG->dbtype = 'mariadb';
-    $CFG->dbhost = '127.0.0.1';
-    $CFG->dboptions = ['dbpersist' => 0, 'dbport' => 3307, 'dbsocket' => '', 'dbcollation' => 'utf8mb4_unicode_ci'];
-}
-```
-
-```bash
-MOODLE_DB=mariadb php public/admin/tool/phpunit/cli/init.php
-MOODLE_DB=mariadb vendor/bin/phpunit --testsuite mod_sideline_testsuite
-```
-
-## 8b. Upgrade-Test 0.1.0 → 0.2.0
-
-Vor dem Anheben der Version wurde eine Dev-Site mit 0.1.0-Daten (Instanz, Einwilligung, Protokoll, Cache) als
-`pg_dump -Fc` gesichert (`/home/claude/moodle_010_snapshot.dump`). Wiederholbar:
-
-```bash
-su postgres -c "dropdb moodle && createdb -O moodle -E UTF8 moodle"
-su postgres -c "pg_restore -d moodle --no-owner --role=moodle /home/claude/moodle_010_snapshot.dump"
-php admin/cli/upgrade.php --non-interactive
-php admin/cli/check_database_schema.php     # keine Abweichungen für sideline
-```
-
-## 8c. Messungen
-
-```bash
-php public/mod/sideline/tools/bench.php --users=200 --activities=30 --requests=1000 --workers=8 --cleanup
-```
-
-Ergebnisse und Budgets: `docs/TRACEABILITY.md`, Abschnitt Performance.
-
-## 8d. Versionsmatrix Moodle 4.5 bis 5.3
-
-Weitere Moodle-Bäume neben `/home/claude/moodle` (5.3):
-
-| Baum | Branch | Layout | PHPUnit | DB (PG) | wwwroot / Behat |
-|---|---|---|---|---|---|
-| `/home/claude/moodle405` | MOODLE_405_STABLE | klassisch (`mod/sideline`) | 9.6 | `moodle405` | 8105 / 8205 |
-| `/home/claude/moodle500` | MOODLE_500_STABLE | klassisch | 11 | `moodle500` | 8110 / 8210 |
-| `/home/claude/moodle501` | MOODLE_501_STABLE | `public/` | 11 | `moodle501` | 8111 / 8211 |
-| `/home/claude/moodle502` | MOODLE_502_STABLE | `public/` | 11 | `moodle502` | 8112 / 8212 |
-
-```bash
-git clone --depth 1 -b MOODLE_405_STABLE https://github.com/moodle/moodle.git /home/claude/moodle405
-cd /home/claude/moodle405 && composer install --no-interaction --prefer-dist
-# Composer holt die Pakete hier als Git-Klone: .git-Ordner in vendor löschen spart mehrere GB.
-find vendor -mindepth 2 -maxdepth 3 -type d -name .git -prune -exec rm -rf {} +
-tools/mkconfig.sh 405          # config.php, Datenroots, Datenbank
-/home/claude/work/moodle-mod_sideline/tools/mirror.sh /home/claude/moodle405   # erkennt das Layout selbst
-php admin/cli/install_database.php --agree-license --adminpass='Admin-123!' --fullname=M405 --shortname=m405
-php admin/tool/phpunit/cli/init.php            # 5.1+: public/admin/tool/phpunit/cli/init.php
-vendor/bin/phpunit --testsuite mod_sideline_testsuite
-```
-
-Behat je Version: eigener PHP-Webserver auf dem Behat-Port (`php -S 127.0.0.1:8205 -t /home/claude/moodle405`,
-ab 5.1 `-t …/public`), ChromeDriver wie in Abschnitt 8.
-
-**Frontend je Version:** Moodle 5.3 rendert das React-Panel (`js/esm`). Moodle 4.5 bis 5.2 bekommen das AMD-Panel
-(`amd/src/panel.js`), weil React erst in 5.3 vollständig ist. Build wie `grunt amd` (Rollup, Babel, Terser mit Moodles Optionen):
-
-```bash
-mkdir -p /tmp/amdbuild && cd /tmp/amdbuild && npm init -y
-npm install @babel/core@7.17.5 @babel/preset-env@7.16.11 babel-plugin-system-import-transformer@4 \
-    babel-plugin-transform-es2015-modules-amd-lazy@2.0.1 rollup@2 rollup-plugin-terser@7 glob@7 @xmldom/xmldom xpath@0.0.32 \
-    eslint@8 eslint-plugin-jsdoc@48 eslint-plugin-promise@6.0.0 @babel/eslint-parser@7.17.0 @babel/eslint-plugin@7.17
-# build.js: siehe tools/amd-build.js (nutzt .grunt/babel-plugin-add-module-to-define.js des Moodle-Baums)
-cd /home/claude/moodle405 && NODE_PATH=/tmp/amdbuild/node_modules node /home/claude/work/moodle-mod_sideline/tools/amd-build.js /home/claude/moodle405 /home/claude/moodle405/mod/sideline
-cp mod/sideline/amd/build/* /home/claude/work/moodle-mod_sideline/amd/build/
-# ESLint mit Moodles Regeln
-ln -sfn /tmp/amdbuild/node_modules node_modules && ./node_modules/.bin/eslint mod/sideline/amd/src/panel.js
-# Jest für das AMD-Panel
-cd /tmp/fe && npm install babel-jest@30 @babel/core @babel/preset-env
-NODE_PATH=/tmp/fe/node_modules npx jest --config /home/claude/work/moodle-mod_sideline/tests/js/jest.config.js
-```
-
-**PHP 8.1 und 8.2 zur Laufzeit** (seit 0.3.0) kommen aus dem PPA `ondrej/php`, parallel zu 8.3. `add-apt-repository` fehlt im Container, deshalb wird das Repository von Hand eingetragen:
+PHP 8.1 und 8.2 kommen aus dem PPA `ondrej/php`. `add-apt-repository` fehlt, deshalb wird das Repository von Hand eingetragen:
 
 ```bash
 curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x14AA40EC0831756756D7F66C4F4EA0AAE5267A6C" \
@@ -306,22 +43,168 @@ echo "deb [signed-by=/usr/share/keyrings/ondrej-php.gpg] https://ppa.launchpadco
   > /etc/apt/sources.list.d/ondrej-php.list
 apt-get update
 for v in 8.1 8.2; do apt-get install -y php$v-cli php$v-{pgsql,mysql,intl,xml,mbstring,curl,zip,gd,soap,bcmath}; done
-update-alternatives --set php /usr/bin/php8.3      # 8.3 bleibt Standard
-cd /home/claude/moodle405 && php8.1 admin/tool/phpunit/cli/init.php && php8.1 vendor/bin/phpunit --testsuite mod_sideline_testsuite
+update-alternatives --set php /usr/bin/php8.3
 ```
 
-Zusätzlich die statische Prüfung:
+`max_input_vars` muss für **jede** PHP-Version mindestens 5000 sein. Das `-d`-Flag erreicht Unterprozesse nicht:
 
 ```bash
-cd /tmp/moodlecs && composer require --dev "phpcompatibility/php-compatibility:^10.0@dev"
-# installed_paths um vendor/phpcompatibility/php-compatibility/PHPCompatibility ergänzen
-/tmp/moodlecs/vendor/bin/phpcs --standard=PHPCompatibility --runtime-set testVersion 8.1- --extensions=php .
+for v in 8.1 8.2 8.3; do echo "max_input_vars=5000" > /etc/php/$v/cli/conf.d/99-moodle.ini; done
 ```
 
-## 8e. Coverage, HTTP-Lasttest, Restore auf fremder Website (0.3.0)
+## 2. Datenbanken
 
-**Coverage** mit pcov (`apt-get install php8.3-pcov`). Moodle 5.1 und neuer liegen unter `public/`, deshalb muss
-`pcov.directory` gesetzt werden, sonst misst pcov nichts:
+**PostgreSQL 17** (die Distribution hat nur 16):
+
+```bash
+apt-get install -y -qq postgresql-common && /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+apt-get install -y -qq postgresql-17
+pg_ctlcluster 17 main start
+su postgres -c "psql -c \"CREATE USER moodle WITH PASSWORD 'moodle' CREATEDB SUPERUSER;\""
+su postgres -c "psql -c \"CREATE DATABASE moodle OWNER moodle ENCODING 'UTF8';\""
+```
+
+`CREATEDB` braucht moodle-plugin-ci, weil es seine Datenbank selbst anlegt. Der Cluster überlebt keinen Container-Neustart: `pg_ctlcluster 17 main start` (macht auch `tools/mirror.sh`).
+
+**MariaDB 11.4** als Binärarchiv (die Distribution hat 10.11):
+
+```bash
+curl -O https://archive.mariadb.org/mariadb-11.4.13/bintar-linux-systemd-x86_64/mariadb-11.4.13-linux-systemd-x86_64.tar.gz
+tar xzf mariadb-11.4.13-linux-systemd-x86_64.tar.gz -C /opt && ln -sfn /opt/mariadb-11.4.13-linux-systemd-x86_64 /opt/mariadb
+/opt/mariadb/scripts/mariadb-install-db --basedir=/opt/mariadb --datadir=/home/claude/mariadb-data --user=root
+/opt/mariadb/bin/mariadbd --basedir=/opt/mariadb --datadir=/home/claude/mariadb-data --user=root --port=3307 \
+    --bind-address=127.0.0.1 --socket=/tmp/mariadb.sock \
+    --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci &
+# Etwa zehn Sekunden warten, bis "ready for connections" im Log steht.
+/opt/mariadb/bin/mariadb -uroot --socket=/tmp/mariadb.sock -e "
+  CREATE USER IF NOT EXISTS 'moodle'@'127.0.0.1' IDENTIFIED BY 'moodle'; GRANT ALL ON moodle.* TO 'moodle'@'127.0.0.1';
+  CREATE USER IF NOT EXISTS 'ci'@'127.0.0.1' IDENTIFIED BY 'ci'; GRANT ALL ON *.* TO 'ci'@'127.0.0.1' WITH GRANT OPTION;"
+```
+
+## 3. Moodle-Bäume 4.5 bis 5.3
+
+Die Bäume sind Entwicklungs-Sites. Ihre Git-Klone sind außerdem die Quelle für die CI-Läufe (`file://`), damit nicht jeder Lauf Moodle neu von GitHub holt.
+
+| Baum | Branch | Layout | PHPUnit | DB (PG) | wwwroot / Behat |
+|---|---|---|---|---|---|
+| `/home/claude/moodle` | MOODLE_503_STABLE | `public/` | 11 | `moodle` | 8000 / 8090 |
+| `/home/claude/moodle405` | MOODLE_405_STABLE | klassisch | 9.6 | `moodle405` | 8105 / 8205 |
+| `/home/claude/moodle500` | MOODLE_500_STABLE | klassisch | 11 | `moodle500` | 8110 / 8210 |
+| `/home/claude/moodle501` | MOODLE_501_STABLE | `public/` | 11 | `moodle501` | 8111 / 8211 |
+| `/home/claude/moodle502` | MOODLE_502_STABLE | `public/` | 11 | `moodle502` | 8112 / 8212 |
+
+```bash
+B=405   # 503: Zielordner /home/claude/moodle
+git clone --depth 1 -b MOODLE_${B}_STABLE https://github.com/moodle/moodle.git /home/claude/moodle$B
+cd /home/claude/moodle$B && COMPOSER_ALLOW_SUPERUSER=1 composer install --no-interaction --prefer-dist
+# Composer holt die Pakete hier als Git-Klone (kein Zugriff auf die GitHub-API): .git in vendor löschen spart GB.
+find vendor -mindepth 2 -maxdepth 3 -type d -name .git -prune -exec rm -rf {} +
+/home/claude/work/moodle-mod_sideline/tools/mkconfig.sh $B      # config.php, Datenroots, Datenbank
+/home/claude/work/moodle-mod_sideline/tools/mirror.sh /home/claude/moodle$B
+php admin/cli/install_database.php --agree-license --adminpass='Admin-123!' --fullname=M$B --shortname=m$B
+```
+
+Für die tägliche Entwicklung (schneller als ein CI-Lauf):
+
+```bash
+tools/mirror.sh /home/claude/moodle && cd /home/claude/moodle
+php admin/cli/upgrade.php --non-interactive
+php public/admin/tool/phpunit/cli/init.php && vendor/bin/phpunit --testsuite mod_sideline_testsuite
+```
+
+**Achtung:** `init.php` gibt Debug-Meldungen (etwa von XMLDB) nur aus und läuft weiter. moodle-plugin-ci bricht bei jeder solchen Meldung ab. Die Entwicklungs-Site ersetzt daher nie den CI-Lauf aus Abschnitt 4.
+
+## 4. moodle-plugin-ci lokal (Pflicht vor jeder Auslieferung)
+
+### 4.1 Einrichtung
+
+```bash
+mkdir -p /tmp/claude-0/cd && cd /tmp/claude-0/cd && npx -y @puppeteer/browsers install chromedriver@153.0.8010.12
+/home/claude/work/moodle-mod_sideline/tools/ci-local/setup.sh
+```
+
+`setup.sh` installiert moodle-plugin-ci 4 nach `/opt/mpci/ci` (`composer create-project … moodlehq/moodle-plugin-ci ci ^4`, wie im Workflow). Dazu kommen drei Anpassungen an diesen Container. Keine davon ändert, was geprüft wird:
+
+| Hindernis | Lösung (`tools/ci-local/`) |
+|---|---|
+| Der Proxy blockt GitHub-Archive (`github.com/<owner>/<repo>/archive/<tag>.tar.gz`), Git selbst geht. Moodles `npm-shrinkwrap.json` verweist auf zwei solche Pakete (`shifter`, `istanbul`, Forks von andrewnicols). | `npm`-Wrapper: baut das Archiv aus dem Git-Tag und trägt es als lokale Datei ein, nur in der Wegwerf-Kopie des Laufs. Identische `node_modules` werden als Hardlinks wiederverwendet. |
+| Composer holt ohne GitHub-API jedes Paket als vollen Git-Klon: mehrere GB pro Lauf. Die Platte läuft voll. | `composer`-Wrapper: verlinkt `vendor/` eines Moodle-Baums mit identischer `composer.lock` als Hardlinks. Composer prüft dann nur noch. |
+| Kein Docker, also kein Selenium-Container. Chrome startet als root nur mit `--no-sandbox`. | `/opt/google/chrome/chrome` ist ein Wrapper um Playwrights Chromium mit `--no-sandbox`. ChromeDriver läuft unter Xvfb auf Port 4444 (`/wd/hub`), wie Selenium. |
+
+### 4.2 Ein Lauf
+
+```bash
+tools/ci-local/ci.sh MOODLE_503_STABLE pgsql 8.3            # alle Schritte
+tools/ci-local/ci.sh MOODLE_405_STABLE pgsql 8.1 "codechecker phpdoc"   # einzelne Schritte, nach einem install
+SRC=/pfad/zum/entpackten/zip/sideline tools/ci-local/ci.sh MOODLE_502_STABLE mariadb 8.3   # Abnahme des ZIP
+```
+
+Schritte und Optionen sind die aus `.github/workflows/moodle-plugin-ci-main.yml`:
+
+- `install`;
+- `phplint`;
+- `phpcpd` und `phpmd` (informativ, wie in der CI);
+- `codechecker --max-warnings 0 --exclude=PSR1.Classes.ClassDeclaration,moodle.Commenting.TodoComment`;
+- `phpdoc --max-warnings 0`;
+- `validate`, `savepoints`, `mustache`;
+- `grunt --max-lint-warnings 0`;
+- `phpunit --fail-on-warning`;
+- `behat --profile chrome --tags "@mod_sideline&&~@broken"`.
+
+Ergebnis je Schritt steht in `/home/claude/ci/<tag>/ci-logs/rc.txt`, das Protokoll in `<schritt>.log`. Behat-Läufe warten aufeinander (gemeinsame Ports 8000 und 4444), alles andere kann parallel laufen.
+
+### 4.3 Matrix
+
+Wie in der CI:
+
+| Moodle | PHP | DB |
+|---|---|---|
+| 4.5 | 8.1 | pgsql |
+| 4.5 | 8.3 | mariadb |
+| 5.0 | 8.2 | pgsql |
+| 5.0 | 8.3 | mariadb |
+| 5.1 | 8.3 | pgsql |
+| 5.2 | 8.3 | mariadb |
+| 5.3 | 8.3 | pgsql |
+| 5.3 | 8.3 | mariadb |
+
+Vor einer Auslieferung laufen mindestens 4.5/8.1/pgsql und 5.3/8.3/pgsql vollständig grün. Vor einem Release läuft die ganze Matrix. Was moodle-plugin-ci auf welcher Version anders prüft, steht in Abschnitt 9.
+
+## 5. Frontend-Prüfungen
+
+moodle-plugin-ci prüft mit `grunt` nur `amd/src`, CSS und Gherkin. Die React-Quellen (TypeScript), die Tests und die Playwright-Skripte prüft:
+
+```bash
+tools/ci-local/js-checks.sh /home/claude/ci/503-pgsql-8.3/moodle    # nach einem ci.sh-Lauf auf 5.3
+```
+
+| Prüfung | Werkzeug |
+|---|---|
+| ESLint mit Moodles Regeln für alle JS/TS-Dateien (`amd/src`, `js/esm/src`, `js/esm/tests`, `tests/js`, `tests/playwright`) | `npx eslint --max-warnings 0` |
+| Moodles React-Lint | `grunt eslint:react --max-lint-warnings=0` (vorher `grunt esm`: erzeugt `tsconfig.aliases.json` und die Jest-Aliase) |
+| TypeScript strikt, nur das Plugin | `tsc --noEmit` mit eingeschränktem `include` |
+| Jest React-Panel (mit axe) | `npx jest public/mod/sideline/js/esm/tests` (dazu `jest-axe@10`, `--no-save`) |
+| Jest AMD-Panel (mit axe) | `tests/js/jest.config.js` mit eigener Werkzeugkette `/opt/mpci/jest-amd` (Moodles Babel 7.17 ist zu alt für babel-jest 30); läuft außerhalb des Moodle-Baums, sonst findet Node Moodles `node_modules` zuerst |
+| ESM-Bundle und AMD-Bundle aktuell | `grunt esm` und `grunt amd` neu bauen, mit der Quelle vergleichen |
+
+Nach einer Änderung an `js/esm/src` oder `amd/src` werden die Bundles im CI-Baum gebaut und zurückkopiert:
+
+```bash
+cd /home/claude/ci/503-pgsql-8.3/moodle && npx grunt esm --root=public/mod/sideline && npx grunt amd --root=public/mod/sideline
+cp -r public/mod/sideline/js/esm/build /home/claude/work/moodle-mod_sideline/js/esm/
+cp public/mod/sideline/amd/build/* /home/claude/work/moodle-mod_sideline/amd/build/
+```
+
+Das AMD-Bundle ist auf 4.5 und 5.3 byte-gleich, die CI kann es also auf jeder Version prüfen.
+
+## 6. Browser-Journeys und Lasttest
+
+- Playwright: `tests/playwright/README.md` (`make playwright` gegen eine laufende Entwicklungs-Site, 5.3 und 4.5).
+- k6: `tests/load/README.md`. Der Server läuft mit `PHP_CLI_SERVER_WORKERS=8`.
+
+Hintergrundserver überleben das Ende eines Befehls nicht zuverlässig. Server, Seed und Test laufen deshalb im selben Befehl, am Ende wird der Server mit `pkill` beendet.
+
+## 7. Coverage
 
 ```bash
 cd /home/claude/moodle
@@ -330,33 +213,46 @@ php -d pcov.enabled=1 -d pcov.directory=$PWD/public/mod/sideline vendor/bin/phpu
 php public/mod/sideline/tools/coverage_gate.php /tmp/clover.xml 80
 ```
 
-Nur Code, der in einem `CoversClass` oder `CoversFunction` steht, zählt (PHPUnit 11).
-Stand 0.3.0: 89,4 % der Zeilen (3107 von 3475): Klassen, Backup und lib.php.
+Ab 5.1 muss `pcov.directory` auf `public/mod/sideline` zeigen, sonst misst pcov nichts. Gezählt wird nur Code, der in `CoversClass` oder `CoversFunction` steht (PHPUnit 11).
 
-**k6** liegt als Binärdatei unter den GitHub-Releases (`grafana/k6`, z. B. v1.3.0, `linux-amd64.tar.gz`). Ablauf und
-Messwerte: `tests/load/README.md`. Der Server muss mit `PHP_CLI_SERVER_WORKERS=8` laufen, sonst werden die
-Anfragen nacheinander abgearbeitet.
+## 8. Auslieferung
 
-**Restore auf fremder Website:**
+Reihenfolge, ohne Ausnahme:
 
-```bash
-php tools/foreign_restore_source.php /home/claude/moodle405       # Quellkurs auf 4.5, gibt die Kurs-ID aus
-cd /home/claude/moodle405 && php admin/cli/backup.php --courseid=<id> --destination=/tmp/bk
-cd /home/claude/moodle && php admin/cli/restore_backup.php --file=/tmp/bk/<datei>.mbz --categoryid=1
-php /home/claude/work/moodle-mod_sideline/tools/foreign_restore_check.php /home/claude/moodle
-```
+1. Version in `version.php` und beiden `adapter/*/version.php` anheben, gleiche Version und gleiches Release (Gleichlauf-Job).
+2. `docs/CHANGELOG.md` ergänzen. Entfernte oder verschobene Dateien in `db/removed_files.txt` eintragen.
+3. ZIP bauen: volle Codebase ohne `.git`, `node_modules`, `test-results`, `playwright-report`. Name `mod_sideline-<release>.zip`, Wurzelordner `sideline/`.
+4. ZIP in ein leeres Verzeichnis entpacken und die Matrix aus Abschnitt 4.3 mit `SRC=<entpackt>/sideline` laufen lassen. Die Installation in eine frische Moodle-Site ist dabei Teil von `install`.
+5. `tools/ci-local/js-checks.sh` mit derselben Quelle.
+6. Zusätzlich prüfen:
+   - das Upgrade einer Entwicklungs-Site mit der Vorversion (`php admin/cli/upgrade.php`, danach `php admin/cli/check_database_schema.php`);
+   - die Stale-Files-Liste: Kein Pfad aus `db/removed_files.txt` existiert;
+   - der Versionsgleichlauf.
+7. Erst wenn alles grün ist, wird ausgeliefert.
 
-Ergebnis 0.3.0:
-- Die Konfiguration kommt an.
-- Scope und Regelreferenzen zeigen auf die neuen Kursmodule.
-- Es kommt keine Einwilligung, kein Einwilligungsprotokoll und kein Cache mit.
+## 9. Stolpersteine
 
-**`local_moodlecheck`** lässt sich hier nicht in den Moodle-Baum installieren. Die PHPDoc-Prüfung läuft in der CI.
+- **Debug-Meldungen brechen die CI ab.** moodle-plugin-ci wertet jede `debugging()`-Ausgabe bei Installation und PHPUnit-Init als Fehler. Typisch: `CHAR NOT NULL` mit `DEFAULT=""` in `install.xml` oder `upgrade.php`. XMLDB „repariert“ das zwar, meldet es aber.
+- **moodle-cs prüft je nach Moodle-Version anders.**
+  - 4.5 (PHPUnit 9) kennt keine Coverage-Attribute und sucht `@covers` im Docblock **direkt** vor der Klasse.
+  - Ab 5.0 reichen die Attribute.
+  - Lösung für beide: erst die Attribute, dann der Docblock mit `@covers`, dann die Klasse.
+- **Namensraum = Verzeichnis** auch für Tests: `namespace mod_sideline\local\ai` gehört nach `tests/local/ai/`.
+- **`tools/` wird mitgeprüft.** moodle-plugin-ci beachtet weder `phpcs.xml`-Ausnahmen noch `.phpcsignore`.
+- **Test-Fixtures** per `$CFG->dirroot` laden, mit `global $CFG;` auf Dateiebene. PHPUnit lädt Testdateien aus einer Funktion heraus.
+- **Das Plugin nicht per `add-plugin` hinzufügen.** `install --plugin` übernimmt es schon; ein zweiter Klon bricht ab.
+- **Testserver an `127.0.0.1` binden** (`localhost` kann `::1` sein) und im selben Schritt starten, der ihn braucht.
+- **MariaDB-Gesundheitsprüfung** mit `healthcheck.sh`; das Image `mariadb:11.4` hat `mysqladmin` nicht mehr.
+- **Laufende Skripte nicht bearbeiten.** bash liest ein Skript stückweise; wer `ci.sh` während eines Laufs ändert, bekommt Syntaxfehler mitten im Lauf. Änderungen in eine neue Datei schreiben und mit `mv` ersetzen.
+- **Parallele moodle-plugin-ci-Läufe** teilen sich dessen `.env` (Pfad des zuletzt installierten Baums). `ci.sh` setzt `MOODLE_DIR` und `PLUGIN_DIR` deshalb selbst. Gesetzte Variablen haben Vorrang vor der Datei.
+- **`pkill -f <muster>`** trifft auch die eigene Shell, wenn das Muster in ihrer Befehlszeile steht. Server besser über ihre PID beenden (`… & SPID=$!; …; kill $SPID`).
+- **Platte voll** zeigt sich als „Avail 0“ bei wenig „Used“ und als seltsame Composer-Fehler („sha1 file … write error“). Alte CI-Bäume und `~/.cache/composer/vcs` löschen.
+- **k6 und Moodle-Sitzungen:** `noCookiesReset`, sonst ist jede zweite Anfrage abgemeldet.
+- **Playwright-Login:** erst nach `networkidle` ausfüllen; Benutzertouren im Seed abschalten.
+- `core_ai\manager::user_policy_accepted()` **schreibt**; zum Lesen `get_user_policy_status()`.
 
-## 9. Bekannte Abweichungen zum Plugin-Template
+## 10. Verifikationsstand
 
-- CI-Matrix des Templates (PG16, MariaDB 10.11, PHP 8.1, Moodle 4.5/5.0) ist veraltet → Moodle 5.3,
-  PG17, MariaDB 11.4, PHP 8.3.
-- `make react` (esbuild nach `js/build/`) passte nicht zu Moodle 5.3 → ist auf `grunt esm` umgestellt.
-- `core_ai\manager::user_policy_accepted()` ist ein **Schreib**-Aufruf; zum Lesen
-  `get_user_policy_status()` verwenden.
+Stand 02.11.2026, Version 0.3.2: Alle Abschnitte dieser Anleitung sind im Container ausgeführt. Die CI-Matrix aus Abschnitt 4.3 lief vollständig grün auf dem entpackten Auslieferungs-ZIP, ebenso `js-checks.sh` und Playwright auf 4.5 und 5.3. Einzelheiten: `docs/TRACEABILITY.md`, Abschnitt Läufe.
+
+Nicht lokal nachgebildet: der Selenium-Container (stattdessen ChromeDriver mit demselben Chromium, Profil `chrome`) und die GitHub-Dienste für PostgreSQL und MariaDB (stattdessen lokale Server derselben Hauptversionen).

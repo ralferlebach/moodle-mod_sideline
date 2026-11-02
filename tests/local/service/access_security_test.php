@@ -17,15 +17,22 @@
 namespace mod_sideline\local\service;
 
 use mod_sideline\external\get_commentary;
-use mod_sideline\local\ai\ai_gateway;
 use mod_sideline\local\cache\commentary_cache;
 use mod_sideline\local\consent\consent_manager;
 use mod_sideline\tests\fake_text_generator;
 
 defined('MOODLE_INTERNAL') || die();
 
-require_once(__DIR__ . '/fixtures/fake_text_generator.php');
+global $CFG;
+require_once($CFG->dirroot . '/mod/sideline/tests/fixtures/fake_text_generator.php');
+require_once($CFG->dirroot . '/mod/sideline/tests/fixtures/commentary_course.php');
 
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\scope_resolver::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\message_composer::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\commentary_service::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\external\get_commentary::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\cache\commentary_cache::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\state_collector::class)]
 /**
  * Negative tests for access, delivery-time checks, the withdrawal race and prompt injection (SLC-020 P0).
  *
@@ -39,61 +46,13 @@ require_once(__DIR__ . '/fixtures/fake_text_generator.php');
  * @covers \mod_sideline\local\cache\commentary_cache
  * @covers \mod_sideline\local\service\state_collector
  */
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\scope_resolver::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\message_composer::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\commentary_service::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\external\get_commentary::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\cache\commentary_cache::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\state_collector::class)]
 final class access_security_test extends \advanced_testcase {
-    /** @var \stdClass Course. */
-    private \stdClass $course;
-    /** @var \stdClass Learner. */
-    private \stdClass $student;
-    /** @var \stdClass First activity. */
-    private \stdClass $page1;
-    /** @var \stdClass Second activity. */
-    private \stdClass $page2;
+    use \mod_sideline\tests\commentary_course;
 
     #[\Override]
     protected function setUp(): void {
         parent::setUp();
-        $this->resetAfterTest();
-        set_config('enablecompletion', 1);
-        $gen = $this->getDataGenerator();
-        $this->course = $gen->create_course(['enablecompletion' => 1]);
-        $this->student = $gen->create_and_enrol($this->course, 'student', ['firstname' => 'Maria']);
-        $manual = ['completion' => COMPLETION_TRACKING_MANUAL];
-        $this->page1 = $gen->create_module('page', ['course' => $this->course->id, 'name' => 'Alpha unit'] + $manual);
-        $this->page2 = $gen->create_module('page', ['course' => $this->course->id, 'name' => 'Beta unit'] + $manual);
-    }
-
-    /**
-     * Create a Sideline instance.
-     *
-     * @param array $options Options.
-     * @return array Instance, cm, context.
-     */
-    private function sideline(array $options = []): array {
-        $instance = $this->getDataGenerator()->create_module('sideline', ['course' => $this->course->id] + $options);
-        $cm = get_coursemodule_from_instance('sideline', $instance->id);
-        return [$instance, $cm, \context_module::instance($cm->id)];
-    }
-
-    /**
-     * Ask the service for the student.
-     *
-     * @param \stdClass $instance Instance.
-     * @param \context_module $context Context.
-     * @param fake_text_generator|null $fake AI double.
-     * @return array
-     */
-    private function get(\stdClass $instance, \context_module $context, ?fake_text_generator $fake = null): array {
-        global $DB;
-        $this->setUser($this->student);
-        $record = $DB->get_record('sideline', ['id' => $instance->id], '*', MUST_EXIST);
-        $service = new commentary_service(new ai_gateway($fake ?? new fake_text_generator()));
-        return $service->get($record, $this->course, $this->student, $context, time());
+        $this->create_commentary_course([], ['firstname' => 'Maria']);
     }
 
     public function test_guest_is_refused_by_the_endpoint(): void {

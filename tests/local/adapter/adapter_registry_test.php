@@ -16,6 +16,8 @@
 
 namespace mod_sideline\local\adapter;
 
+#[\PHPUnit\Framework\Attributes\CoversClass(registry::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(facts::class)]
 /**
  * Adapter contract: discovery, type checks and safe fallback (P1-06).
  *
@@ -25,8 +27,6 @@ namespace mod_sideline\local\adapter;
  * @covers \mod_sideline\local\adapter\registry
  * @covers \mod_sideline\local\adapter\facts
  */
-#[\PHPUnit\Framework\Attributes\CoversClass(registry::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(facts::class)]
 final class adapter_registry_test extends \advanced_testcase {
     #[\Override]
     protected function tearDown(): void {

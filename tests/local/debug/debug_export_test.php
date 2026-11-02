@@ -23,8 +23,13 @@ use core_privacy\local\request\writer;
 
 defined('MOODLE_INTERNAL') || die();
 
-require_once(__DIR__ . '/fixtures/fake_text_generator.php');
+global $CFG;
+require_once($CFG->dirroot . '/mod/sideline/tests/fixtures/fake_text_generator.php');
 
+#[\PHPUnit\Framework\Attributes\CoversClass(debug_exporter::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(trace_recorder::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(provider::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\commentary_service::class)]
 /**
  * Administrator debug export, traces, audit log, retention and privacy completeness (P1-10).
  *
@@ -36,10 +41,6 @@ require_once(__DIR__ . '/fixtures/fake_text_generator.php');
  * @covers \mod_sideline\privacy\provider
  * @covers \mod_sideline\local\service\commentary_service
  */
-#[\PHPUnit\Framework\Attributes\CoversClass(debug_exporter::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(trace_recorder::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(provider::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\commentary_service::class)]
 final class debug_export_test extends \core_privacy\tests\provider_testcase {
     /** @var \stdClass Course. */
     private \stdClass $course;

@@ -22,8 +22,17 @@ use mod_sideline\tests\fake_text_generator;
 
 defined('MOODLE_INTERNAL') || die();
 
-require_once(__DIR__ . '/fixtures/fake_text_generator.php');
+global $CFG;
+require_once($CFG->dirroot . '/mod/sideline/tests/fixtures/fake_text_generator.php');
 
+#[\PHPUnit\Framework\Attributes\CoversClass(group_service::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(sharing_manager::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\rule_evaluator::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\commentary_service::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\ai\pseudonymizer::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\message_composer::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\cache\commentary_cache::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\instance_config::class)]
 /**
  * Group mode: test matrix 1 to 8 of the concept extension V1.2 (G9).
  *
@@ -39,14 +48,6 @@ require_once(__DIR__ . '/fixtures/fake_text_generator.php');
  * @covers \mod_sideline\local\cache\commentary_cache
  * @covers \mod_sideline\local\instance_config
  */
-#[\PHPUnit\Framework\Attributes\CoversClass(group_service::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(sharing_manager::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\rule_evaluator::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\commentary_service::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\ai\pseudonymizer::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\message_composer::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\cache\commentary_cache::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\instance_config::class)]
 final class group_mode_test extends \advanced_testcase {
     /** @var \stdClass Course. */
     private \stdClass $course;

@@ -29,6 +29,10 @@ require_once($CFG->dirroot . '/backup/moodle2/restore_plan_builder.class.php');
 require_once($CFG->dirroot . '/mod/sideline/backup/moodle2/backup_sideline_activity_task.class.php');
 require_once($CFG->dirroot . '/mod/sideline/backup/moodle2/restore_sideline_activity_task.class.php');
 
+#[\PHPUnit\Framework\Attributes\CoversClass(\backup_sideline_activity_task::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\backup_sideline_activity_structure_step::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\restore_sideline_activity_task::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\restore_sideline_activity_structure_step::class)]
 /**
  * Backup and restore of the configuration, the scope and the absence of personal data (SLC-020-P1-12).
  *
@@ -40,10 +44,6 @@ require_once($CFG->dirroot . '/mod/sideline/backup/moodle2/restore_sideline_acti
  * @covers \restore_sideline_activity_task
  * @covers \restore_sideline_activity_structure_step
  */
-#[\PHPUnit\Framework\Attributes\CoversClass(\backup_sideline_activity_task::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\backup_sideline_activity_structure_step::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\restore_sideline_activity_task::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\restore_sideline_activity_structure_step::class)]
 final class backup_restore_test extends \advanced_testcase {
     /**
      * Back a course up and restore it into a new course.

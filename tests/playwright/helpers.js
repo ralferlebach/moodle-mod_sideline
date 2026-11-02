@@ -19,6 +19,7 @@
  * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+/* eslint-env node */
 const {expect} = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 

@@ -19,6 +19,11 @@ namespace mod_sideline\form;
 use mod_sideline\local\dialog\dialog_manager;
 use mod_sideline\local\dialog\question_type;
 
+#[\PHPUnit\Framework\Attributes\CoversClass(question_form::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(rule_form::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(persona_form::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(debug_form::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(transfer_form::class)]
 /**
  * Validation and data mapping of the teacher and administrator forms.
  *
@@ -31,11 +36,6 @@ use mod_sideline\local\dialog\question_type;
  * @covers \mod_sideline\form\debug_form
  * @covers \mod_sideline\form\transfer_form
  */
-#[\PHPUnit\Framework\Attributes\CoversClass(question_form::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(rule_form::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(persona_form::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(debug_form::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(transfer_form::class)]
 final class forms_test extends \advanced_testcase {
     /**
      * The QuickForm behind a moodleform.

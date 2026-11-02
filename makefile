@@ -31,6 +31,10 @@
 #   make k6           — HTTP load test with k6 against a running site (see tests/load/README.md)
 #   make playwright   — browser journeys against a running site (see tests/playwright/README.md)
 #
+# Local CI (docs/environment-setup.md, section 4), required before every delivery:
+#   make ci CI_BRANCH=MOODLE_503_STABLE CI_DB=pgsql CI_PHP=8.3   — moodle-plugin-ci, same steps as GitHub
+#   make js-checks    — ESLint, tsc, Jest and bundle checks in the 5.3 CI tree
+#
 # Paths are auto-detected from the makefile's own location.
 # The plugin lives at <MOODLE_ROOT>/public/mod/sideline/ —
 # levels below the Moodle root — so both PLUGIN_DIR and MOODLE_ROOT are
@@ -75,7 +79,7 @@ LOAD_USERS     ?= 50
 .PHONY: all fix check clear \
         lint-php lint-phpdoc lint-js lint-mustache lint-cpd lint-md \
         lint-react test-react react build \
-        fix-lint-php fix-phpdoc amd phpunit test-amd load-seed k6 playwright
+        fix-lint-php fix-phpdoc amd phpunit test-amd load-seed k6 playwright ci js-checks
 
 all: clear fix check
 	@echo ""
@@ -248,3 +252,14 @@ playwright:
 	@$(PHP) $(PW_DIR)/seed.php | grep '^export ' | sed 's/^export //' > $(PW_DIR)/.pw-env
 	@cd $(PW_DIR) && $(NPM) ci --silent && $(NPX) playwright install chromium \
 		&& set -a && . ./.pw-env && set +a && $(NPX) playwright test
+
+# --- Local CI, see docs/environment-setup.md -----------------------------------------
+CI_BRANCH      ?= MOODLE_503_STABLE
+CI_DB          ?= pgsql
+CI_PHP         ?= 8.3
+
+ci:
+	@$(PLUGIN_DIR)/tools/ci-local/ci.sh $(CI_BRANCH) $(CI_DB) $(CI_PHP)
+
+js-checks:
+	@$(PLUGIN_DIR)/tools/ci-local/js-checks.sh

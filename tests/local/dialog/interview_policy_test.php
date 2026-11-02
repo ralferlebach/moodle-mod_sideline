@@ -16,6 +16,7 @@
 
 namespace mod_sideline\local\dialog;
 
+#[\PHPUnit\Framework\Attributes\CoversClass(dialog_manager::class)]
 /**
  * The site-wide interview policy as upper bound for every activity (P-31, P-15).
  *
@@ -24,7 +25,6 @@ namespace mod_sideline\local\dialog;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @covers \mod_sideline\local\dialog\dialog_manager
  */
-#[\PHPUnit\Framework\Attributes\CoversClass(dialog_manager::class)]
 final class interview_policy_test extends \advanced_testcase {
     /** @var int Fixed time. */
     private const NOW = 1800000000;

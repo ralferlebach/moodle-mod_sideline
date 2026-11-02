@@ -106,8 +106,12 @@ const QuestionForm = ({question, strings, onSubmit}: Props) => {
                 <legend id={`${id}-legend`} className="h6">{strings.questionTitle}: {question.prompt}</legend>
                 {control}
             </fieldset>
-            <button type="submit" className="btn btn-primary btn-sm me-2 mt-2" disabled={!complete}>{strings.questionSubmit}</button>
-            <button type="button" className="btn btn-link btn-sm mt-2" onClick={() => onSubmit('', true)}>{strings.questionSkip}</button>
+            <button type="submit" className="btn btn-primary btn-sm me-2 mt-2" disabled={!complete}>
+                {strings.questionSubmit}
+            </button>
+            <button type="button" className="btn btn-link btn-sm mt-2" onClick={() => onSubmit('', true)}>
+                {strings.questionSkip}
+            </button>
         </form>
     );
 };

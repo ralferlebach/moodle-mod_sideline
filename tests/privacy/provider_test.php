@@ -25,6 +25,7 @@ use mod_sideline\local\consent\consent_manager;
 
 defined('MOODLE_INTERNAL') || die();
 
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\privacy\provider::class)]
 /**
  * Privacy API tests: export, deletion for a user, for users and for a whole context (P-48).
  *
@@ -33,7 +34,6 @@ defined('MOODLE_INTERNAL') || die();
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @covers \mod_sideline\privacy\provider
  */
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\privacy\provider::class)]
 final class provider_test extends \core_privacy\tests\provider_testcase {
     /** @var \stdClass Course. */
     private \stdClass $course;

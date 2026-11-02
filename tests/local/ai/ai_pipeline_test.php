@@ -18,6 +18,9 @@ namespace mod_sideline\local\ai;
 
 use mod_sideline\local\model\recommendation;
 
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\ai\pseudonymizer::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\ai\prompt_builder::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\ai\response_validator::class)]
 /**
  * Tests for pseudonymisation, prompt building and response validation (P-09, P-22, P-23).
  *
@@ -28,9 +31,6 @@ use mod_sideline\local\model\recommendation;
  * @covers \mod_sideline\local\ai\prompt_builder
  * @covers \mod_sideline\local\ai\response_validator
  */
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\ai\pseudonymizer::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\ai\prompt_builder::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\ai\response_validator::class)]
 final class ai_pipeline_test extends \advanced_testcase {
     /** @var int Fixed time. */
     private const NOW = 1800000000;

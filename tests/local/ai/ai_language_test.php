@@ -22,8 +22,15 @@ use mod_sideline\tests\fake_text_generator;
 
 defined('MOODLE_INTERNAL') || die();
 
-require_once(__DIR__ . '/fixtures/fake_text_generator.php');
+global $CFG;
+require_once($CFG->dirroot . '/mod/sideline/tests/fixtures/fake_text_generator.php');
 
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\ai\language_detector::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\ai\claim_checker::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\ai\ai_gateway::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\ai\ai_usage::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\ai\response_validator::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\ai\prompt_builder::class)]
 /**
  * Language of AI text, the translation step and the semantic plausibility check (P-09, P-24, L-07).
  *
@@ -37,12 +44,6 @@ require_once(__DIR__ . '/fixtures/fake_text_generator.php');
  * @covers \mod_sideline\local\ai\response_validator
  * @covers \mod_sideline\local\ai\prompt_builder
  */
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\ai\language_detector::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\ai\claim_checker::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\ai\ai_gateway::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\ai\ai_usage::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\ai\response_validator::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\ai\prompt_builder::class)]
 final class ai_language_test extends \advanced_testcase {
     /** @var int Fixed time. */
     private const NOW = 1800000000;

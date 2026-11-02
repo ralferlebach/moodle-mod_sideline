@@ -20,6 +20,7 @@
  * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+/* eslint-env node */
 const {test, expect} = require('@playwright/test');
 const {env, login, panel, expectAccessible} = require('./helpers');
 

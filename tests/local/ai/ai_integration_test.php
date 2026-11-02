@@ -20,6 +20,8 @@ use GuzzleHttp\Psr7\Response;
 use mod_sideline\local\service\commentary_service;
 use Psr\Http\Message\RequestInterface;
 
+#[\PHPUnit\Framework\Attributes\CoversClass(core_text_generator::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(ai_gateway::class)]
 /**
  * The real path through Moodle's AI subsystem with a configured provider and a mocked HTTP endpoint
  * (P0-03): policy, capability, what leaves the site, what core stores, fallback on errors.
@@ -30,8 +32,6 @@ use Psr\Http\Message\RequestInterface;
  * @covers \mod_sideline\local\ai\core_text_generator
  * @covers \mod_sideline\local\ai\ai_gateway
  */
-#[\PHPUnit\Framework\Attributes\CoversClass(core_text_generator::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(ai_gateway::class)]
 final class ai_integration_test extends \advanced_testcase {
     /** @var \stdClass Course. */
     private \stdClass $course;
@@ -93,6 +93,7 @@ final class ai_integration_test extends \advanced_testcase {
      * Mock the provider endpoint. The fake model answers with the required tokens of the prompt.
      *
      * @param int $status HTTP status.
+     * @param int $requests Number of responses to queue.
      */
     private function mock_provider(int $status = 200, int $requests = 1): void {
         ['mock' => $mock] = $this->get_mocked_http_client($this->history);

@@ -1,0 +1,21 @@
+#!/bin/bash
+# composer wrapper for the local CI run (docs/environment-setup.md, section 4; installed by setup.sh).
+# Without GitHub API access composer installs every package as a full git clone (several GB per
+# Moodle tree). A Moodle tree with the identical composer.lock already has a vendor directory:
+# it is reused as hard links, composer then only verifies it. .git directories in vendor are removed.
+export COMPOSER_ALLOW_SUPERUSER=1
+SELF=$(readlink -f "$0")
+REAL=$(type -ap composer | while read -r c; do [[ $(readlink -f "$c") != "$SELF" ]] && echo "$c" && break; done)
+if [[ "$1" == install && -f composer.lock && ! -d vendor ]]; then
+  for t in ${MOODLE_TREES:-/home/claude/moodle /home/claude/moodle405 /home/claude/moodle500 /home/claude/moodle501 /home/claude/moodle502}; do
+    if [[ -f $t/vendor/composer/installed.json ]] && cmp -s composer.lock "$t/composer.lock"; then
+      cp -al "$t/vendor" vendor; break
+    fi
+  done
+fi
+for i in 1 2 3; do
+  "$REAL" "$@" && rc=0 && break || rc=$?
+  echo "composer failed (attempt $i), retrying" >&2
+done
+[[ -d vendor ]] && find vendor -mindepth 2 -maxdepth 3 -type d -name .git -prune -exec rm -rf {} +
+exit $rc

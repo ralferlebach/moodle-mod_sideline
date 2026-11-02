@@ -1,0 +1,54 @@
+#!/bin/bash
+# npm wrapper for the local CI run (docs/environment-setup.md, section 4; installed by setup.sh).
+# The container proxy blocks GitHub archive tarballs (https://github.com/<owner>/<repo>/archive/<tag>.tar.gz),
+# git access to the same repositories works. Moodle's shrinkwrap pins two such packages (shifter and
+# istanbul, both forks by andrewnicols). They are built from the git tag and referenced as local
+# files, in the throwaway Moodle copy of a CI run only.
+SELF=$(readlink -f "$0")
+REAL=$(type -ap npm | while read -r c; do [[ $(readlink -f "$c") != "$SELF" ]] && echo "$c" && break; done)
+if [[ "$1" == install && -f npm-shrinkwrap.json ]] && grep -q 'github.com/[^"]*/archive/' package.json npm-shrinkwrap.json; then
+  python3 - <<'PY'
+import json, os, re, subprocess
+cache = os.environ.get('MPCI', '/opt/mpci') + '/gh-tarballs'
+os.makedirs(cache, exist_ok=True)
+pat = re.compile(r'https://github\.com/([^/"]+)/([^/"]+)/archive/([^"]+)\.tar\.gz')
+def local(url):
+    m = pat.fullmatch(url)
+    owner, repo, tag = m.groups()
+    out = f'{cache}/{owner}-{repo}-{tag}.tgz'
+    if not os.path.exists(out):
+        bare = f'{cache}/{owner}-{repo}.git'
+        if not os.path.isdir(bare):
+            subprocess.run(['git', 'clone', '-q', '--bare', f'https://github.com/{owner}/{repo}', bare], check=True)
+        subprocess.run(f"git -C {bare} archive --format=tar --prefix={repo}-{tag}/ {tag} | gzip -n > {out}",
+                       shell=True, check=True)
+    return 'file:' + out
+def fix(obj):
+    if isinstance(obj, dict):
+        for k, v in list(obj.items()):
+            if isinstance(v, str) and pat.fullmatch(v):
+                obj[k] = local(v)
+                if k == 'resolved':
+                    obj.pop('integrity', None)
+            else:
+                fix(v)
+    elif isinstance(obj, list):
+        for v in obj:
+            fix(v)
+for f in ('package.json', 'npm-shrinkwrap.json'):
+    data = json.load(open(f))
+    fix(data)
+    json.dump(data, open(f, 'w'), indent=2)
+    open(f, 'a').write('\n')
+PY
+fi
+# node_modules of an identical dependency set are reused as hard links: saves about 1 GB per run.
+if [[ "$1" == install && $# -le 2 && -f npm-shrinkwrap.json ]]; then
+  key=$(cat package.json npm-shrinkwrap.json | sha256sum | cut -c1-16)
+  cache=${MPCI:-/opt/mpci}/nm-cache/$key
+  [[ -d $cache/node_modules && ! -e node_modules ]] && cp -al "$cache/node_modules" node_modules
+  "$REAL" "$@"; rc=$?
+  if [[ $rc -eq 0 && ! -d $cache/node_modules ]]; then mkdir -p "$cache" && cp -al node_modules "$cache/node_modules"; fi
+  exit $rc
+fi
+exec "$REAL" "$@"

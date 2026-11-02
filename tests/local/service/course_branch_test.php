@@ -18,6 +18,8 @@ namespace mod_sideline\local\service;
 
 use mod_sideline\local\instance_config;
 
+#[\PHPUnit\Framework\Attributes\CoversClass(scope_resolver::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(instance_config::class)]
 /**
  * Course branches (categories with subcategories) as sources of a course union (L-19, P-43).
  *
@@ -27,8 +29,6 @@ use mod_sideline\local\instance_config;
  * @covers \mod_sideline\local\service\scope_resolver
  * @covers \mod_sideline\local\instance_config
  */
-#[\PHPUnit\Framework\Attributes\CoversClass(scope_resolver::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(instance_config::class)]
 final class course_branch_test extends \advanced_testcase {
     /** @var \core_course_category Category of the branch. */
     private \core_course_category $branch;

@@ -23,6 +23,10 @@ defined('MOODLE_INTERNAL') || die();
 global $CFG;
 require_once($CFG->dirroot . '/webservice/tests/helpers.php');
 
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\external\set_persona::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\external\delete_answer::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\external\set_group_sharing::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\external\get_my_answers::class)]
 /**
  * The learner's own write services: persona choice, deleting an answer, group sharing (P-19, P-42, L-G05).
  *
@@ -34,10 +38,6 @@ require_once($CFG->dirroot . '/webservice/tests/helpers.php');
  * @covers \mod_sideline\external\set_group_sharing
  * @covers \mod_sideline\external\get_my_answers
  */
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\external\set_persona::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\external\delete_answer::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\external\set_group_sharing::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\external\get_my_answers::class)]
 final class services_test extends \advanced_testcase {
     /** @var \stdClass Course. */
     private \stdClass $course;

@@ -23,6 +23,8 @@ defined('MOODLE_INTERNAL') || die();
 global $CFG;
 require_once($CFG->dirroot . '/webservice/tests/helpers.php');
 
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\external\get_commentary::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\external\set_consent::class)]
 /**
  * Tests for the web services: rights, data subject and the absence of a teacher view (L-16, P-40).
  *
@@ -32,8 +34,6 @@ require_once($CFG->dirroot . '/webservice/tests/helpers.php');
  * @covers \mod_sideline\external\get_commentary
  * @covers \mod_sideline\external\set_consent
  */
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\external\get_commentary::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\external\set_consent::class)]
 final class external_test extends \advanced_testcase {
     /** @var \stdClass Course. */
     private \stdClass $course;

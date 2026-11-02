@@ -21,6 +21,15 @@ defined('MOODLE_INTERNAL') || die();
 global $CFG;
 require_once($CFG->dirroot . '/mod/sideline/lib.php');
 
+#[\PHPUnit\Framework\Attributes\CoversFunction('sideline_supports')]
+#[\PHPUnit\Framework\Attributes\CoversFunction('sideline_add_instance')]
+#[\PHPUnit\Framework\Attributes\CoversFunction('sideline_update_instance')]
+#[\PHPUnit\Framework\Attributes\CoversFunction('sideline_delete_instance')]
+#[\PHPUnit\Framework\Attributes\CoversFunction('sideline_view')]
+#[\PHPUnit\Framework\Attributes\CoversFunction('sideline_save_relations')]
+#[\PHPUnit\Framework\Attributes\CoversFunction('mod_sideline_tracing_updated')]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\event\course_module_viewed::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\task\purge_cache::class)]
 /**
  * Module callbacks in lib.php: features, instance life cycle, view event, tracing switch, the scheduled task.
  *
@@ -37,15 +46,6 @@ require_once($CFG->dirroot . '/mod/sideline/lib.php');
  * @covers \mod_sideline\event\course_module_viewed
  * @covers \mod_sideline\task\purge_cache
  */
-#[\PHPUnit\Framework\Attributes\CoversFunction('sideline_supports')]
-#[\PHPUnit\Framework\Attributes\CoversFunction('sideline_add_instance')]
-#[\PHPUnit\Framework\Attributes\CoversFunction('sideline_update_instance')]
-#[\PHPUnit\Framework\Attributes\CoversFunction('sideline_delete_instance')]
-#[\PHPUnit\Framework\Attributes\CoversFunction('sideline_view')]
-#[\PHPUnit\Framework\Attributes\CoversFunction('sideline_save_relations')]
-#[\PHPUnit\Framework\Attributes\CoversFunction('mod_sideline_tracing_updated')]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\event\course_module_viewed::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\task\purge_cache::class)]
 final class lib_test extends \advanced_testcase {
     public function test_supported_features(): void {
         $this->assertTrue(sideline_supports(FEATURE_MOD_INTRO));

@@ -1,10 +1,24 @@
-# Abdeckungsmatrix mod_sideline 0.3.0
+# Abdeckungsmatrix mod_sideline 0.3.2
 
-Stand: 29.10.2026. Jede Zeile nennt die Umsetzung und den **ausgeführten** Nachweis. Ausgeführt heißt: lokal im Container gelaufen, nicht in GitHub-CI (siehe P-37).
+Stand: 02.11.2026. Jede Zeile nennt die Umsetzung und den **ausgeführten** Nachweis. Ausgeführt heißt: lokal im Container gelaufen, nicht in GitHub-CI (siehe P-37).
 
 Legende: ✔ umgesetzt und getestet · ◐ teilweise / mit benannter Lücke · ✘ offen
 
-Testorte: `tests/*.php` (PHPUnit, mod_sideline_testsuite), `adapter/*/tests` (slcmod-Suites), `tests/behat/sideline.feature` (Behat), `js/esm/tests` (Jest).
+Testorte: `tests/**/*_test.php` (PHPUnit, mod_sideline_testsuite), `adapter/*/tests` (slcmod-Suites), `tests/behat/sideline.feature` (Behat), `js/esm/tests` (Jest).
+Läufe (0.3.2, 02.11.2026), alle auf dem entpackten Auslieferungs-ZIP, mit moodle-plugin-ci 4.5.11 lokal (`tools/ci-local/ci.sh`, gleiche Schritte und Optionen wie `moodle-plugin-ci-main.yml`):
+- CI-Matrix 8/8 Zellen grün:
+  - 4.5/PHP 8.1/pgsql, 4.5/8.3/mariadb, 5.0/8.2/pgsql, 5.0/8.3/mariadb, 5.1/8.3/pgsql, 5.2/8.3/mariadb, 5.3/8.3/pgsql, 5.3/8.3/mariadb;
+  - jeweils install, phplint, phpcpd, phpmd, codechecker (`--max-warnings 0`), phpdoc (`--max-warnings 0`), validate, savepoints, mustache, grunt (`--max-lint-warnings 0`), PHPUnit 302/302 (`--fail-on-warning`), Behat 13/13 Szenarien und 166/166 Schritte in Chrome.
+- Adapter-Suites 3/3 auf 4.5 und 5.3.
+- Frontend (`tools/ci-local/js-checks.sh`, Moodle 5.3):
+  - ESLint mit Moodles Regeln über alle JS/TS-Dateien inklusive Tests und Playwright: 0 Befunde;
+  - `grunt eslint:react`: 0 Befunde;
+  - `tsc --noEmit` strict: 0 Befunde;
+  - Jest React-Panel 20/20, AMD-Panel 17/17 (beide mit axe);
+  - ESM- und AMD-Bundle entsprechen dem Neubau.
+- Playwright 4/4 auf 5.3 (React-Panel) und 4.5 (AMD-Panel).
+- Upgrade 0.3.1 → 0.3.2 auf 4.5 und 5.3: `check_database_schema` ohne Abweichung.
+
 Läufe (0.3.0, 29.10.2026):
 - PHPUnit 305/305 (302 Plugin, 3 Adapter):
   - PostgreSQL 17.11: Moodle 4.5 mit PHP 8.1, 5.0 mit PHP 8.2, 5.1, 5.2 und 5.3 mit PHP 8.3;
@@ -13,7 +27,6 @@ Läufe (0.3.0, 29.10.2026):
 - Behat 13/13 Szenarien mit 166 Schritten auf allen fünf Versionen (5 mit Headless-Chrome, 2 davon mit axe-WCAG-Prüfung).
 - Jest: 20/20 React-Panel, 17/17 AMD-Panel.
 - k6-Lasttest: 2549 Anfragen ohne Fehler.
-- Playwright (0.3.1, 02.11.2026): 4/4 Browser-Journeys auf Moodle 5.3 und 4.5, mit axe.
 - Code-Prüfungen:
   - phpcs Moodle-Standard: 0 Fehler, 0 Warnungen;
   - PHPCompatibility 8.1: ohne Befund;
@@ -37,7 +50,7 @@ Läufe (0.3.0, 29.10.2026):
 | L-12 Selektiver Export/Import ohne Personendaten | ✔ | `config_transfer`, `transfer.php` | `custom_rules_test` (Rundreise, Konflikte, Migration), Behat |
 | L-13 Pseudonymisierung, lokale Auflösung | ✔ | `pseudonymizer`, Tokens für Personen, Gruppen, Aktivitäten, Daten | `ai_integration_test` (HTTP-Ebene), `group_mode_test` |
 | L-14 Ohne KI / bei Ausfall | ✔ | Fallback-Kette | `ai_integration_test` (HTTP 500), `commentary_service_test` |
-| L-15 Vollständige automatisierte Abdeckung | ✔ / ◐ | 305 PHPUnit (Line Coverage 89,4 %, CI-Untergrenze 80 %), Property-Test der Regeln (2000 Fälle), 13 Behat, 37 Jest, 4 Playwright, k6-Lasttest | Lücke: GitHub-CI-Lauf steht aus |
+| L-15 Vollständige automatisierte Abdeckung | ✔ / ◐ | 305 PHPUnit (Line Coverage 89,4 %, CI-Untergrenze 80 %), Property-Test der Regeln (2000 Fälle), 13 Behat, 37 Jest, 4 Playwright, k6-Lasttest | Lücke: GitHub-CI-Lauf steht aus; die CI-Schritte laufen lokal 1:1 (`tools/ci-local/`) |
 | L-16 Vertraulichkeit | ✔ | keine Lehrenden-Endpunkte, `manage` ohne Leserechte | `external_test`, `dialog_test`, Behat |
 | L-17 Admin-Debug-Export | ✔ | `debug_exporter`, `debug.php`, Audit-Log | `debug_export_test`, Behat |
 | L-18 Persona-Freigabe | ✔ | `persona_manager`, `personas.php`, Teilmenge, Lernendenwahl | `persona_test`, Behat |
@@ -82,7 +95,7 @@ Läufe (0.3.0, 29.10.2026):
 | P-34 Backup/Restore, Privacy | ✔ | `backup/moodle2` (Konfiguration, Scope, Gruppen, Regeln, Fragen) | `backup_restore_test`, `debug_export_test`; Restore einer 4.5-Sicherung auf einer anderen 5.3-Website: Referenzen umgeschrieben, keine Personendaten (`tools/foreign_restore_*.php`) |
 | P-35 Tests je Zustand, Regel, Persona, Dialogtyp, Subplugin, Recht | ✔ / ◐ | siehe Testorte; Property-Test der Regeln | Lücke wie L-15 |
 | P-36 Negativtests | ✔ | | `access_security_test`, `state_model_test`, `rule_evaluator_test` |
-| P-37 Matrix Moodle, PostgreSQL/MariaDB, CI | ◐ | lokal Moodle 4.5–5.3 auf PG 17, MariaDB 11.4 mit 4.5 und 5.3, Chrome 153; PHP 8.1 (4.5), 8.2 (5.0) und 8.3 zur Laufzeit | Lücke: GitHub-CI-Lauf steht aus |
+| P-37 Matrix Moodle, PostgreSQL/MariaDB, CI | ◐ | lokal Moodle 4.5–5.3 auf PG 17, MariaDB 11.4 mit 4.5 und 5.3, Chrome 153; PHP 8.1 (4.5), 8.2 (5.0) und 8.3 zur Laufzeit | Lücke: GitHub-CI-Lauf steht aus; die CI-Schritte laufen lokal 1:1 (`tools/ci-local/`) |
 | P-38 Barrierefreiheit | ✔ | native Controls, Labels, Fokus, aria-live, reduzierte Bewegung | Jest (axe), Behat mit axe (WCAG 1.3.1, 1.4.1, 4.1.2), Playwright mit axe und Tastaturbedienung |
 | P-39 Performance-Budgets | ✔ | Budgets siehe unten, `tools/bench.php`, k6-Lasttest über HTTP | Messung unten, `cache_concurrency_test`, `tests/load/README.md` |
 | P-40 Keine Lehrenden-Einsicht | ✔ | | `external_test` |

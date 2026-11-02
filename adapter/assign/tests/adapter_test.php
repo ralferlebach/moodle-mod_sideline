@@ -16,6 +16,8 @@
 
 namespace slcmod_assign;
 
+#[\PHPUnit\Framework\Attributes\CoversClass(adapter::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\state_collector::class)]
 /**
  * Assignment adapter: dates after overrides and extensions, submission state.
  *
@@ -25,8 +27,6 @@ namespace slcmod_assign;
  * @covers \slcmod_assign\adapter
  * @covers \mod_sideline\local\service\state_collector
  */
-#[\PHPUnit\Framework\Attributes\CoversClass(adapter::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(\mod_sideline\local\service\state_collector::class)]
 final class adapter_test extends \advanced_testcase {
     public function test_overrides_extensions_and_submission(): void {
         global $DB;

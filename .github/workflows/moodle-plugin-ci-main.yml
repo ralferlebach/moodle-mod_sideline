@@ -3,8 +3,10 @@
 #
 # Runs ONLY on push / PR to main; provides the "CI complete" status check for
 # branch protection. Full SEQUENTIAL pipeline per matrix cell across the
-# supported Moodle 4.5 to 5.3 x PHP x DB matrix. No grunt step: the AMD build and the
-# React bundle are committed and checked by Jest and ESLint locally (docs/README.md). The fast parallel pipeline lives in moodle-plugin-ci-dev.yml.
+# supported Moodle 4.5 to 5.3 x PHP x DB matrix. grunt lints amd/src and checks that the
+# committed AMD build is current (it is identical on every supported version). The React
+# sources are checked locally with tools/ci-local/js-checks.sh (docs/environment-setup.md).
+# The fast parallel pipeline lives in moodle-plugin-ci-dev.yml.
 ##############################################################################
 
 name: Moodle Plugin CI Main
@@ -108,6 +110,9 @@ jobs:
       - name: Check upgrade savepoints
         if: ${{ always() }}
         run: set -o pipefail; moodle-plugin-ci savepoints 2>&1 | tee ci-logs/savepoints.log
+      - name: Grunt (ESLint, AMD build up to date, stylelint, gherkin)
+        if: ${{ always() }}
+        run: set -o pipefail; moodle-plugin-ci grunt --max-lint-warnings 0 2>&1 | tee ci-logs/grunt.log
       - name: PHPUnit tests
         if: ${{ always() }}
         run: set -o pipefail; moodle-plugin-ci phpunit --fail-on-warning --testdox 2>&1 | tee ci-logs/phpunit.log
