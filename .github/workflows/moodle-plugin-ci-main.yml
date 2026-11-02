@@ -3,8 +3,8 @@
 #
 # Runs ONLY on push / PR to main; provides the "CI complete" status check for
 # branch protection. Full SEQUENTIAL pipeline per matrix cell across the
-# supported Moodle 4.5 to 5.3 x PHP x DB matrix. PHP-only plugin: no grunt /
-# mustache. The fast parallel pipeline lives in moodle-plugin-ci-dev.yml.
+# supported Moodle 4.5 to 5.3 x PHP x DB matrix. No grunt step: the AMD build and the
+# React bundle are committed and checked by Jest and ESLint locally (docs/README.md). The fast parallel pipeline lives in moodle-plugin-ci-dev.yml.
 ##############################################################################
 
 name: Moodle Plugin CI Main
@@ -81,9 +81,6 @@ jobs:
           sudo locale-gen en_AU.UTF-8
       - name: Install Moodle, dependencies and plugin
         run: |
-          moodle-plugin-ci add-plugin ralferlebach/moodle-mod_sideline
-          moodle-plugin-ci add-plugin ralferlebach/moodle-mod_sideline
-          moodle-plugin-ci add-plugin ralferlebach/moodle-mod_sideline
           moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1
         env:
           DB: ${{ matrix.database }}
@@ -151,7 +148,7 @@ jobs:
           if-no-files-found: warn
 
   ecosystem-lockstep:
-    name: Ecosystem version lockstep
+    name: Version lockstep (plugin and adapters)
     runs-on: ubuntu-22.04
     steps:
       - name: Check out plugin
@@ -159,37 +156,27 @@ jobs:
         with:
           path: plugin
 
-      - name: All four Sideline Learning Coach plugins must ship the same version
+      - name: mod_sideline and its slcmod adapters must ship the same version and release
         run: |
-          get_version() {
-            grep -oE '\$plugin->version[[:space:]]*=[[:space:]]*[0-9]+' "$1"               | grep -oE '[0-9]+$'
+          # The adapters live inside this repository and are released with it, so a version or
+          # release that differs is always an error (no rollout of separate repositories).
+          field() {
+            grep -oE "\\\$plugin->$2[[:space:]]*=[[:space:]]*['\"]?[^;'\"]+" "$1" | grep -oE "[^ '\"=]+$"
           }
-          own=$(get_version plugin/version.php)
-          echo "This plugin: $own"
+          own=$(field plugin/version.php version)
+          rel=$(field plugin/version.php release)
+          echo "mod_sideline: $own ($rel)"
           rc=0
-          for sib in auth enrol mod tool; do
-            git clone --depth 1 --branch main               "https://github.com/ralferlebach/moodle-${sib}_sideline.git" "/tmp/$sib" >/dev/null 2>&1
-            sibver=$(get_version "/tmp/$sib/version.php")
-            echo "  ${sib}_sideline: $sibver"
-            if [[ "$sibver" != "$own" ]]; then
-              echo "  MISMATCH: expected $own"
+          for f in plugin/adapter/*/version.php; do
+            v=$(field "$f" version)
+            r=$(field "$f" release)
+            echo "  $f: $v ($r)"
+            if [[ "$v" != "$own" || "$r" != "$rel" ]]; then
+              echo "  MISMATCH: expected $own ($rel)"
               rc=1
             fi
           done
-          if [[ $rc -ne 0 ]]; then
-            # Four separate repositories can only be pushed one after another, so during a rollout
-            # the siblings are legitimately still on the previous version. Failing here would make
-            # the first three pushes red every single time - the gate would be noise, not a gate.
-            # It is therefore enforced where "released together" is actually claimed: on a tag.
-            if [[ "${{ github.ref_type }}" == "tag" ]]; then
-              echo "Release gate: a tagged release requires all four plugins at one version."
-              exit 1
-            fi
-            echo "::warning::Ecosystem versions differ - expected while a rollout is in progress."
-            echo "Kein Fehler: auf einem Branch-Push wird der Gleichstand nur berichtet."
-            exit 0
-          fi
-          echo "All four plugins are in lockstep."
+          exit $rc
 
   release-artefact:
     name: Release artefact contents
@@ -220,6 +207,7 @@ jobs:
           docs/
           \.github/
           tests/load/
+          tests/playwright/
           \.gitattributes
           \.gitignore
           makefile
@@ -276,11 +264,8 @@ jobs:
           sudo locale-gen en_AU.UTF-8
           echo "NVM_DIR=$HOME/.nvm" >> $GITHUB_ENV
 
-      - name: Install Moodle and the plugin ecosystem
+      - name: Install Moodle and the plugin
         run: |
-          moodle-plugin-ci add-plugin ralferlebach/moodle-mod_sideline
-          moodle-plugin-ci add-plugin ralferlebach/moodle-mod_sideline
-          moodle-plugin-ci add-plugin ralferlebach/moodle-mod_sideline
           moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1
         env:
           DB: pgsql

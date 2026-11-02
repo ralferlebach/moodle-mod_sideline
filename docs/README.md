@@ -14,12 +14,14 @@ Werkzeuge, Pipelines und Testinfrastruktur. Fachliche Dokumentation: `DOCUMENTAT
 - `moodle-plugin-ci-dev.yml`: schnelle Rückmeldung auf dem Entwicklungszweig (Moodle 4.5 und 5.3).
 - `moodle-plugin-ci-main.yml`: volle Matrix Moodle 4.5 bis 5.3 mit PostgreSQL und MariaDB, dazu Release-Gates: Versionsgleichlauf, Release-Artefakt, Coverage-Untergrenze, veraltete Dateien und ein zusammenfassendes Gate.
 - `load-k6.yml`: HTTP-Lasttest mit k6, nur manuell (siehe `tests/load/README.md`).
+- `playwright.yml`: Browser-Journeys in Chromium, nur manuell, Moodle-Version wählbar (siehe `tests/playwright/README.md`).
 
 ## Testinfrastruktur
 - `tests/*.php`: PHPUnit (`mod_sideline_testsuite`). Die Adapter haben eigene Suites unter `adapter/*/tests`.
 - `tests/behat/`: Ende-zu-Ende-Szenarien, mit Headless-Chrome und axe für die Barrierefreiheit.
 - `js/esm/tests/` (React-Panel, ab Moodle 5.3) und `tests/js/` (AMD-Panel): Jest.
 - `tests/load/`: k6-Plan, Seed- und Prüfskript für den HTTP-Lasttest.
+- `tests/playwright/`: Browser-Journeys mit Playwright und axe, eigenes Seed-Skript.
 - `tests/coverage.php` legt den Umfang der Abdeckungsmessung fest, `tools/coverage_gate.php` erzwingt die Untergrenze.
 
 ## Was Pipelines schon rot gemacht hat
@@ -30,7 +32,9 @@ Werkzeuge, Pipelines und Testinfrastruktur. Fachliche Dokumentation: `DOCUMENTAT
 - **Server im Schritt starten, der ihn braucht.** Ein Hintergrundserver überlebt den startenden Schritt nicht zuverlässig.
 - **MariaDB-Gesundheitsprüfung mit `healthcheck.sh`.** Das Image `mariadb:11.4` enthält `mysqladmin` nicht mehr.
 - **k6 und Moodle-Sitzungen:** k6 leert Cookies je Iteration. Ohne `noCookiesReset` ist jede zweite Anfrage abgemeldet.
+- **Das Plugin nicht per `add-plugin` hinzufügen.** `moodle-plugin-ci install` übernimmt es schon; ein zweiter Klon bricht die Installation ab.
+- **Playwright und Moodle-Login:** Erst nach `networkidle` ausfüllen, sonst ersetzt Moodles JavaScript das Feld und der Login scheitert mit „invalid login token“. Benutzertouren abschalten, ihr Dialog setzt `aria-hidden` auf die Seite.
 - **`db/removed_files.txt` pflegen.** Ein Plugin-Paket löscht nie etwas. Eine entfernte Datei überlebt sonst in einem in-place aktualisierten Repository.
 
 ## Voraussetzungen
-Moodle 4.5 bis 5.3, PHP 8.1 oder neuer, Node.js für Build und Jest, k6 für den Lasttest.
+Moodle 4.5 bis 5.3, PHP 8.1 oder neuer, Node.js für Build, Jest und Playwright, k6 für den Lasttest.

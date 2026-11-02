@@ -45,6 +45,6 @@ Entwicklung
 -----------
 
 Siehe `docs/environment-setup.md` (Umgebung), `docs/README.md` (Werkzeuge und Pipelines) und `docs/TRACEABILITY.md` (Nachweise).
-Tests: `make phpunit`, `make test-amd`, Behat unter `tests/behat`, Lasttest `make load-seed k6`. Stil: `make lint-php`.
+Tests: `make phpunit`, `make test-amd`, Behat unter `tests/behat`, Lasttest `make load-seed k6`, Browser `make playwright`. Stil: `make lint-php`.
 
 Lizenz: GNU GPL v3 or later.

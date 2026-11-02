@@ -29,6 +29,7 @@
 #   make test-amd     — Jest tests of the AMD panel (Moodle 4.5 to 5.2)
 #   make load-seed    — seed a load-test course with learners; stores the exports
 #   make k6           — HTTP load test with k6 against a running site (see tests/load/README.md)
+#   make playwright   — browser journeys against a running site (see tests/playwright/README.md)
 #
 # Paths are auto-detected from the makefile's own location.
 # The plugin lives at <MOODLE_ROOT>/public/mod/sideline/ —
@@ -74,7 +75,7 @@ LOAD_USERS     ?= 50
 .PHONY: all fix check clear \
         lint-php lint-phpdoc lint-js lint-mustache lint-cpd lint-md \
         lint-react test-react react build \
-        fix-lint-php fix-phpdoc amd phpunit test-amd load-seed k6
+        fix-lint-php fix-phpdoc amd phpunit test-amd load-seed k6 playwright
 
 all: clear fix check
 	@echo ""
@@ -236,3 +237,14 @@ k6:
 		-e PASSWORD='$(PASSWORD)' -e PAGE_CMIDS='$(PAGE_CMIDS)' -e VUS='$(VUS)' -e DURATION='$(DURATION)' \
 		$(LOAD_DIR)/sideline-commentary.js
 	$(PHP) $(PLUGIN_DIR)/tests/load/verify_load.php --cmid=$(CMID) --prefix=$(USER_PREFIX)
+
+# --- Browser journeys (Playwright), see tests/playwright/README.md --------------------
+# Needs an installed development site served on its wwwroot. Disposable sites only.
+PW_DIR         ?= $(PLUGIN_DIR)/tests/playwright
+
+playwright:
+	@echo ""
+	@echo "=== Playwright browser journeys ==="
+	@$(PHP) $(PW_DIR)/seed.php | grep '^export ' | sed 's/^export //' > $(PW_DIR)/.pw-env
+	@cd $(PW_DIR) && $(NPM) ci --silent && $(NPX) playwright install chromium \
+		&& set -a && . ./.pw-env && set +a && $(NPX) playwright test

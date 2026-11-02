@@ -52,6 +52,9 @@ if (empty($CFG->sideline_allow_load_seed) && !preg_match('#^https?://(127\.0\.0\
 }
 
 \core\session\manager::set_user(get_admin());
+// No mail from enrolments or account creation; such notices would also end up in the printed exports.
+$CFG->noemailever = true;
+ob_start();
 set_config('enablecompletion', 1);
 $generator = testing_util::get_data_generator();
 $password = 'Load!pass1';
@@ -78,6 +81,7 @@ for ($i = 0; $i < (int) $options['users']; $i++) {
     }
 }
 
+ob_end_clean();
 $cmids = array_map(static fn($p) => (int) $p->cmid, $pages);
 echo "export BASE_URL='" . $CFG->wwwroot . "'\n";
 echo "export COURSEID='" . $course->id . "'\n";

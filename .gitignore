@@ -10,7 +10,7 @@ desktop.ini
 *.iml
 *.iws
 
-# Node (only if browser/load harnesses are added later)
+# Node (browser harness in tests/playwright)
 node_modules/
 npm-debug.log*
 
@@ -45,3 +45,8 @@ behatfaildumps/
 tests/load/.load-env
 tests/load/k6
 tests/load/*.tgz
+
+# Playwright run artefacts
+tests/playwright/test-results/
+tests/playwright/playwright-report/
+tests/playwright/.pw-env

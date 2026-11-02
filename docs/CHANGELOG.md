@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.1 (beta)
+
+CI repariert, keine Änderung am Verhalten des Plugins:
+
+* **Installation in der CI:** Die Workflows fügten das Plugin zusätzlich mit `moodle-plugin-ci add-plugin` hinzu. Das Plugin lag damit doppelt im Baum, und `install` brach ab. Die Adapter `slcmod_assign` und `slcmod_quiz` sind Subplugins im Plugin selbst; es gibt keine externen Abhängigkeiten.
+* **Versionsgleichlauf:** Der Job klonte vier Geschwister-Repositories (`auth_`, `enrol_`, `tool_sideline` …), die es nicht gibt (Exit 128). Er prüft jetzt, dass `mod_sideline` und seine Adapter dieselbe Version und dasselbe Release tragen.
+* **Browser-Journeys (Playwright):** neu für dieses Plugin geschrieben (`tests/playwright/`): Einwilligung und Widerruf, Interview per Tastatur mit Wirkung und Löschen, reduzierte Bewegung und Tippanimation, keine Sicht für Lehrende, axe-Prüfung. Läuft mit React-Panel (5.3) und AMD-Panel (4.5 bis 5.2). Workflow `playwright.yml` nur manuell, ohne Zeitplan; `make playwright` lokal.
+* `seed_load.php` unterdrückt E-Mails beim Anlegen der Personen; deren Fehlermeldungen landeten sonst in den ausgegebenen Exporten.
+* `tests/playwright/` ist vom Release-Artefakt ausgeschlossen und steht im Release-Gate auf der Verbotsliste.
+
 ## 0.3.0 (beta)
 
 Offene Punkte aus Lasten- und Pflichtenheft nachgezogen:
@@ -34,7 +44,7 @@ Offene Punkte aus Lasten- und Pflichtenheft nachgezogen:
   * Eigene Sprachanpassungen (`tool_customlang`) machen den Cache ungültig.
   * Der Lasttest prüfte das Race nicht wirklich, und die Zustandswechsel waren oft keine. Beides ist behoben; der Seed-Schutz gilt jetzt auch bei Debugging.
 * **Aufgeräumt:**
-  * Die Template-Reste `tests/playwright/`, `playwright.yml`, `load-jmeter.yml` und die alten Lastskripte sind entfernt. Sie verwiesen auf fremde Plugins und wären in der CI gescheitert. Die Pfade stehen in `db/removed_files.txt`.
+  * Die Template-Reste `tests/playwright/`, `playwright.yml` (in 0.3.1 neu geschrieben), `load-jmeter.yml` und die alten Lastskripte sind entfernt. Sie verwiesen auf fremde Plugins und wären in der CI gescheitert. Die Pfade stehen in `db/removed_files.txt`.
   * `seed_load.php` und `tools/bench.php` laufen auch auf Moodle 4.5.
 
 ## 0.2.1 (beta)

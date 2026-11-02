@@ -7,8 +7,8 @@
 # plugin: no grunt / mustache steps. Reduced matrix spanning Moodle 4.5 to 5.3.
 # The full sequential matrix runs on main via moodle-plugin-ci-main.yml.
 #
-# Sideline Learning Coach has no external plugin dependencies; add-plugin only pulls the
-# sibling plugins required by this component's hard dependency graph.
+# mod_sideline has no external plugin dependencies: the adapters slcmod_assign and slcmod_quiz are
+# subplugins shipped inside it, so no add-plugin step is needed (adding the plugin itself fails).
 ##############################################################################
 
 name: Moodle Plugin CI Dev
@@ -161,9 +161,6 @@ jobs:
           sudo locale-gen en_AU.UTF-8
       - name: Install Moodle, dependencies and plugin (no test init)
         run: |
-          moodle-plugin-ci add-plugin ralferlebach/moodle-mod_sideline --branch development
-          moodle-plugin-ci add-plugin ralferlebach/moodle-mod_sideline --branch development
-          moodle-plugin-ci add-plugin ralferlebach/moodle-mod_sideline --branch development
           moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1 --no-init
         env:
           DB: pgsql
@@ -243,9 +240,6 @@ jobs:
           sudo locale-gen en_AU.UTF-8
       - name: Install Moodle, dependencies and plugin
         run: |
-          moodle-plugin-ci add-plugin ralferlebach/moodle-mod_sideline --branch development
-          moodle-plugin-ci add-plugin ralferlebach/moodle-mod_sideline --branch development
-          moodle-plugin-ci add-plugin ralferlebach/moodle-mod_sideline --branch development
           moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1
         env:
           DB: ${{ matrix.database }}
@@ -305,9 +299,6 @@ jobs:
           sudo locale-gen en_AU.UTF-8
       - name: Install Moodle, dependencies and plugin
         run: |
-          moodle-plugin-ci add-plugin ralferlebach/moodle-mod_sideline --branch development
-          moodle-plugin-ci add-plugin ralferlebach/moodle-mod_sideline --branch development
-          moodle-plugin-ci add-plugin ralferlebach/moodle-mod_sideline --branch development
           moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1
         env:
           DB: mariadb

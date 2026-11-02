@@ -13,6 +13,7 @@ Läufe (0.3.0, 29.10.2026):
 - Behat 13/13 Szenarien mit 166 Schritten auf allen fünf Versionen (5 mit Headless-Chrome, 2 davon mit axe-WCAG-Prüfung).
 - Jest: 20/20 React-Panel, 17/17 AMD-Panel.
 - k6-Lasttest: 2549 Anfragen ohne Fehler.
+- Playwright (0.3.1, 02.11.2026): 4/4 Browser-Journeys auf Moodle 5.3 und 4.5, mit axe.
 - Code-Prüfungen:
   - phpcs Moodle-Standard: 0 Fehler, 0 Warnungen;
   - PHPCompatibility 8.1: ohne Befund;
@@ -32,11 +33,11 @@ Läufe (0.3.0, 29.10.2026):
 | L-08 KI und Kursverbünde separat schaltbar | ✔ | Einstellungen `aienabled`, `crosscourse` | `commentary_service_test`, `scope_test` |
 | L-09 Subplugins `slcmod_*` | ✔ | `db/subplugins.json`, `local\adapter\{base,registry,facts}`, `slcmod_assign`, `slcmod_quiz` | `adapter_registry_test`, Adapter-Suites |
 | L-10 Cache bis Zustandsänderung, Zeitabläufe | ✔ | Fingerprint über Empfehlungen, `next_transition`, Observer | `commentary_service_test`, `cache_concurrency_test` |
-| L-11 Tippanimation, reduzierte Bewegung | ✔ | `useTypewriter.ts`, `prefers-reduced-motion` | Jest „respects reduced motion“ |
+| L-11 Tippanimation, reduzierte Bewegung | ✔ | `useTypewriter.ts`, `prefers-reduced-motion` | Jest „respects reduced motion“, Playwright „with reduced motion …“ |
 | L-12 Selektiver Export/Import ohne Personendaten | ✔ | `config_transfer`, `transfer.php` | `custom_rules_test` (Rundreise, Konflikte, Migration), Behat |
 | L-13 Pseudonymisierung, lokale Auflösung | ✔ | `pseudonymizer`, Tokens für Personen, Gruppen, Aktivitäten, Daten | `ai_integration_test` (HTTP-Ebene), `group_mode_test` |
 | L-14 Ohne KI / bei Ausfall | ✔ | Fallback-Kette | `ai_integration_test` (HTTP 500), `commentary_service_test` |
-| L-15 Vollständige automatisierte Abdeckung | ✔ / ◐ | 305 PHPUnit (Line Coverage 89,4 %, CI-Untergrenze 80 %), Property-Test der Regeln (2000 Fälle), 13 Behat, 37 Jest, k6-Lasttest | Lücke: GitHub-CI-Lauf steht aus |
+| L-15 Vollständige automatisierte Abdeckung | ✔ / ◐ | 305 PHPUnit (Line Coverage 89,4 %, CI-Untergrenze 80 %), Property-Test der Regeln (2000 Fälle), 13 Behat, 37 Jest, 4 Playwright, k6-Lasttest | Lücke: GitHub-CI-Lauf steht aus |
 | L-16 Vertraulichkeit | ✔ | keine Lehrenden-Endpunkte, `manage` ohne Leserechte | `external_test`, `dialog_test`, Behat |
 | L-17 Admin-Debug-Export | ✔ | `debug_exporter`, `debug.php`, Audit-Log | `debug_export_test`, Behat |
 | L-18 Persona-Freigabe | ✔ | `persona_manager`, `personas.php`, Teilmenge, Lernendenwahl | `persona_test`, Behat |
@@ -82,7 +83,7 @@ Läufe (0.3.0, 29.10.2026):
 | P-35 Tests je Zustand, Regel, Persona, Dialogtyp, Subplugin, Recht | ✔ / ◐ | siehe Testorte; Property-Test der Regeln | Lücke wie L-15 |
 | P-36 Negativtests | ✔ | | `access_security_test`, `state_model_test`, `rule_evaluator_test` |
 | P-37 Matrix Moodle, PostgreSQL/MariaDB, CI | ◐ | lokal Moodle 4.5–5.3 auf PG 17, MariaDB 11.4 mit 4.5 und 5.3, Chrome 153; PHP 8.1 (4.5), 8.2 (5.0) und 8.3 zur Laufzeit | Lücke: GitHub-CI-Lauf steht aus |
-| P-38 Barrierefreiheit | ✔ | native Controls, Labels, Fokus, aria-live, reduzierte Bewegung | Jest (axe), Behat mit axe (WCAG 1.3.1, 1.4.1, 4.1.2) |
+| P-38 Barrierefreiheit | ✔ | native Controls, Labels, Fokus, aria-live, reduzierte Bewegung | Jest (axe), Behat mit axe (WCAG 1.3.1, 1.4.1, 4.1.2), Playwright mit axe und Tastaturbedienung |
 | P-39 Performance-Budgets | ✔ | Budgets siehe unten, `tools/bench.php`, k6-Lasttest über HTTP | Messung unten, `cache_concurrency_test`, `tests/load/README.md` |
 | P-40 Keine Lehrenden-Einsicht | ✔ | | `external_test` |
 | P-41 Debug-Export | ✔ | | `debug_export_test` |
