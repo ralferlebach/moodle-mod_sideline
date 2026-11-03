@@ -58,6 +58,13 @@ class provider implements
         'sideline_debuglog' => ['adminid', 'purpose', 'timefrom', 'timeto', 'timecreated'],
     ];
 
+    /** @var array Configuration tables with the user who authorised or wrote a row. */
+    private const AUTHOR_TABLES = [
+        'sideline_source' => ['usermodified'],
+        'sideline_sourcecat' => ['usermodified'],
+        'sideline_persona' => ['usermodified', 'approvedby'],
+    ];
+
     /**
      * Describe the data stored by this plugin.
      *
@@ -67,6 +74,14 @@ class provider implements
     public static function get_metadata(collection $collection): collection {
         foreach (self::TABLES as $table => $fields) {
             $described = ['userid' => "privacy:metadata:{$table}:userid"];
+            foreach ($fields as $field) {
+                $described[$field] = "privacy:metadata:{$table}:{$field}";
+            }
+            $collection->add_database_table($table, $described, "privacy:metadata:{$table}");
+        }
+        // Configuration that records who authorised or wrote it.
+        foreach (self::AUTHOR_TABLES as $table => $fields) {
+            $described = [];
             foreach ($fields as $field) {
                 $described[$field] = "privacy:metadata:{$table}:{$field}";
             }
@@ -94,12 +109,20 @@ class provider implements
         }
         $exists[] = "EXISTS (SELECT 1 FROM {sideline_debuglog} d WHERE d.sidelineid = cm.instance AND d.adminid = :admin)";
         $params['admin'] = $userid;
+        $exists[] = "EXISTS (SELECT 1 FROM {sideline_source} s WHERE s.sidelineid = cm.instance AND s.usermodified = :src)";
+        $params['src'] = $userid;
+        $exists[] = "EXISTS (SELECT 1 FROM {sideline_sourcecat} c WHERE c.sidelineid = cm.instance AND c.usermodified = :cat)";
+        $params['cat'] = $userid;
         $sql = "SELECT DISTINCT ctx.id
                   FROM {context} ctx
                   JOIN {course_modules} cm ON cm.id = ctx.instanceid AND ctx.contextlevel = :contextlevel
                   JOIN {modules} m ON m.id = cm.module AND m.name = 'sideline'
                  WHERE " . implode(' OR ', $exists);
         $contextlist->add_from_sql($sql, $params);
+        // Site personas belong to the system context.
+        if (self::persona_rows($userid)) {
+            $contextlist->add_system_context();
+        }
         return $contextlist;
     }
 
@@ -110,6 +133,12 @@ class provider implements
      */
     public static function get_users_in_context(userlist $userlist): void {
         $context = $userlist->get_context();
+        if ($context instanceof \context_system) {
+            foreach (['usermodified', 'approvedby'] as $field) {
+                $userlist->add_from_sql($field, "SELECT $field FROM {sideline_persona} WHERE $field > 0", []);
+            }
+            return;
+        }
         if (!$context instanceof \context_module) {
             return;
         }
@@ -127,6 +156,13 @@ class provider implements
             "SELECT t.adminid $from JOIN {sideline_debuglog} t ON t.sidelineid = cm.instance WHERE cm.id = :cmid",
             $params
         );
+        foreach (['sideline_source', 'sideline_sourcecat'] as $table) {
+            $userlist->add_from_sql(
+                'usermodified',
+                "SELECT t.usermodified $from JOIN {{$table}} t ON t.sidelineid = cm.instance WHERE cm.id = :cmid",
+                $params
+            );
+        }
     }
 
     /**
@@ -139,6 +175,21 @@ class provider implements
 
         $user = $contextlist->get_user();
         foreach ($contextlist->get_contexts() as $context) {
+            if ($context instanceof \context_system) {
+                $rows = self::persona_rows((int) $user->id);
+                if ($rows) {
+                    writer::with_context($context)->export_data(
+                        [get_string('privacy:path:sideline_persona', 'mod_sideline')],
+                        (object) ['items' => array_map(static fn($row) => [
+                            'persona' => $row->shortname,
+                            'written' => (int) $row->usermodified === (int) $user->id,
+                            'approved' => (int) $row->approvedby === (int) $user->id,
+                            'time' => transform::datetime($row->timemodified),
+                        ], array_values($rows))]
+                    );
+                }
+                continue;
+            }
             $cm = self::cm($context);
             if (!$cm) {
                 continue;
@@ -154,6 +205,26 @@ class provider implements
                         (object) ['items' => array_map(static fn($row) => self::export_row($row, $fields), array_values($rows))]
                     );
                 }
+            }
+            $authorised = array_merge(
+                array_map(static fn($id) => ['course' => (int) $id], $DB->get_fieldset_select(
+                    'sideline_source',
+                    'courseid',
+                    'sidelineid = ? AND usermodified = ?',
+                    [$cm->instance, $user->id]
+                )),
+                array_map(static fn($id) => ['category' => (int) $id], $DB->get_fieldset_select(
+                    'sideline_sourcecat',
+                    'categoryid',
+                    'sidelineid = ? AND usermodified = ?',
+                    [$cm->instance, $user->id]
+                ))
+            );
+            if ($authorised) {
+                writer::with_context($context)->export_data(
+                    [get_string('privacy:path:sideline_source', 'mod_sideline')],
+                    (object) ['items' => $authorised]
+                );
             }
             $actions = $DB->get_records('sideline_debuglog', ['sidelineid' => $cm->instance, 'adminid' => $user->id], 'id ASC');
             if ($actions) {
@@ -176,12 +247,21 @@ class provider implements
     public static function delete_data_for_all_users_in_context(\context $context): void {
         global $DB;
 
+        if ($context instanceof \context_system) {
+            $DB->set_field('sideline_persona', 'usermodified', 0);
+            $DB->set_field('sideline_persona', 'approvedby', 0);
+            return;
+        }
         $cm = self::cm($context);
         if (!$cm) {
             return;
         }
         foreach (array_keys(self::TABLES) as $table) {
             $DB->delete_records($table, ['sidelineid' => $cm->instance]);
+        }
+        // Sources without a teacher on record are no longer evaluated until a teacher confirms them again.
+        foreach (['sideline_source', 'sideline_sourcecat'] as $table) {
+            $DB->set_field($table, 'usermodified', 0, ['sidelineid' => $cm->instance]);
         }
     }
 
@@ -193,6 +273,10 @@ class provider implements
     public static function delete_data_for_user(approved_contextlist $contextlist): void {
         $userid = (int) $contextlist->get_user()->id;
         foreach ($contextlist->get_contexts() as $context) {
+            if ($context instanceof \context_system) {
+                self::forget_persona_authors([$userid]);
+                continue;
+            }
             $cm = self::cm($context);
             if ($cm) {
                 self::delete_users((int) $cm->instance, [$userid]);
@@ -206,6 +290,10 @@ class provider implements
      * @param approved_userlist $userlist Approved users.
      */
     public static function delete_data_for_users(approved_userlist $userlist): void {
+        if ($userlist->get_context() instanceof \context_system) {
+            self::forget_persona_authors(array_map('intval', $userlist->get_userids()));
+            return;
+        }
         $cm = self::cm($userlist->get_context());
         $userids = array_map('intval', $userlist->get_userids());
         if ($cm && $userids) {
@@ -226,6 +314,17 @@ class provider implements
         foreach (array_keys(self::TABLES) as $table) {
             $DB->delete_records_select($table, "sidelineid = :sid AND userid $insql", ['sid' => $sidelineid] + $inparams);
         }
+        // A source counts only while the teacher on record may manage activities there: without one it waits for
+        // a confirmation by another teacher.
+        foreach (['sideline_source', 'sideline_sourcecat'] as $table) {
+            $DB->set_field_select(
+                $table,
+                'usermodified',
+                0,
+                "sidelineid = :sid AND usermodified $insql",
+                ['sid' => $sidelineid] + $inparams
+            );
+        }
         // The audit log keeps the fact that an export happened, not who did it.
         $DB->set_field_select(
             'sideline_debuglog',
@@ -235,7 +334,7 @@ class provider implements
             ['sid' => $sidelineid] + $inparams,
         );
         // Other learners' commentary may name these users or count them in a group statement, whatever the
-        // mode is now and even when their publication rows are already gone (issue #14). Cached texts are
+        // mode is now and even when their publication rows are already gone. Cached texts are
         // derived data and are rebuilt on the next request, so every cached text of the instance is dropped.
         $DB->delete_records('sideline_cache', ['sidelineid' => $sidelineid]);
     }
@@ -260,6 +359,33 @@ class provider implements
             $out[$field] = $value;
         }
         return $out;
+    }
+
+    /**
+     * Site personas a user wrote or approved.
+     *
+     * @param int $userid User id.
+     * @return \stdClass[]
+     */
+    private static function persona_rows(int $userid): array {
+        global $DB;
+        return $DB->get_records_select('sideline_persona', 'usermodified = :a OR approvedby = :b', ['a' => $userid,
+            'b' => $userid], 'id ASC');
+    }
+
+    /**
+     * Remove users as authors and approvers of site personas. The personas stay: they are configuration.
+     *
+     * @param int[] $userids Users.
+     */
+    private static function forget_persona_authors(array $userids): void {
+        global $DB;
+        if (!$userids) {
+            return;
+        }
+        [$insql, $params] = $DB->get_in_or_equal($userids);
+        $DB->set_field_select('sideline_persona', 'usermodified', 0, "usermodified $insql", $params);
+        $DB->set_field_select('sideline_persona', 'approvedby', 0, "approvedby $insql", $params);
     }
 
     /**

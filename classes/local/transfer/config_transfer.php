@@ -37,11 +37,13 @@ use mod_sideline\local\rules\rule_store;
  * Import is two-step: preview() reports what would change, including conflicts and references
  * that could not be mapped; apply() performs the selected parts. Older formats are migrated first.
  *
- * The import is a permission and consent boundary (issue #18). It enforces the same rights as the
+ * The import is a permission and consent boundary. It enforces the same rights as the
  * interactive forms: a course or course branch is only added if the importing teacher may manage
  * activities there, a group only if it exists in the target course, a persona definition only for
- * site administrators and only as a draft that needs approval. A malformed file is rejected as a
- * whole. Group sharing is never switched on with an implicit "all groups": unless the admitted
+ * site administrators and only as a draft that needs approval. A malformed file, or one that
+ * exceeds a limit (size, nesting, number of entries per part, length of a text, the limits of an
+ * instance), is rejected as a whole: nothing of it is imported and nothing is cut off silently.
+ * Group sharing is never switched on with an implicit "all groups": unless the admitted
  * groups are transferred and resolved, or the target already restricts them, sharing stays off.
  * Every change runs through the same version rules as the form, so widening consent or sharing
  * asks learners again.
@@ -51,6 +53,26 @@ use mod_sideline\local\rules\rule_store;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class config_transfer {
+    /** @var int Largest file that is read at all (the upload form has the same limit). */
+    public const MAX_BYTES = 512 * 1024;
+
+    /** @var int Deepest nesting of the JSON; an export of this plugin needs less than half of it. */
+    public const MAX_DEPTH = 16;
+
+    /** @var int Longest text of a single value. */
+    public const MAX_STRING = 10000;
+
+    /** @var int[] Most entries per part of the file. */
+    public const LIMITS = [
+        'scope.activities' => 1000,
+        'rules' => rule_schema::MAX_RULES,
+        'questions' => 100,
+        'personas' => 50,
+        'sources.courses' => instance_config::MAX_SOURCES,
+        'sources.categories' => instance_config::MAX_SOURCE_CATEGORIES,
+        'groups.items' => 1000,
+    ];
+
     /** @var string Format identifier. */
     public const FORMAT = 'mod_sideline_config';
     /** @var int Current format version. */
@@ -153,7 +175,39 @@ class config_transfer {
     }
 
     /**
-     * Bring older formats to the current one and reject malformed files as a whole (issue #18).
+     * Read an uploaded file: size and nesting limits, valid JSON, then migrate().
+     *
+     * @param string $content File content.
+     * @return array Migrated data.
+     */
+    public static function decode(string $content): array {
+        if (strlen($content) > self::MAX_BYTES) {
+            self::limit('file', display_size(self::MAX_BYTES));
+        }
+        try {
+            $data = json_decode($content, true, self::MAX_DEPTH, JSON_THROW_ON_ERROR);
+        } catch (\JsonException $e) {
+            if ($e->getCode() === JSON_ERROR_DEPTH) {
+                self::limit('depth', (string) self::MAX_DEPTH);
+            }
+            throw new \moodle_exception('err_transfer_json', 'mod_sideline');
+        }
+        return self::migrate($data);
+    }
+
+    /**
+     * Reject a file that exceeds a limit.
+     *
+     * @param string $part Part of the file.
+     * @param string $limit The limit, for display.
+     * @return never
+     */
+    private static function limit(string $part, string $limit): never {
+        throw new \moodle_exception('err_transfer_limit', 'mod_sideline', '', (object) ['part' => s($part), 'limit' => s($limit)]);
+    }
+
+    /**
+     * Bring older formats to the current one and reject malformed files as a whole.
      *
      * Version 1 had settings and scope only, version 2 added rules and questions.
      *
@@ -238,6 +292,17 @@ class config_transfer {
                 $fail('items');
             }
         }
+        $counts = $lists + ['rules' => $data['rules'], 'questions' => $data['questions'], 'personas' => $data['personas']];
+        foreach (self::LIMITS as $where => $max) {
+            if (count($counts[$where]) > $max) {
+                self::limit($where, (string) $max);
+            }
+        }
+        array_walk_recursive($data, static function ($value, $key): void {
+            if ((is_string($value) && mb_strlen($value) > self::MAX_STRING) || (is_string($key) && mb_strlen($key) > 100)) {
+                self::limit('text', (string) self::MAX_STRING);
+            }
+        });
     }
 
     /**
@@ -297,7 +362,11 @@ class config_transfer {
             }
         }
         if (in_array('sources', $parts, true)) {
-            [$plan['sources'], $sourcechanges, $sourcewarnings] = self::preview_sources($data['sources'], $userid);
+            [$plan['sources'], $sourcechanges, $sourcewarnings] = self::preview_sources(
+                (int) $sideline->id,
+                $data['sources'],
+                $userid
+            );
             $changes = array_merge($changes, $sourcechanges);
             $warnings = array_merge($warnings, $sourcewarnings);
         }
@@ -312,7 +381,7 @@ class config_transfer {
             $warnings = array_merge($warnings, $personawarnings);
         }
 
-        // Sharing is never switched on for an implicit "all groups" (issue #18): it needs resolved groups from
+        // Sharing is never switched on for an implicit "all groups": it needs resolved groups from
         // this import or an existing restriction of the target.
         $mode = (string) ($plan['settings']['sharingmode'] ?? $sideline->sharingmode);
         $switchingon = $sideline->sharingmode === instance_config::GROUP_INDIVIDUAL && $mode !== instance_config::GROUP_INDIVIDUAL;
@@ -390,11 +459,12 @@ class config_transfer {
     /**
      * Preview of the course union: only courses and branches the importing teacher may manage.
      *
+     * @param int $sidelineid Target instance.
      * @param array $sources courses and categories of the file.
      * @param int $userid Importing user.
      * @return array [plan entry, changes, warnings]
      */
-    private static function preview_sources(array $sources, int $userid): array {
+    private static function preview_sources(int $sidelineid, array $sources, int $userid): array {
         global $DB;
 
         $changes = [];
@@ -432,8 +502,20 @@ class config_transfer {
         if ($courseids || $categoryids) {
             $changes[] = get_string('transfer_change_sources', 'mod_sideline', count($courseids) + count($categoryids));
         }
-        return [['courseids' => array_values(array_unique($courseids)), 'categoryids' => array_values(array_unique($categoryids))],
-            $changes, $warnings];
+        $courseids = array_values(array_unique($courseids));
+        $categoryids = array_values(array_unique($categoryids));
+        // The import adds to the existing union: together they must stay within the limits of an instance,
+        // otherwise saving would drop sources without saying so.
+        $existing = array_map('intval', $DB->get_fieldset_select('sideline_source', 'courseid', 'sidelineid = ?', [$sidelineid]));
+        if (count(array_unique(array_merge($existing, $courseids))) > instance_config::MAX_SOURCES) {
+            self::limit('sources.courses', (string) instance_config::MAX_SOURCES);
+        }
+        $existing = $DB->get_fieldset_select('sideline_sourcecat', 'categoryid', 'sidelineid = ?', [$sidelineid]);
+        $existing = array_map('intval', $existing);
+        if (count(array_unique(array_merge($existing, $categoryids))) > instance_config::MAX_SOURCE_CATEGORIES) {
+            self::limit('sources.categories', (string) instance_config::MAX_SOURCE_CATEGORIES);
+        }
+        return [['courseids' => $courseids, 'categoryids' => $categoryids], $changes, $warnings];
     }
 
     /**
@@ -586,7 +668,7 @@ class config_transfer {
                 'cooldown' => (int) ($q['cooldown'] ?? 0), 'enabled' => (int) ($q['enabled'] ?? 1),
             ]);
         }
-        // Any change of mode or groups is compared with the circle learners decided for (issue #9).
+        // Any change of mode or groups is compared with the circle learners decided for.
         instance_config::refresh_group_circle((int) $sideline->id);
         commentary_cache::invalidate_instance((int) $sideline->id);
         $transaction->allow_commit();
@@ -616,7 +698,7 @@ class config_transfer {
     /**
      * Find an activity of the target course by module type and name, and section when several match.
      *
-     * Never guesses (issue #10): several activities of the same type and name in the same section are a
+     * Never guesses: several activities of the same type and name in the same section are a
      * conflict that the teacher resolves by renaming, the reference then stays unmapped.
      *
      * @param \course_modinfo $modinfo Target course.

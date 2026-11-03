@@ -7,7 +7,7 @@
 # Every cell runs the plugin and adapter PHPUnit suites (skipped tests fail the run), Behat and
 # the real concurrency races of tools/race. grunt lints amd/src and checks that the committed AMD
 # build is current. The frontend job runs ESLint, the strict TypeScript check, the ESM build and
-# Jest with axe for both panels on Moodle 5.3; the upgrade job upgrades from the previous release.
+# Jest with axe for both panels on Moodle 5.3; the upgrade job upgrades from the previous release and from 0.3.2.
 # There is no release gate and no version lockstep (issue #2): "CI complete" only aggregates the
 # results of the functional jobs. The fast parallel pipeline lives in moodle-plugin-ci-dev.yml.
 ##############################################################################
@@ -363,7 +363,7 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p ci-logs
-          SRC=$GITHUB_WORKSPACE/plugin MPCI=$RUNNER_TEMP/mpci plugin/tools/ci-local/js-checks.sh $GITHUB_WORKSPACE/moodle 2>&1 | tee ci-logs/frontend.log
+          SRC=$GITHUB_WORKSPACE/plugin MPCI=$RUNNER_TEMP/mpci bash plugin/tools/ci-local/js-checks.sh $GITHUB_WORKSPACE/moodle 2>&1 | tee ci-logs/frontend.log
       - name: Upload frontend log
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
@@ -374,7 +374,7 @@ jobs:
           if-no-files-found: ignore
 
   upgrade:
-    name: "Upgrade from the previous release / ${{ matrix.moodle }} / ${{ matrix.database }}"
+    name: "Upgrade from ${{ matrix.from }} / ${{ matrix.moodle }} / ${{ matrix.database }}"
     runs-on: ubuntu-22.04
     services:
       postgres:
@@ -396,26 +396,36 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # "previous": the last commit with a different release string. "0.3.2": the last release before
+        # the schema changes of 0.4.0, so that every upgrade step runs on real data at least once.
         include:
-          - { moodle: MOODLE_405_STABLE, php: '8.3', database: pgsql }
-          - { moodle: MOODLE_503_STABLE, php: '8.3', database: mariadb }
+          - { from: previous, moodle: MOODLE_405_STABLE, php: '8.3', database: pgsql }
+          - { from: previous, moodle: MOODLE_503_STABLE, php: '8.3', database: mariadb }
+          - { from: '0.3.2', moodle: MOODLE_405_STABLE, php: '8.3', database: pgsql }
+          - { from: '0.3.2', moodle: MOODLE_503_STABLE, php: '8.3', database: mariadb }
     steps:
       - name: Check out repository code with history
         uses: actions/checkout@v4
         with:
           path: current
           fetch-depth: 0
-      - name: The previous release (last commit with a different release string)
+      - name: The release to upgrade from
+        env:
+          FROM: ${{ matrix.from }}
         run: |
           cd current
-          field() { git show "$1:version.php" 2>/dev/null | grep -oE "\\\$plugin->release *= *'[^']+'" | grep -oE "'[^']+'"; }
+          field() { git show "$1:version.php" 2>/dev/null | grep -oE "\\\$plugin->release *= *'[^']+'" | grep -oE "[^']+'$" | tr -d "'"; }
           now=$(field HEAD)
           prev=""
           for c in $(git log --format=%H -- version.php); do
-            if [[ "$(field $c)" != "$now" ]]; then prev=$c; break; fi
+            release=$(field "$c")
+            if [[ "$FROM" == "previous" && "$release" != "$now" ]] || [[ "$release" == "$FROM" ]]; then
+              prev=$c
+              break
+            fi
           done
-          if [[ -z "$prev" ]]; then echo "No previous release in the history."; exit 1; fi
-          echo "Upgrading from $(field $prev) ($prev) to $now"
+          if [[ -z "$prev" ]]; then echo "Release $FROM not found in the history."; exit 1; fi
+          echo "Upgrading from $(field "$prev") ($prev) to $now"
           git worktree add ../previous "$prev"
       - name: Setup PHP ${{ matrix.php }}
         uses: shivammathur/setup-php@v2
@@ -439,22 +449,24 @@ jobs:
           set -o pipefail
           root=moodle; [[ -d moodle/public ]] && root=moodle/public
           php moodle/admin/cli/install_database.php --agree-license --adminpass=Admin1! --adminemail=admin@example.com --fullname=CI --shortname=CI
-          # Data of the previous release, written with its own code (the seed script is in the current code).
+          # Data of the old release, written with its own code (the seed script comes from the current code).
           cp current/tools/ci/upgrade_seed.php "$root/mod/sideline/upgrade_seed.php"
-          php "$root/mod/sideline/upgrade_seed.php"
+          php "$root/mod/sideline/upgrade_seed.php" 2>&1 | tee upgrade-seed.log
           # The full code base replaces the old one, as an administrator does it.
           rm -rf "$root/mod/sideline"
           rsync -a --exclude=.git current/ "$root/mod/sideline/"
           php moodle/admin/cli/upgrade.php --non-interactive 2>&1 | tee upgrade.log
-          php moodle/admin/cli/check_database_schema.php
+          php moodle/admin/cli/check_database_schema.php 2>&1 | tee upgrade-schema.log
           php "$root/mod/sideline/tools/ci/upgrade_verify.php" 2>&1 | tee upgrade-verify.log
       - name: Upload upgrade logs
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
-          name: upgrade-${{ matrix.moodle }}-${{ matrix.database }}
+          name: upgrade-${{ matrix.from }}-${{ matrix.moodle }}-${{ matrix.database }}
           path: |
+            upgrade-seed.log
             upgrade.log
+            upgrade-schema.log
             upgrade-verify.log
           retention-days: 7
           if-no-files-found: ignore

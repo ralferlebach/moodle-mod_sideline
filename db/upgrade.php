@@ -118,8 +118,8 @@ function xmldb_sideline_upgrade($oldversion) {
         upgrade_mod_savepoint(true, 2026102802, 'sideline');
     }
 
-    // 0.3.x to 0.4.0: open AI reservations (issue #8), configurable group event types (issue #6),
-    // course sources without a verifiable teacher (issue #5).
+    // 0.3.x to 0.4.0: open AI reservations, configurable group event types,
+    // course sources without a verifiable teacher.
     if ($oldversion < 2026110300) {
         $table = new xmldb_table('sideline_aiusage');
         $field = new xmldb_field('timecompleted', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0', 'timecreated');
@@ -137,11 +137,11 @@ function xmldb_sideline_upgrade($oldversion) {
         if (!$dbman->field_exists($table, $field)) {
             $dbman->add_field($table, $field);
         }
-        // Anonymous aggregates of two people are no longer allowed (issue #12): raising the minimum
+        // Anonymous aggregates of two people are no longer allowed: raising the minimum
         // narrows sharing, so no new decision of the learners is needed.
         $DB->set_field_select('sideline', 'groupminsize', 3, 'groupminsize < 3');
 
-        // Sources saved before 0.3.0 carry no teacher. They no longer count (issue #5) until a teacher
+        // Sources saved before 0.3.0 carry no teacher. They no longer count until a teacher
         // who may manage activities there saves the settings again. Record which instances are affected.
         mod_sideline_upgrade_report_legacy_sources();
         upgrade_mod_savepoint(true, 2026110300, 'sideline');
@@ -151,7 +151,7 @@ function xmldb_sideline_upgrade($oldversion) {
 }
 
 /**
- * Report course sources and course branches without a verifiable teacher (issue #5).
+ * Report course sources and course branches without a verifiable teacher.
  *
  * They are kept, so that a teacher can confirm them by saving the settings, but scope_resolver
  * ignores them from 0.4.0 on. The affected instances get a new configuration version (their cached

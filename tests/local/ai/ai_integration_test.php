@@ -221,14 +221,28 @@ final class ai_integration_test extends \advanced_testcase {
         $this->assertStringContainsString('[anonmod', $stored);
         $this->assertSame([2, 2], array_map('intval', $DB->get_fieldset_sql('SELECT tokens FROM {sideline_aiusage} ORDER BY id')));
 
-        // Core's own privacy deletion blanks prompt and response of the learner's actions.
-        $contextlist = new \core_privacy\local\request\approved_contextlist(
-            $this->student,
-            'core_ai',
-            [\context_module::instance($this->instance->cmid)->id]
+        // Registered in the learner's user context, never in the course or the activity: the AI usage report of a
+        // course would otherwise tell teachers who uses the coach.
+        $usercontext = \context_user::instance($this->student->id);
+        $this->assertSame([(int) $usercontext->id, (int) $usercontext->id], array_map('intval', $DB->get_fieldset_sql(
+            'SELECT contextid FROM {ai_action_register} ORDER BY id'
+        )));
+
+        // A withdrawal empties prompt and response of the learner's actions in the AI subsystem.
+        $sideline = $DB->get_record('sideline', ['id' => $this->instance->id]);
+        \mod_sideline\local\consent\consent_manager::record_decision(
+            $sideline,
+            (int) $this->student->id,
+            false,
+            \context_module::instance($this->instance->cmid)->id,
+            time()
         );
-        \core_ai\privacy\provider::delete_data_for_user($contextlist);
         $this->assertSame(0, $DB->count_records_select('ai_action_generate_text', $DB->sql_like('prompt', '?'), ['%anon%']));
+        $this->assertSame(0, $DB->count_records_select(
+            'ai_action_generate_text',
+            $DB->sql_like('generatedcontent', '?'),
+            ['%anon%']
+        ));
     }
 
     public function test_provider_errors_and_missing_capability_fall_back_to_templates(): void {

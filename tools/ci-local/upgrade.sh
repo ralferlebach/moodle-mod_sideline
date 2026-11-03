@@ -10,9 +10,9 @@ set -u
 BRANCH=$1; DB=$2; PHPV=$3; PREV=$4
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC=${SRC:-$(cd "$HERE/../.." && pwd)}
-TAG=upgrade-$(echo "$BRANCH" | sed 's/MOODLE_\([0-9]*\)_STABLE/\1/')-$DB
+TAG=upgrade-$(echo "$BRANCH" | sed 's/MOODLE_\([0-9]*\)_STABLE/\1/')-$DB-$(basename "$PREV")
 CI_WORK=${CI_WORK:-/home/claude/ci}
-SRC=$PREV CI_TAG=$TAG CI_WORK=$CI_WORK "$HERE/ci.sh" "$BRANCH" "$DB" "$PHPV" install > /dev/null
+SRC=$PREV CI_TAG=$TAG CI_WORK=$CI_WORK bash "$HERE/ci.sh" "$BRANCH" "$DB" "$PHPV" install > /dev/null
 grep -q "install rc=0" "$CI_WORK/$TAG/ci-logs/rc.txt" || { echo "install of the previous release failed"; exit 1; }
 cd "$CI_WORK/$TAG" || exit 1
 PB=/tmp/claude-0/phpbin-$PHPV; export PATH=$PB:$PATH

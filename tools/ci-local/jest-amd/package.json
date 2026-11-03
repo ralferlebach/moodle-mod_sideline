@@ -1,0 +1,14 @@
+{
+  "name": "mod_sideline-jest-amd",
+  "private": true,
+  "description": "Pinned toolchain for the Jest tests of the AMD panel (tests/js), used by tools/ci-local/js-checks.sh.",
+  "license": "GPL-3.0-or-later",
+  "devDependencies": {
+    "@babel/core": "7.29.7",
+    "@babel/preset-env": "7.29.7",
+    "babel-jest": "30.5.2",
+    "jest": "30.5.2",
+    "jest-axe": "10.0.0",
+    "jest-environment-jsdom": "30.5.2"
+  }
+}

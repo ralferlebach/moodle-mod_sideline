@@ -1,5 +1,55 @@
 # Changelog
 
+## 0.4.1 (beta)
+
+Nacharbeit aus dem Critical-Friend-Re-Audit von 0.4.0 (02.11.2026, Issues #3 bis #27). Nachweise je Issue: `docs/ISSUE_NACHWEISE_0.4.1.md`. Keine Schemaänderung, kein Upgrade-Schritt; neu ist eine Cache-Definition (`db/caches.php`).
+
+**CI auf GitHub (#20, #21, #22, #15)**
+* **Frontend-Job (#20):** Das Skript hatte im Repository kein Ausführungsrecht (`Permission denied`, Exit 126). Alle Skripte werden jetzt mit `bash` aufgerufen, im Workflow, im `makefile` und untereinander.
+* **Upgrade-Job (#21):** Das Muster `ci/` in `.gitignore` galt in jedem Verzeichnis und versteckte `tools/ci/` mit der Upgrade-Fixture vor Git. Es ist jetzt auf die oberste Ebene verankert (`/ci/`, `/moodle/`). Der Job prüft zwei Ausgangsstände, den direkten Vorgänger (jetzt 0.4.0) und 0.3.2, je auf 4.5/pgsql und 5.3/mariadb. Seed und Prüfung hängen vom Ausgangsrelease ab.
+* **Playwright-Gruppenjourney (#22):** Ursache war kein Fachfehler. Der Test löschte die Cookies unter einer Seite, deren JavaScript noch lief; deren nächste AJAX-Antwort leitete zum Login um und brach die Navigation des Tests ab (`net::ERR_ABORTED`). Der Wiederholungsversuch scheiterte dann, weil der erste Versuch den Zustand schon verändert hatte. Jetzt hat jede Person einen eigenen Browserkontext, die Journey stellt ihren Ausgangszustand selbst her, und es gibt keine Wiederholungen mehr (`retries: 0`).
+* **Neue lokale Abnahme:** `tools/ci-local/checkout.sh` baut den Checkout, den GitHub sieht (mit `.gitignore`, ohne Ausführungsrechte), und meldet ignorierte Dateien. `playwright.sh` bildet den Playwright-Workflow nach. Alle Abnahmeläufe von 0.4.1 liefen auf diesem Checkout.
+* Kein neuer Job, keine neue Abhängigkeit von „CI complete“.
+
+**Sicherheit und Datenschutz (unabhängiges Review, #3, #4, #12, #14; `docs/security/REVIEW_0.4.1.md`)**
+* Der KI-Anbieter sieht neutrale Blockkennungen (`b1`, `b2`) statt der frei benannten Schlüssel eigener Regeln. Die Wiederherstellung prüft Regeldefinitionen und verwirft ungültige.
+* KI-Aufrufe laufen im Nutzerkontext der lernenden Person. Der KI-Nutzungsbericht des Kurses zeigt Lehrenden damit nicht mehr, wer den Coach nutzt.
+* Ein Widerruf entfernt auch Entscheidungsprotokolle, Regeltreffer sowie Prompt und Antwort im KI-Kern. Die Erzeugung prüft Zustimmung und Freigaben erst nach dem letzten Schreibvorgang.
+* Persona-Stile von Admins, Namen aus den weiteren Kursen eines Kursverbunds und KI-Antworten werden auf Namen geprüft.
+* Die Prüfung von Freitexten erkennt mehr Datumsformen, jeden Hostnamen, verschleierte E-Mail-Adressen und Prompt-Injection in allen geprüften Sprachen.
+* Gruppenmodus: Die anonyme Zählung bleibt für den Tag fest (Moodle-Cache `groupsnapshot`), auch wenn Moodle eine Erledigung neu abstempelt. Eine anonyme Aussage über alle anderen Mitglieder einer Gruppe entfällt.
+* Privacy-API: Autor- und Freigabe-IDs in Kursquellen, Kursbereichen und Site-Personas werden exportiert und gelöscht.
+
+**Fehler**
+* **Einstellungsformular:** Eine Instanz mit einer Pause von 0 Sekunden zwischen zwei Fragen (Import, Generator, Playwright-Seed) oder einem Wert, der kein Vielfaches einer Stunde ist, ließ sich nicht mehr bearbeiten (Coding Error des Dauerfelds). Das Feld kennt jetzt Minuten und eine Standardeinheit. Gefunden durch das neue Behat-Szenario des Kursverbunds.
+* **Hinweis auf unbestätigte Kursquellen:** stand in einem eingeklappten Abschnitt. Der Abschnitt wird jetzt aufgeklappt.
+* **Regelvorschau:** kein TypeError mehr bei einer ungültigen Definition.
+* **Zielgröße (WCAG 2.5.8):** Die als Link gestalteten Schaltflächen „Show my answers“, „Delete answer“ und „Withdraw my consent“ waren niedriger als 24 px. Jetzt mindestens 24 × 24 px, in beiden Panels. Gefunden durch die neue Playwright-Prüfung.
+* **Playwright- und k6-Workflow:** riefen `install.php` unter `public/` auf. Ab Moodle 5.1 liegt `admin/cli` aber im Wurzelverzeichnis. Auf 5.1 bis 5.3 wären beide Workflows schon bei der Installation gescheitert; der GitHub-Lauf von 0.4.0 lief auf 4.5.
+* **Sprache der Vorlagentexte (#17):** Ein installiertes Sprachpaket ohne Texte dieses Plugins (der Normalfall für Pakete vom Moodle-Sprachserver) führte zu einem englischen Text, der als Text in der Paketsprache galt. Der Hinweis „nicht in deiner Sprache verfügbar“ fehlte. Die Textsprache ist jetzt die Sprache, in der es Texte des Plugins gibt (Sprache, Elternsprache, Englisch). Der Hinweis vergleicht die Sprachfamilie.
+* **Import (#26):** Kursquellen über dem Maximum eines Kursverbunds wurden beim Import stillschweigend verworfen. Jetzt wird der Import mit Meldung abgelehnt.
+
+**Leistung (#24)**
+* `prompt_text_guard` lädt die Namen eines Kurses nicht mehr in den Speicher. Die Wortfolgen des Freitexts werden in der Datenbank abgeglichen: höchstens zwei Abfragen, unabhängig von der Kursgröße (gemessen bis 20 000 Einschreibungen). Bei einem Datenbankfehler wird nichts an die KI gesendet.
+
+**Import-Grenzen (#26)**
+* Höchstens 512 KiB, Verschachtelungstiefe 16, Texte bis 10 000 Zeichen, je Teil eine Höchstzahl an Einträgen (Regeln und Kursquellen wie in der Instanz). Ungültiges JSON und jede Überschreitung lehnen die ganze Datei ab.
+
+**Tests**
+* Behat: `course_union.feature` (Kursverbund mit Abschluss in einem anderen Kurs, Rechteentzug, unbestätigte Altquelle, Kursbereich mit Verschiebung und Rollenentzug; #5, #16), `transfer.feature` (Downloads im echten HTTP-Pfad mit Content-Type, Dateiname, Caching und Negativfällen; Import aus einem anderen Kurs und von einer fremden Site; Backup und Restore; #10, #19), `languages.feature` (Deutsch, Französisch mit Übersetzungsschritt, Polnisch als Fallback; #17).
+* Playwright `a11y.spec.js`: Reflow bei 400 % und 200 % Zoom, Zielgrößen, sichtbarer Fokus, Rechts nach links, Touch-Gerät (#25). Manueller Prüfablauf für Screenreader: `docs/A11Y_SMOKE.md`.
+* PHPUnit: Namensprüfung in der Datenbank, Importgrenzen, Textsprache, Einstellungsformular, Widerruf räumt auf, Gruppen-Tagesschnappschuss und ganze Gruppe, Privacy der Konfigurationsautoren; 461 Tests (vorher 421).
+* `tools/bench_names.php`: Kosten der Namensprüfung.
+
+**Formales (#23, #27)**
+* `styles.css` und zwei Jest-Dateien mit vollständigem GPL-Kopf.
+* Die Jest-Werkzeugkette des AMD-Panels ist mit Lockdatei festgelegt (`tools/ci-local/jest-amd/`). Abhängigkeiten und bekannte Advisories: `docs/ABHAENGIGKEITEN.md`. Das Plugin bündelt keine Fremdbibliothek.
+* Code-Kommentare ohne Verweise auf Issues und Versionshistorie (Produktionscode).
+
+**Dokumentation (#3, #4, #12, #14)**
+* Unabhängiges Security-/Privacy-Review: `docs/security/REVIEW_0.4.1.md`.
+* `docs/privacy/DATENSCHUTZ.md`: Inventar der Prompt-Felder mit verbleibenden Identifikatoren, darunter die verkettbare Nutzerkennung, die der Moodle-Kern an den Anbieter sendet; Aufbewahrung der Kern-KI-Protokolle (keine automatische Löschung im Kern).
+
 ## 0.4.0 (beta)
 
 Nacharbeit aus dem Re-Audit vom 02.11.2026 (Issues #1 bis #18). Nachweise je Issue: `docs/ISSUE_NACHWEISE_0.4.0.md`.

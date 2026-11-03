@@ -25,7 +25,7 @@ namespace mod_sideline\local\ai;
  * so it is not personal data. When a provider reports no token numbers, they are estimated from the
  * text length (about four characters per token), so the daily cap still works.
  *
- * Reservations are atomic site-wide (issue #8): the check of both caps and the ledger write happen
+ * Reservations are atomic site-wide: the check of both caps and the ledger write happen
  * under one site-wide lock, so concurrent requests of different users and instances can never pass
  * the check together. A reservation counts the worst case (prompt estimate plus the largest possible
  * answer) until the call completes; a call that never completes (aborted process) keeps counting with

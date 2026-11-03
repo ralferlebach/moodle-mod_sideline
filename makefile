@@ -259,7 +259,7 @@ CI_DB          ?= pgsql
 CI_PHP         ?= 8.3
 
 ci:
-	@$(PLUGIN_DIR)/tools/ci-local/ci.sh $(CI_BRANCH) $(CI_DB) $(CI_PHP)
+	@bash $(PLUGIN_DIR)/tools/ci-local/ci.sh $(CI_BRANCH) $(CI_DB) $(CI_PHP)
 
 js-checks:
-	@$(PLUGIN_DIR)/tools/ci-local/js-checks.sh
+	@bash $(PLUGIN_DIR)/tools/ci-local/js-checks.sh

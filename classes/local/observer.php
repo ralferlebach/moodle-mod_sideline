@@ -65,7 +65,7 @@ class observer {
     }
 
     /**
-     * Groups, groupings or their visibility changed: the release circle may have grown (issue #9).
+     * Groups, groupings or their visibility changed: the release circle may have grown.
      *
      * @param \core\event\base $event The event.
      */
@@ -89,7 +89,7 @@ class observer {
     }
 
     /**
-     * A course was updated or deleted: its category may have changed (issue #16).
+     * A course was updated or deleted: its category may have changed.
      *
      * @param \core\event\base $event The event.
      */
@@ -108,7 +108,7 @@ class observer {
     }
 
     /**
-     * A category was moved, changed or deleted (issue #16).
+     * A category was moved, changed or deleted.
      *
      * @param \core\event\base $event The event.
      */
@@ -119,7 +119,7 @@ class observer {
     }
 
     /**
-     * Role definitions changed: the authority of teachers over course sources may be gone (issue #5, #16).
+     * Role definitions changed: the authority of teachers over course sources may be gone.
      *
      * @param \core\event\base $event The event.
      */
@@ -133,7 +133,7 @@ class observer {
 
     /**
      * A role was assigned or unassigned: the user's own texts, and the texts of every instance that
-     * relies on this user as the teacher who authorised a course source (issue #5).
+     * relies on this user as the teacher who authorised a course source.
      *
      * @param \core\event\base $event The event.
      */

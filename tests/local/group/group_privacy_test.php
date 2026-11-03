@@ -55,6 +55,8 @@ final class group_privacy_test extends \advanced_testcase {
     private \stdClass $page;
     /** @var \stdClass Activity with a pass grade. */
     private \stdClass $quiz;
+    /** @var \stdClass[] One member per group who does not share. */
+    private array $bystanders = [];
 
     #[\Override]
     protected function setUp(): void {
@@ -86,6 +88,12 @@ final class group_privacy_test extends \advanced_testcase {
         $users = [];
         // The current record: creating groups may have raised the group version (issue #9).
         $sideline = $DB->get_record('sideline', ['id' => $sideline->id]);
+        $groupid = (int) ($group ?? $this->own)->id;
+        if (!isset($this->bystanders[$groupid])) {
+            // A member who does not share: no statement may cover every other member of a group.
+            $this->bystanders[$groupid] = $gen->create_and_enrol($this->course, 'student');
+            $gen->create_group_member(['groupid' => $groupid, 'userid' => $this->bystanders[$groupid]->id]);
+        }
         for ($i = 0; $i < $count; $i++) {
             $user = $gen->create_and_enrol($this->course, 'student');
             $gen->create_group_member(['groupid' => ($group ?? $this->own)->id, 'userid' => $user->id]);
@@ -349,5 +357,62 @@ final class group_privacy_test extends \advanced_testcase {
         );
         $keys = array_column($result['commentary']['blocks'], 'key');
         $this->assertNotContains('group_together', $keys, 'Consents for the old circle are no longer current');
+    }
+
+    public function test_a_statement_never_covers_every_other_member_of_the_group(): void {
+        global $DB;
+        $sideline = $this->coach();
+        $gen = $this->getDataGenerator();
+        // Rita and three others, all of whom share and completed: "a few others" would name each of them.
+        $small = $gen->create_group(['courseid' => $this->course->id, 'name' => 'Small team']);
+        groups_remove_member($this->own->id, $this->recipient->id);
+        $gen->create_group_member(['groupid' => $small->id, 'userid' => $this->recipient->id]);
+        $sideline = $DB->get_record('sideline', ['id' => $sideline->id]);
+        foreach ([1, 2, 3] as $i) {
+            $user = $gen->create_and_enrol($this->course, 'student');
+            $gen->create_group_member(['groupid' => $small->id, 'userid' => $user->id]);
+            sharing_manager::record($sideline, (int) $user->id, true, false, 1, time());
+            $this->event($user, $this->page, 'completed');
+        }
+        $facts = $this->facts($sideline);
+        $this->assertSame([], $facts);
+
+        // One more member who did not complete: now the statement says nothing about any single person.
+        $other = $gen->create_and_enrol($this->course, 'student');
+        $gen->create_group_member(['groupid' => $small->id, 'userid' => $other->id]);
+        $facts = $this->facts($DB->get_record('sideline', ['id' => $sideline->id]));
+        $this->assertCount(1, $facts);
+        $this->assertSame('few', $facts[0]['band']);
+    }
+
+    public function test_a_completion_stamped_again_today_does_not_change_the_statement_of_the_day(): void {
+        global $DB;
+        $sideline = $this->coach();
+        $members = $this->sharing_members($sideline, 3);
+        foreach ($members as $member) {
+            $this->event($member, $this->page, 'completed');
+        }
+        $morning = $this->facts($sideline);
+        $this->assertCount(1, $morning);
+
+        // A member ticks the completion off and on again: Moodle stamps it with the current time.
+        $DB->set_field('course_modules_completion', 'timemodified', time(), ['coursemoduleid' => $this->page->cmid,
+            'userid' => $members[0]->id]);
+        $later = $this->facts($sideline);
+        $this->assertSame($morning, $later, 'The same statement for the whole day');
+
+        // Who stops sharing drops out at once, even within the day.
+        foreach ([1, 2] as $i) {
+            sharing_manager::record(
+                $DB->get_record('sideline', ['id' => $sideline->id]),
+                (int) $members[$i]->id,
+                false,
+                false,
+                1,
+                time()
+            );
+        }
+        $after = $this->facts($DB->get_record('sideline', ['id' => $sideline->id]));
+        $this->assertSame([], $after);
     }
 }

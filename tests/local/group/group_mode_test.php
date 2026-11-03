@@ -88,6 +88,9 @@ final class group_mode_test extends \advanced_testcase {
             $gen->create_group_member(['groupid' => $this->other->id, 'userid' => $user->id]);
             $this->others[] = $user;
         }
+        // Blue team has a fourth member who never shares: no statement may cover every member of a group.
+        $gen->create_group_member(['groupid' => $this->other->id,
+            'userid' => $gen->create_and_enrol($this->course, 'student', ['firstname' => 'Oda'])->id]);
     }
 
     /**

@@ -43,7 +43,7 @@ const QuestionForm = ({question, strings, onSubmit}: Props) => {
     let value = '';
     let complete = false;
     if (question.qtype === 'mc' && question.multiple) {
-        // Several options: checkboxes, a hint on how many, a JSON list of the selected indexes (issue #11).
+        // Several options: checkboxes, a hint on how many, a JSON list of the selected indexes.
         const toggle = (index: number) => setChoices(
             choices.includes(index) ? choices.filter((c) => c !== index) : [...choices, index].sort((a, b) => a - b)
         );

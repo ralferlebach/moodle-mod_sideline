@@ -30,16 +30,18 @@ cat > tsconfig.sideline.json <<'EOF'
 EOF
 step tsc npx tsc --noEmit -p tsconfig.sideline.json
 rm -f tsconfig.sideline.json
-# jest-axe is no Moodle dependency; without it the axe test of the React panel is skipped.
-[[ -d node_modules/jest-axe ]] || npm install --no-save --no-progress jest-axe@10 > /dev/null 2>&1
+# jest-axe is no Moodle dependency; without it the axe test of the React panel is skipped. Same version as in
+# the pinned AMD toolchain.
+[[ -d node_modules/jest-axe ]] || npm install --no-save --no-progress --no-audit --no-fund jest-axe@10.0.0 > /dev/null 2>&1
 step jest-react npx jest $P/js/esm/tests
-# The AMD tests need a newer Babel than Moodle's own (7.17): own toolchain from setup.sh, run from SRC so that
-# Node does not find Moodle's node_modules in a parent directory first.
+# The AMD tests need a newer Babel than Moodle's own (7.17): own toolchain, pinned by tools/ci-local/jest-amd
+# (package.json and package-lock.json), installed outside the Moodle tree and run from SRC so that Node does not
+# find Moodle's node_modules in a parent directory first. Reinstalled whenever the lock file changes.
 J=${MPCI:-/opt/mpci}/jest-amd/node_modules
-if [[ ! -x $J/.bin/jest ]]; then
-    mkdir -p "${J%/node_modules}" && (cd "${J%/node_modules}" && npm init -y > /dev/null && npm install --no-progress \
-        --no-audit --no-fund jest@30 jest-environment-jsdom@30 babel-jest@30 @babel/core@7 @babel/preset-env@7 jest-axe@10 \
-        > /dev/null 2>&1)
+if ! cmp -s "$SRC/tools/ci-local/jest-amd/package-lock.json" "${J%/node_modules}/package-lock.json" || [[ ! -x $J/.bin/jest ]]; then
+    rm -rf "${J%/node_modules}" && mkdir -p "${J%/node_modules}"
+    cp "$SRC/tools/ci-local/jest-amd/package.json" "$SRC/tools/ci-local/jest-amd/package-lock.json" "${J%/node_modules}/"
+    (cd "${J%/node_modules}" && npm ci --no-progress --no-audit --no-fund > /dev/null 2>&1)
 fi
 step jest-amd bash -c "cd '$SRC/tests/js' && NODE_PATH=$J $J/.bin/jest --config jest.config.js"
 npx grunt amd --root=$P > /dev/null 2>&1

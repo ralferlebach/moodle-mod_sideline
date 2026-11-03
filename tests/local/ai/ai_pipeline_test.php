@@ -99,12 +99,12 @@ final class ai_pipeline_test extends \advanced_testcase {
     public function test_tokens_are_resolved_locally_after_validation(): void {
         $request = $this->request();
         $raw = json_encode(['blocks' => [
-            ['key' => 'deadline_soon', 'text' => '[anonuser1], [anonmod1] is due [anondate1].'],
-            ['key' => 'progress', 'text' => 'You did 3 of 7.'],
+            ['key' => 'b1', 'text' => '[anonuser1], [anonmod1] is due [anondate1].'],
+            ['key' => 'b2', 'text' => 'You did 3 of 7.'],
         ]]);
-        $texts = (new response_validator())->validate($raw, ['deadline_soon', 'progress'], $request);
+        $texts = (new response_validator())->validate($raw, ['b1', 'b2'], $request);
         $this->assertNotNull($texts);
-        $resolved = $request->resolve($texts['deadline_soon']);
+        $resolved = $request->resolve($texts['b1']);
         $this->assertStringContainsString('Maria', $resolved);
         $this->assertStringContainsString('Maria Schmidt Exam', $resolved);
         $this->assertStringNotContainsString('[anon', $resolved);
@@ -141,30 +141,30 @@ final class ai_pipeline_test extends \advanced_testcase {
     public function test_validator_rejects_unsafe_or_unfaithful_text(string $text): void {
         $request = $this->request();
         $raw = json_encode(['blocks' => [
-            ['key' => 'deadline_soon', 'text' => $text],
-            ['key' => 'progress', 'text' => 'You did 3 of 7.'],
+            ['key' => 'b1', 'text' => $text],
+            ['key' => 'b2', 'text' => 'You did 3 of 7.'],
         ]]);
-        $this->assertNull((new response_validator())->validate($raw, ['deadline_soon', 'progress'], $request));
+        $this->assertNull((new response_validator())->validate($raw, ['b1', 'b2'], $request));
     }
 
     public function test_validator_rejects_wrong_structure(): void {
         $request = $this->request();
         $validator = new response_validator();
-        $keys = ['deadline_soon', 'progress'];
+        $keys = ['b1', 'b2'];
         $this->assertNull($validator->validate('not json', $keys, $request));
         $this->assertNull($validator->validate('{"blocks":[]}', $keys, $request));
         $this->assertNull($validator->validate(json_encode(['blocks' => [
-            ['key' => 'progress', 'text' => 'x'], ['key' => 'deadline_soon', 'text' => 'y'],
+            ['key' => 'b2', 'text' => 'x'], ['key' => 'b1', 'text' => 'y'],
         ]]), $keys, $request));
     }
 
     public function test_validator_accepts_a_fenced_json_answer(): void {
         $request = $this->request();
         $raw = "\x60\x60\x60json\n" . json_encode(['blocks' => [
-            ['key' => 'deadline_soon', 'text' => '[anonmod1] by [anondate1].'],
-            ['key' => 'progress', 'text' => '3 of 7 done.'],
+            ['key' => 'b1', 'text' => '[anonmod1] by [anondate1].'],
+            ['key' => 'b2', 'text' => '3 of 7 done.'],
         ]]) . "\n\x60\x60\x60";
-        $this->assertNotNull((new response_validator())->validate($raw, ['deadline_soon', 'progress'], $request));
+        $this->assertNotNull((new response_validator())->validate($raw, ['b1', 'b2'], $request));
     }
 
     public function test_numbers_from_the_facts_are_allowed_but_no_others(): void {

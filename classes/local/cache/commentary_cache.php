@@ -231,7 +231,7 @@ class commentary_cache {
      * Mark all cached commentary of a user in a course dirty. Observers call this and nothing else (P-29).
      *
      * Affected are the instances of the course itself, those that name the course as a further source,
-     * and those whose course branch (category with subcategories) contains the course (issue #16).
+     * and those whose course branch (category with subcategories) contains the course.
      *
      * @param int $courseid Course id.
      * @param int $userid User id.

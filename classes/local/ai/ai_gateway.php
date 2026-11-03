@@ -16,6 +16,7 @@
 
 namespace mod_sideline\local\ai;
 
+use mod_sideline\local\instance_config;
 use mod_sideline\local\model\recommendation;
 
 /**
@@ -49,7 +50,7 @@ class ai_gateway {
     public const STATUS_BUDGET = 'budget';
     /** @var string Status: the provider returned nothing. */
     public const STATUS_NO_RESPONSE = 'no_response';
-    /** @var string Status: configured free text contains identifiers, nothing was sent (issue #4). */
+    /** @var string Status: configured free text contains identifiers, nothing was sent. */
     public const STATUS_UNSAFE_INPUT = 'unsafe_input';
 
     /** @var text_generator The seam to the AI subsystem. */
@@ -58,7 +59,7 @@ class ai_gateway {
     /** @var string Outcome of the last phrase() call: a status constant or "invalid:<reason>". */
     private string $laststatus = '';
 
-    /** @var array What the last phrase() call exchanged, for the decision trace (issue #14): no real values. */
+    /** @var array What the last phrase() call exchanged, for the decision trace: no real values. */
     private array $lastexchange = [];
 
     /**
@@ -121,7 +122,7 @@ class ai_gateway {
      * @return bool
      */
     public static function language_supported(string $lang): bool {
-        // Only languages in which invented facts can be recognised (issue #13): elsewhere the template is served.
+        // Only languages in which invented facts can be recognised: elsewhere the template is served.
         return claim_checker::supports($lang) && language_detector::supports($lang);
     }
 
@@ -158,14 +159,26 @@ class ai_gateway {
         $genlang = claim_checker::supports($target) ? $lang : 'en';
 
         $format = get_string_manager()->get_string('strftimedatetimeshort', 'langconfig', null, $lang);
-        // Free text configured by teachers is checked against the names of the people of the course (issue #4).
-        $hasfreetext = (bool) array_filter($recommendations, static fn(recommendation $r): bool => !empty($r->facts['templates']));
-        $coursecontext = $context->get_course_context(false);
-        $names = $hasfreetext ? prompt_text_guard::names($coursecontext ? (int) $coursecontext->instanceid : 0, $user) : [];
-        $request = new pseudonymizer($recommendations, (string) $user->firstname, $format, $now, $lang, $names);
-        // The persona style is free text as well, written by administrators for the whole site: the same guard,
-        // without the names of one course (a style is no place for them, and common words would match).
-        $stylereason = prompt_text_guard::check($style ?? persona_registry::style_prompt($persona));
+        // Free text is checked against the learner's names and those of everybody enrolled in the courses the
+        // activity draws on: its own course, its further courses and, for course branches, the learner's courses.
+        $courseids = $this->name_courses($context, (int) $user->id, $sidelineid);
+        $request = new pseudonymizer(
+            $recommendations,
+            (string) $user->firstname,
+            $format,
+            $now,
+            $lang,
+            prompt_text_guard::names($user),
+            $courseids,
+        );
+        // The persona style is free text as well when administrators wrote it (site personas, previews): the same
+        // guard with the same names. The built-in styles are the plugin's own text.
+        $styletext = $style ?? persona_registry::style_prompt($persona);
+        $stylereason = prompt_text_guard::check($styletext);
+        if ($stylereason === null && ($style !== null || !in_array($persona, persona_registry::builtin_keys(), true))) {
+            $stylereason = prompt_text_guard::check($styletext, prompt_text_guard::names($user))
+                ?? prompt_text_guard::course_name($styletext, $courseids);
+        }
         $unsafe = $request->unsafe() ?? $stylereason;
         if ($unsafe !== null) {
             // Nothing leaves the site: the caller serves the localised template text (static fallback).
@@ -178,12 +191,12 @@ class ai_gateway {
         if ($raw === null) {
             return $this->laststatus === self::STATUS_BUDGET ? null : $this->status(self::STATUS_NO_RESPONSE);
         }
-        $keys = array_map(static fn(recommendation $r): string => $r->key, $recommendations);
         $validator = new response_validator();
-        $texts = $validator->validate($raw, $keys, $request);
+        $texts = $validator->validate($raw, $request->aliases(), $request);
         if ($texts === null) {
             return $this->status('invalid:' . $validator->reason);
         }
+        $texts = $request->by_key($texts);
 
         // Which language did we get, block by block? Only languages with phrase lists count. A block too
         // short to tell takes the language of the whole answer.
@@ -209,11 +222,44 @@ class ai_gateway {
             }
             $status = self::STATUS_TRANSLATED;
         }
+        // The provider knows no name: a name of the learner or of somebody in the courses is invented or leaked.
+        foreach ($texts as $text) {
+            $plain = str_replace($request->issued_tokens(), ' ', $text);
+            if (
+                prompt_text_guard::contains_name($plain, prompt_text_guard::names($user))
+                    || prompt_text_guard::course_name($plain, $courseids) !== null
+            ) {
+                return $this->status('invalid:name');
+            }
+        }
         $this->laststatus = $status;
         // The validated texts with tokens in place: what the provider said, without any real value.
         $this->lastexchange['response'] = $texts;
         // Resolve only after validation, locally.
         return array_map(static fn(string $text): string => $request->resolve($text), $texts);
+    }
+
+    /**
+     * Courses whose people a free text must not name.
+     *
+     * @param \context $context Context of the activity.
+     * @param int $userid Learner.
+     * @param int $sidelineid Instance id, 0 for a preview.
+     * @return int[]
+     */
+    private function name_courses(\context $context, int $userid, int $sidelineid): array {
+        $coursecontext = $context->get_course_context(false);
+        if (!$coursecontext) {
+            return [];
+        }
+        $courseids = [(int) $coursecontext->instanceid];
+        if ($sidelineid > 0) {
+            $courseids = array_merge($courseids, instance_config::get_sources($sidelineid));
+            if (instance_config::get_source_categories($sidelineid)) {
+                $courseids = array_merge($courseids, array_map('intval', array_keys(enrol_get_users_courses($userid, true, 'id'))));
+            }
+        }
+        return array_values(array_unique(array_map('intval', $courseids)));
     }
 
     /**
@@ -240,23 +286,31 @@ class ai_gateway {
         string $purpose,
     ): ?array {
         $target = language_detector::base_language($lang);
-        $prompt = (new prompt_builder())->build_translation($texts, $lang);
+        // Neutral block ids for the provider here as well, mapped back after validation.
+        $keys = array_keys($texts);
+        $aliased = array_combine(array_map(static fn(int $i): string => 'b' . ($i + 1), array_keys($keys)), array_values($texts));
+        $prompt = (new prompt_builder())->build_translation($aliased, $lang);
         $purpose = $purpose === ai_usage::PREVIEW ? ai_usage::PREVIEW : ai_usage::TRANSLATE;
         $raw = $this->call($prompt, $userid, $contextid, $sidelineid, $purpose, $now);
         if ($raw === null) {
             return $this->laststatus === self::STATUS_BUDGET ? null : $this->status('invalid:translation_no_response');
         }
         $validator = new response_validator();
-        $translated = $validator->validate_translation($raw, $texts);
+        $translated = $validator->validate_translation($raw, $aliased);
         if ($translated === null) {
             return $this->status('invalid:' . $validator->reason);
         }
+        $bykey = [];
+        foreach ($keys as $i => $key) {
+            $bykey[$key] = $translated['b' . ($i + 1)];
+        }
+        $translated = $bykey;
         // Every block must now be in the target language: a block left untranslated is rejected.
         $languages = self::languages($translated);
         if ($languages === null || array_diff(array_unique($languages), [$target])) {
             return $this->status('invalid:translation_language');
         }
-        // The translation is checked for invented facts again (issue #13). A target without phrase lists never
+        // The translation is checked for invented facts again. A target without phrase lists never
         // gets this far (language_supported()), and is refused here as well: unchecked text is never delivered.
         if (!claim_checker::supports($target)) {
             return $this->status('invalid:translation_unverifiable');
@@ -330,7 +384,7 @@ class ai_gateway {
     }
 
     /**
-     * What the last phrase() call sent and received, without real values (issue #14).
+     * What the last phrase() call sent and received, without real values.
      *
      * @return array prompt version, prompt hash, generation language and the validated texts with tokens.
      */

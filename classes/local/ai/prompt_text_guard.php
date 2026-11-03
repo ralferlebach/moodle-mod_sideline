@@ -17,7 +17,7 @@
 namespace mod_sideline\local\ai;
 
 /**
- * Checks configured free text before it may become part of an AI prompt (issue #4, P-22, L-13, N-04).
+ * Checks configured free text before it may become part of an AI prompt (P-22, L-13, N-04).
  *
  * Free text that a teacher or administrator wrote (the intent of a custom rule, the style of a
  * persona) is not a checked fact. It may contain identifiers that must stay on the site: e-mail
@@ -30,8 +30,12 @@ namespace mod_sideline\local\ai;
  * localised template text (static fallback). The tokens that the plugin issues itself, such as
  * [anonmod1], are allowed; every other bracketed token is not.
  *
- * Limits: it recognises the forms listed in check() and the names it is given. A name it is not
- * given (a person outside the course) and identifiers in forms it does not know are not
+ * Names of the people of a course are not loaded into memory: course_name() looks up only the words
+ * of the text itself, in the database, so its cost depends on the length of the text (at most
+ * MAX_LENGTH characters) and not on the number of people ever enrolled in the course.
+ *
+ * Limits: it recognises the forms listed in check() and the names of the course and of the learner.
+ * A name of a person outside the course and identifiers in forms it does not know are not
  * recognised. That residual risk is documented in docs/privacy/DATENSCHUTZ.md.
  *
  * @package    mod_sideline
@@ -54,21 +58,51 @@ final class prompt_text_guard {
         'novembro', 'dezembro',
     ];
 
+    /** @var string[] Abbreviated month names of the same languages ("3 Nov", "Okt. 3"). */
+    private const MONTH_ABBREVIATIONS = [
+        'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'sept', 'oct', 'nov', 'dec', 'mär', 'okt', 'dez',
+        'janv', 'févr', 'fevr', 'avr', 'juil', 'déc', 'ene', 'abr', 'ago', 'dic', 'gen', 'mag', 'giu', 'lug', 'ott',
+        'mrt', 'mei', 'fev', 'set', 'out',
+    ];
+
     /** @var string[] Phrases that address the model instead of the learner (prompt injection). */
     private const INJECTION = [
         'system prompt', 'systemprompt', 'jailbreak', 'developer mode', 'you are now', 'du bist jetzt', 'act as',
         'tu es maintenant', 'facts:', 'output format', 'persona:', 'language:', 'rules (', '"blocks"', "\x60\x60\x60",
     ];
 
-    /** @var string[] Patterns of instructions aimed at the model (prompt injection). */
+    /**
+     * @var string[] Patterns of instructions aimed at the model (prompt injection), in every language with a
+     * language profile: a verb of ignoring near what is to be ignored, a new role or new instructions.
+     */
     private const INJECTION_PATTERNS = [
-        '/\b(ignore|disregard|forget|override|bypass)\b.{0,40}\b(instruction|rule|above|previous|prior|everything|all|safety)/u',
-        '/\b(ignorier\w*|vergiss|missachte\w*|umgeh\w*)\b.{0,40}\b(anweisung|regel|alles|vorher|oben|sicherheit)/u',
-        '/\b(ignore[sz]?|oublie[sz]?)\b.{0,40}\b(instruction|règle|regle|tout|précédent)/u',
-        '/\b(new|neue|andere)\s+(instruction|anweisung|rolle|role)/u',
+        '/\b(ignore|disregard|forget|override|bypass|skip|discard|drop)\b.{0,40}'
+            . '\b(instruction|rule|guidance|direction|prompt|above|previous|prior|earlier|everything|all|safety|system)/u',
+        '/\b(ignorier\w*|vergiss|missachte\w*|umgeh\w*|übergeh\w*)\b.{0,40}'
+            . '\b(anweisung|vorgabe|regel|alles|vorher|bisherig|oben|sicherheit|system)/u',
+        '/\b(ignore[sz]?|oublie[sz]?|néglige[sz]?)\b.{0,40}\b(instruction|consigne|règle|regle|tout|précédent|precedent)/u',
+        '/\b(ignora\w*|olvida\w*|omite|descarta\w*)\b.{0,40}\b(instrucci\w*|regla\w*|anterior\w*|todo|previ\w*)/u',
+        '/\b(ignora\w*|dimentica\w*|tralascia\w*|scarta\w*)\b.{0,40}\b(istruzion\w*|regol\w*|precedent\w*|tutto|sopra)/u',
+        '/\b(negeer\w*|vergeet)\b.{0,40}\b(instructie\w*|regel\w*|eerder\w*|vorig\w*|alles|boven)/u',
+        '/\b(ignor[ae]\w*|esqueça\w*|esqueca\w*|desconsider\w*)\b.{0,40}\b(instru\w*|regra\w*|anterior\w*|tudo|acima)/u',
+        '/\b(new|neue|andere|nouvelles?|nuevas?|nuov[ae]|nieuwe|novas?)\s+'
+            . '(instruction|anweisung|rolle|role|rôle|consigne|instrucci|istruzion|instructie|instruç|instruc|regel|papel|ruolo)/u',
+        '/\b(ahora eres|ora sei|adesso sei|je bent nu|agora (você|voce) é|agora es|tu es désormais)\b/u',
     ];
 
-    /** @var array Names per course, kept for the request. */
+    /** @var int Most consecutive words a name may span (first names such as "Anna Lena", "van der Berg"). */
+    public const NAME_WORDS = 4;
+
+    /**
+     * @var int Phrases per query. A text of MAX_LENGTH characters has at most MAX_LENGTH / 2 words and so
+     * at most MAX_LENGTH / 2 * NAME_WORDS phrases: three queries, far below the parameter limits of every database.
+     */
+    private const CHUNK = 400;
+
+    /** @var int Results kept for the request, per course and text. */
+    private const CACHE_SIZE = 200;
+
+    /** @var array Results of course_name() for the request, keyed by course id and text hash. */
     private static array $namecache = [];
 
     /**
@@ -92,7 +126,10 @@ final class prompt_text_guard {
         $checks = [
             'email' => '/[^\s@]+@[^\s@]+\.[a-z]{2,}/iu',
             'handle' => '/(^|\s)@[\p{L}\p{N}_.-]{2,}/u',
-            'url' => '~(https?://|ftp://|www\.|\b[\p{L}\p{N}-]+\.(com|org|net|edu|de|at|ch|eu|fr|es|it|nl|pt|uk|io|info|ly)\b)~iu',
+            // Any host name with a top-level domain ("discord.gg", "t.co/abc"), with or without a scheme.
+            'url' => '~(https?://|ftp://|www\.|\b[\p{L}\p{N}-]+(\.[\p{L}\p{N}-]+)*\.\p{L}{2,24}\b)~iu',
+            // E-mail addresses written around the filter: "anna(at)uni(dot)de", "anna at uni dot de".
+            'obfuscated email' => '~([(\[{]\s*(at|ät|dot|punkt|point|punto)\s*[)\]}])|(\S\s+(at|ät)\s+\S+\s+(dot|punkt)\s+\S)~iu',
             'ip' => '/\b\d{1,3}(\.\d{1,3}){3}\b/',
             'date' => '~\b\d{1,4}[./-]\d{1,2}([./-]\d{2,4})?\b~u',
             'time' => '/\b\d{1,2}[:h]\d{2}\b/u',
@@ -105,11 +142,20 @@ final class prompt_text_guard {
                 return $reason;
             }
         }
-        foreach (self::MONTHS as $month) {
+        // A day with a month, written out or abbreviated, with or without an ordinal ending ("November 3rd", "3. Nov.").
+        $ordinal = '(st|nd|rd|th|er|e|º|ª)?\.?';
+        foreach (array_merge(self::MONTHS, self::MONTH_ABBREVIATIONS) as $month) {
             $m = preg_quote($month, '/');
-            if (preg_match('/\b\d{1,2}\.?\s*' . $m . '\b|\b' . $m . '\s+\d{1,2}\b/u', $lower)) {
+            if (
+                preg_match('/\b\d{1,2}' . $ordinal . '\s*(of\s+|de\s+|di\s+)?' . $m . '\b|\b' . $m . '\.?\s+\d{1,2}'
+                    . $ordinal . '(?!\d)/u', $lower)
+            ) {
                 return 'date';
             }
+        }
+        // A day as an ordinal after a preposition of time ("by the 3rd", "until the 21st").
+        if (preg_match('/\b(on|by|until|till|before|after|from)\s+(the\s+)?\d{1,2}(st|nd|rd|th)\b/u', $lower)) {
+            return 'date';
         }
         foreach (self::INJECTION as $phrase) {
             if (str_contains($lower, $phrase)) {
@@ -121,59 +167,131 @@ final class prompt_text_guard {
                 return 'injection';
             }
         }
+        return self::contains_name($withouttokens, $names) ? 'name' : null;
+    }
+
+    /**
+     * Whether a text contains one of the given names as a whole word, ignoring case.
+     *
+     * @param string $text Text.
+     * @param string[] $names Names.
+     * @return bool
+     */
+    public static function contains_name(string $text, array $names): bool {
+        $lower = mb_strtolower($text);
         foreach ($names as $name) {
             $name = mb_strtolower(trim((string) $name));
             if (mb_strlen($name) < 2) {
                 continue;
             }
             if (preg_match('/(?<![\p{L}\p{N}])' . preg_quote($name, '/') . '(?![\p{L}\p{N}])/u', $lower)) {
-                return 'name';
+                return true;
             }
         }
-        return null;
+        return false;
     }
 
     /**
-     * Names of the people of a course and of the learner, the list check() compares against.
+     * The learner's own names, the list check() compares against.
      *
-     * First and last names of everybody enrolled in the course (active or not, every role) plus the
-     * learner's own. One set-based query; the result is kept for the request.
-     *
-     * @param int $courseid Course id, 0 for none (persona preview).
      * @param \stdClass|null $user The learner.
      * @return string[]
      */
-    public static function names(int $courseid, ?\stdClass $user = null): array {
+    public static function names(?\stdClass $user): array {
+        $names = [];
+        foreach (['firstname', 'lastname', 'middlename', 'alternatename'] as $field) {
+            if ($user && trim((string) ($user->$field ?? '')) !== '') {
+                $names[] = (string) $user->$field;
+            }
+        }
+        return array_values(array_unique($names));
+    }
+
+    /**
+     * Whether a free text contains the first or last name of somebody enrolled in one of some courses.
+     *
+     * Everybody enrolled counts, active or not, in every role. Every phrase of one to NAME_WORDS
+     * consecutive words of the text is compared, case-insensitively, with the first and last names in
+     * the database; nothing else of the course is read. A text longer than MAX_LENGTH gives "length",
+     * a database error "budget": the text is then not sent.
+     *
+     * @param string $text Free text, placeholders removed.
+     * @param int|int[] $courseids Course ids; none checks nothing.
+     * @return string|null 'name', 'length', 'budget' or null when no name of the courses was found.
+     */
+    public static function course_name(string $text, int|array $courseids): ?string {
         global $DB;
 
-        $names = [];
-        if ($user) {
-            foreach (['firstname', 'lastname', 'middlename', 'alternatename'] as $field) {
-                if (!empty($user->$field)) {
-                    $names[] = (string) $user->$field;
+        $courseids = array_map('intval', (array) $courseids);
+        $courseids = array_values(array_unique(array_filter($courseids, static fn(int $id): bool => $id > 0)));
+        if (!$courseids) {
+            return null;
+        }
+        sort($courseids);
+        if (mb_strlen($text) > self::MAX_LENGTH) {
+            return 'length';
+        }
+        $candidates = self::candidates($text);
+        if (!$candidates) {
+            return null;
+        }
+        $key = implode(',', $courseids) . ':' . sha1(implode("\n", $candidates));
+        if (array_key_exists($key, self::$namecache)) {
+            return self::$namecache[$key];
+        }
+        $result = null;
+        try {
+            [$incourse, $courseparams] = $DB->get_in_or_equal($courseids, SQL_PARAMS_NAMED, 'sgc');
+            foreach (array_chunk($candidates, self::CHUNK) as $chunk) {
+                [$first, $firstparams] = $DB->get_in_or_equal($chunk, SQL_PARAMS_NAMED, 'sgf');
+                [$last, $lastparams] = $DB->get_in_or_equal($chunk, SQL_PARAMS_NAMED, 'sgl');
+                $sql = "SELECT 1
+                          FROM {user} u
+                          JOIN {user_enrolments} ue ON ue.userid = u.id
+                          JOIN {enrol} e ON e.id = ue.enrolid
+                         WHERE e.courseid $incourse AND u.deleted = 0
+                               AND (LOWER(TRIM(u.firstname)) $first OR LOWER(TRIM(u.lastname)) $last)";
+                if ($DB->record_exists_sql($sql, $courseparams + $firstparams + $lastparams)) {
+                    $result = 'name';
+                    break;
+                }
+            }
+        } catch (\dml_exception $e) {
+            // Unknown whether a name is in the text: it does not leave the site.
+            return 'budget';
+        }
+        if (count(self::$namecache) >= self::CACHE_SIZE) {
+            self::$namecache = [];
+        }
+        self::$namecache[$key] = $result;
+        return $result;
+    }
+
+    /**
+     * Every phrase of one to NAME_WORDS consecutive words of a text, lower case, at least two characters.
+     *
+     * A phrase runs from the start of a word to the end of a later word with the text in between as
+     * written, so "jean-luc" yields "jean", "luc" and "jean-luc". Words are runs of letters, marks and
+     * digits; everything else separates them.
+     *
+     * @param string $text Free text of at most MAX_LENGTH characters.
+     * @return string[]
+     */
+    private static function candidates(string $text): array {
+        $lower = mb_strtolower($text);
+        preg_match_all('/[\p{L}\p{M}\p{N}]+/u', $lower, $words, PREG_OFFSET_CAPTURE);
+        $words = $words[0];
+        $candidates = [];
+        foreach ($words as $i => [, $start]) {
+            for ($j = $i; $j < min(count($words), $i + self::NAME_WORDS); $j++) {
+                $end = $words[$j][1] + strlen($words[$j][0]);
+                $phrase = substr($lower, $start, $end - $start);
+                if (mb_strlen($phrase) >= 2) {
+                    $candidates[$phrase] = true;
                 }
             }
         }
-        if ($courseid > 0) {
-            if (!isset(self::$namecache[$courseid])) {
-                $rs = $DB->get_recordset_sql(
-                    "SELECT DISTINCT u.id, u.firstname, u.lastname
-                       FROM {user} u
-                       JOIN {user_enrolments} ue ON ue.userid = u.id
-                       JOIN {enrol} e ON e.id = ue.enrolid
-                      WHERE e.courseid = :courseid AND u.deleted = 0",
-                    ['courseid' => $courseid]
-                );
-                self::$namecache[$courseid] = [];
-                foreach ($rs as $row) {
-                    self::$namecache[$courseid][] = (string) $row->firstname;
-                    self::$namecache[$courseid][] = (string) $row->lastname;
-                }
-                $rs->close();
-            }
-            $names = array_merge($names, self::$namecache[$courseid]);
-        }
-        return array_values(array_unique(array_filter($names, static fn(string $n): bool => trim($n) !== '')));
+        return array_keys($candidates);
     }
 
     /**

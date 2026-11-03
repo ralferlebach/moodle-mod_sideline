@@ -18,9 +18,10 @@ npm-debug.log*
 vendor/
 composer.lock
 
-# moodle-plugin-ci working directories
-ci/
-moodle/
+# moodle-plugin-ci working directories, only at the top level: an unanchored "ci/" would also
+# hide tools/ci/ from git.
+/ci/
+/moodle/
 
 # PHPUnit / coverage
 .phpunit.result.cache

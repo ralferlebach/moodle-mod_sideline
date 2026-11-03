@@ -50,14 +50,15 @@ class trace_recorder {
      * @param int $userid User id.
      * @param array $trace Trace data.
      * @param int $now Current time.
+     * @return int Id of the trace, 0 when tracing is not active.
      */
-    public static function record(int $sidelineid, int $userid, array $trace, int $now): void {
+    public static function record(int $sidelineid, int $userid, array $trace, int $now): int {
         global $DB;
 
         if (!self::active($now)) {
-            return;
+            return 0;
         }
-        $DB->insert_record('sideline_trace', (object) [
+        return (int) $DB->insert_record('sideline_trace', (object) [
             'sidelineid' => $sidelineid,
             'userid' => $userid,
             'trace' => json_encode($trace, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),

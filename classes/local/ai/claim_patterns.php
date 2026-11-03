@@ -17,7 +17,7 @@
 namespace mod_sideline\local\ai;
 
 /**
- * Claim phrase lists of French, Spanish, Italian, Dutch and Portuguese (issue #13, P-09, P-24).
+ * Claim phrase lists of French, Spanish, Italian, Dutch and Portuguese (P-09, P-24).
  *
  * With these lists every language that the language detector knows can be checked semantically, so
  * no AI text reaches a learner in a language in which invented passes, unlockings, deadlines or

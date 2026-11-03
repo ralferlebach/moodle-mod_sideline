@@ -112,6 +112,50 @@ final class delivery_atomicity_test extends \advanced_testcase {
         $this->assertFalse($DB->record_exists('sideline_cache', ['sidelineid' => $instance->id, 'userid' => $userid]));
     }
 
+    public function test_a_withdrawal_removes_traces_rule_hits_and_the_records_of_the_ai_subsystem(): void {
+        global $DB;
+        set_config('tracing', 1, 'mod_sideline');
+        [$instance, $context] = $this->setup_coach();
+        $userid = (int) $this->student->id;
+        $fake = new fake_text_generator();
+        $fake->responder = fake_text_generator::echoing_tokens();
+        [$result] = $this->ask($instance, $context, $fake);
+        $this->assertSame(commentary_service::STATUS_OK, $result['status']);
+        $DB->insert_record('sideline_rulehit', (object) ['sidelineid' => $instance->id, 'userid' => $userid,
+            'rulekey' => 'custom_x', 'timeshown' => time()]);
+        $this->assertTrue($DB->record_exists('sideline_trace', ['sidelineid' => $instance->id, 'userid' => $userid]));
+
+        consent_manager::record_decision($instance, $userid, false, $context->id, time());
+        foreach (['sideline_cache', 'sideline_trace', 'sideline_rulehit'] as $table) {
+            $this->assertFalse($DB->record_exists($table, ['sidelineid' => $instance->id, 'userid' => $userid]), $table);
+        }
+        $this->assertTrue(
+            $DB->record_exists('sideline_consent_log', ['sidelineid' => $instance->id, 'userid' => $userid]),
+            'The evidence of the decision stays'
+        );
+    }
+
+    public function test_a_withdrawal_during_generation_leaves_no_trace_of_the_text(): void {
+        global $DB;
+        set_config('tracing', 1, 'mod_sideline');
+        [$instance, $context] = $this->setup_coach();
+        $fake = new fake_text_generator();
+        $echo = fake_text_generator::echoing_tokens();
+        $userid = (int) $this->student->id;
+        // Only the status changes, as if the withdrawing process died before it cleaned up.
+        $fake->responder = function (string $prompt) use ($echo, $instance, $userid) {
+            global $DB;
+            $DB->set_field('sideline_consent', 'status', consent_manager::WITHDRAWN, ['sidelineid' => $instance->id,
+                'userid' => $userid]);
+            return $echo($prompt);
+        };
+        [$result] = $this->ask($instance, $context, $fake);
+        $this->assertSame(commentary_service::STATUS_CONSENT_REQUIRED, $result['status']);
+        foreach (['sideline_cache', 'sideline_trace', 'sideline_rulehit'] as $table) {
+            $this->assertFalse($DB->record_exists($table, ['sidelineid' => $instance->id, 'userid' => $userid]), $table);
+        }
+    }
+
     public function test_an_invalidation_during_generation_discards_the_text_and_computes_it_again(): void {
         global $DB;
         [$instance, $context] = $this->setup_coach();

@@ -133,10 +133,15 @@ mkdir -p /tmp/claude-0/cd && cd /tmp/claude-0/cd && npx -y @puppeteer/browsers i
 
 ### 4.2 Ein Lauf
 
+Alle Skripte werden mit `bash` aufgerufen, nie direkt: Kommt die Codebasis ohne Dateirechte ins Repository (Upload im Browser, Windows), fehlt das Ausführungsrecht, und ein direkter Aufruf scheitert mit `Permission denied` (so geschehen im Frontend-Job von 0.4.0).
+
+**Abnahme immer auf dem GitHub-Checkout, nicht auf der Arbeitskopie.** `checkout.sh` baut, was GitHub Actions auschecken würde: Es übernimmt die Codebasis mit `git add -A` (also mit `.gitignore`) in ein Wegwerf-Repository, klont sie neu und entfernt alle Ausführungsrechte. Es meldet jede Datei, die `.gitignore` ausschließt, und endet dann mit Fehler. In 0.4.0 hat das unverankerte Muster `ci/` in `.gitignore` das Verzeichnis `tools/ci/` mit der Upgrade-Fixture versteckt; lokal fiel das nicht auf, weil die Läufe die Arbeitskopie kopierten.
+
 ```bash
-tools/ci-local/ci.sh MOODLE_503_STABLE pgsql 8.3            # alle Schritte
-tools/ci-local/ci.sh MOODLE_405_STABLE pgsql 8.2 "codechecker phpdoc"   # einzelne Schritte, nach einem install
-SRC=/pfad/zum/entpackten/zip/sideline tools/ci-local/ci.sh MOODLE_502_STABLE mariadb 8.3   # Abnahme des ZIP
+bash tools/ci-local/checkout.sh /tmp/co                     # GitHub-Checkout; Fehler, wenn .gitignore etwas versteckt
+SRC=/tmp/co bash /tmp/co/tools/ci-local/ci.sh MOODLE_503_STABLE pgsql 8.3            # alle Schritte
+SRC=/tmp/co bash /tmp/co/tools/ci-local/ci.sh MOODLE_405_STABLE pgsql 8.2 "codechecker phpdoc"   # einzelne Schritte, nach einem install
+MOODLE_REPO=github SRC=/tmp/co bash /tmp/co/tools/ci-local/ci.sh MOODLE_503_STABLE pgsql 8.3 install   # Moodle-Stand von GitHub statt lokalem Baum
 ```
 
 Schritte und Optionen sind die aus `.github/workflows/moodle-plugin-ci-main.yml`:
@@ -156,11 +161,15 @@ Schritte und Optionen sind die aus `.github/workflows/moodle-plugin-ci-main.yml`
 Dazu kommen zwei weitere Jobs des Workflows:
 
 ```bash
-tools/ci-local/js-checks.sh                                     # Job "frontend" (Abschnitt 5)
-tools/ci-local/upgrade.sh MOODLE_405_STABLE pgsql 8.3 /pfad/zum/vorigen/release   # Job "upgrade"
+SRC=/tmp/co MPCI=/tmp/leer bash /tmp/co/tools/ci-local/js-checks.sh /home/claude/ci/<tag>/moodle   # Job "frontend" (Abschnitt 5)
+git -C <klon> worktree add /tmp/prev-0.4.0 <commit von 0.4.0>                          # alte Releases aus der Historie
+SRC=/tmp/co bash /tmp/co/tools/ci-local/upgrade.sh MOODLE_405_STABLE pgsql 8.3 /tmp/prev-0.4.0   # Job "upgrade"
+SRC=/tmp/co bash /tmp/co/tools/ci-local/playwright.sh MOODLE_503_STABLE 3 10           # Workflow "playwright": 3 volle Läufe, Gruppen-Journey 10-mal
 ```
 
-`upgrade.sh` installiert Moodle mit dem vorigen Release und legt mit dessen Code Daten an (`tools/ci/upgrade_seed.php`). Dann ersetzt es das Plugin durch die volle aktuelle Codebasis, führt das Upgrade aus, prüft das Schema (`check_database_schema.php`) und die Daten (`tools/ci/upgrade_verify.php`).
+`upgrade.sh` installiert Moodle mit einem älteren Release und legt mit dessen Code Daten an (`tools/ci/upgrade_seed.php`). Dann ersetzt es das Plugin durch die volle aktuelle Codebasis, führt das Upgrade aus, prüft das Schema (`check_database_schema.php`) und die Daten (`tools/ci/upgrade_verify.php`). Was angelegt und geprüft wird, hängt vom Ausgangsrelease ab: Daten wie vor 0.4.0 (damit die Upgrade-Schritte von 0.4.0 auf echten Daten laufen) oder Daten wie ab 0.4.0 (sie müssen unverändert bleiben). Der GitHub-Job prüft beide Ausgangsstände, den direkten Vorgänger und 0.3.2, auf 4.5/pgsql und 5.3/mariadb.
+
+`playwright.sh` macht, was der manuelle Workflow macht: frischer Moodle-Klon, `install.php`, `seed.php`, `php -S 127.0.0.1:8000`, `npm ci`, `npx playwright test`. Ohne Wiederholung fehlgeschlagener Tests (`retries: 0`).
 
 Ein Release-Gate oder einen Versionsgleichlauf gibt es nicht mehr (Issue #2). „CI complete“ fasst nur die funktionalen Jobs zusammen: Matrix, Frontend, Upgrade, Artefakt, Coverage, veraltete Dateien.
 
@@ -190,7 +199,7 @@ Vor einer Auslieferung laufen mindestens 4.5/8.2/pgsql und 5.3/8.3/pgsql vollst�
 moodle-plugin-ci prüft mit `grunt` nur `amd/src`, CSS und Gherkin. Die React-Quellen (TypeScript), die Tests und die Playwright-Skripte prüft:
 
 ```bash
-tools/ci-local/js-checks.sh /home/claude/ci/503-pgsql-8.3/moodle    # nach einem ci.sh-Lauf auf 5.3
+bash tools/ci-local/js-checks.sh /home/claude/ci/503-pgsql-8.3/moodle    # nach einem ci.sh-Lauf auf 5.3
 ```
 
 | Prüfung | Werkzeug |
@@ -198,8 +207,8 @@ tools/ci-local/js-checks.sh /home/claude/ci/503-pgsql-8.3/moodle    # nach einem
 | ESLint mit Moodles Regeln für alle JS/TS-Dateien (`amd/src`, `js/esm/src`, `js/esm/tests`, `tests/js`, `tests/playwright`) | `npx eslint --max-warnings 0` |
 | Moodles React-Lint | `grunt eslint:react --max-lint-warnings=0` (vorher `grunt esm`: erzeugt `tsconfig.aliases.json` und die Jest-Aliase) |
 | TypeScript strikt, nur das Plugin | `tsc --noEmit` mit eingeschränktem `include` |
-| Jest React-Panel (mit axe) | `npx jest public/mod/sideline/js/esm/tests` (dazu `jest-axe@10`, `--no-save`) |
-| Jest AMD-Panel (mit axe) | `tests/js/jest.config.js` mit eigener Werkzeugkette `/opt/mpci/jest-amd` (Moodles Babel 7.17 ist zu alt für babel-jest 30); läuft außerhalb des Moodle-Baums, sonst findet Node Moodles `node_modules` zuerst |
+| Jest React-Panel (mit axe) | `npx jest public/mod/sideline/js/esm/tests` (dazu `jest-axe@10.0.0`, `--no-save`) |
+| Jest AMD-Panel (mit axe) | `tests/js/jest.config.js` mit eigener Werkzeugkette, festgelegt durch `tools/ci-local/jest-amd/package-lock.json` und mit `npm ci` nach `$MPCI/jest-amd` installiert (Moodles Babel 7.17 ist zu alt für babel-jest 30); läuft außerhalb des Moodle-Baums, sonst findet Node Moodles `node_modules` zuerst. Ändert sich die Lockdatei, wird neu installiert. |
 | ESM-Bundle und AMD-Bundle aktuell | `grunt esm` und `grunt amd` neu bauen, mit der Quelle vergleichen |
 
 Nach einer Änderung an `js/esm/src` oder `amd/src` werden die Bundles im CI-Baum gebaut und zurückkopiert:
@@ -234,15 +243,12 @@ Ab 5.1 muss `pcov.directory` auf `public/mod/sideline` zeigen, sonst misst pcov 
 
 Reihenfolge, ohne Ausnahme:
 
-1. Version in `version.php` und beiden `adapter/*/version.php` anheben, gleiche Version und gleiches Release (Gleichlauf-Job).
+1. Version in `version.php` anheben (die Adapter nur, wenn sie sich ändern; es gibt keinen Versionsgleichlauf).
 2. `docs/CHANGELOG.md` ergänzen. Entfernte oder verschobene Dateien in `db/removed_files.txt` eintragen.
 3. ZIP bauen: volle Codebase ohne `.git`, `node_modules`, `test-results`, `playwright-report`. Name `mod_sideline-<release>.zip`, Wurzelordner `sideline/`.
-4. ZIP in ein leeres Verzeichnis entpacken und die Matrix aus Abschnitt 4.3 mit `SRC=<entpackt>/sideline` laufen lassen. Die Installation in eine frische Moodle-Site ist dabei Teil von `install`.
-5. `tools/ci-local/js-checks.sh` mit derselben Quelle.
-6. Zusätzlich prüfen:
-   - das Upgrade einer Entwicklungs-Site mit der Vorversion (`php admin/cli/upgrade.php`, danach `php admin/cli/check_database_schema.php`);
-   - die Stale-Files-Liste: Kein Pfad aus `db/removed_files.txt` existiert;
-   - der Versionsgleichlauf.
+4. ZIP in ein leeres Verzeichnis entpacken und daraus mit `checkout.sh` den GitHub-Checkout bauen (Abschnitt 4.2). Meldet `checkout.sh` eine ignorierte Datei, ist `.gitignore` zu korrigieren.
+5. Auf diesem Checkout: die Matrix aus Abschnitt 4.3, `js-checks.sh` mit leerem `MPCI`, `upgrade.sh` vom direkten Vorgänger und von 0.3.2 auf 4.5/pgsql und 5.3/mariadb, `playwright.sh` auf 4.5 und 5.3.
+6. Zusätzlich: die Stale-Files-Liste (kein Pfad aus `db/removed_files.txt` existiert).
 7. Erst wenn alles grün ist, wird ausgeliefert.
 
 ## 9. Stolpersteine
@@ -268,10 +274,16 @@ Reihenfolge, ohne Ausnahme:
 - **Moodle 5.x CLI:** `admin/cli/*.php` liegt im Wurzelverzeichnis, nicht unter `public/`.
 - **k6 und Moodle-Sitzungen:** `noCookiesReset`, sonst ist jede zweite Anfrage abgemeldet.
 - **Playwright-Login:** erst nach `networkidle` ausfüllen; Benutzertouren im Seed abschalten.
+- **Playwright, mehrere Personen:** jede Person in einem eigenen Browserkontext (`browser.newContext()`). Werden Cookies unter einer Seite gelöscht, deren JavaScript noch läuft, leitet deren nächste AJAX-Antwort zum Login um und bricht die folgende Navigation ab (`net::ERR_ABORTED`, Gruppen-Journey 0.4.0). Journeys stellen ihren Ausgangszustand selbst her, Wiederholungen sind abgeschaltet.
+- **`.gitignore` verankern:** `/ci/` statt `ci/`. Ein Muster ohne führenden Schrägstrich gilt in jedem Verzeichnis.
+- **Ausführungsrechte:** Skripte immer mit `bash <skript>` aufrufen, im Workflow wie lokal.
+- **`http_build_query()` in Moodle-Code:** Moodle 4.5 bis 5.1 setzen `arg_separator.output` auf `&amp;`. Ein so gebauter POST-Body kommt als `amp;feld` an. Das Trennzeichen immer angeben: `http_build_query($daten, '', '&')`.
+- **`admin/cli` liegt im Moodle-Wurzelverzeichnis,** auch ab 5.1, wenn das Web-Root `public/` ist. Workflows rufen `moodle/admin/cli/install.php` auf, nicht `$web/admin/cli/...`.
+- **Testdatenbank für `install.php`:** Lokal mit `CREATE DATABASE` anlegen; auf GitHub legt sie der PostgreSQL-Dienst an.
 - `core_ai\manager::user_policy_accepted()` **schreibt**; zum Lesen `get_user_policy_status()`.
 
 ## 10. Verifikationsstand
 
-Stand 03.11.2026, Version 0.4.0: Alle Abschnitte dieser Anleitung sind im Container ausgeführt. Auf dem entpackten Auslieferungs-ZIP lief Folgendes vollständig grün: die CI-Matrix aus Abschnitt 4.3 (je 14 Schritte inklusive Adapter-Suites und Races), `js-checks.sh`, `upgrade.sh` auf 4.5/pgsql und 5.3/mariadb, Playwright auf 4.5 und 5.3 sowie `tools/bench_groups.php` und k6 mit Gruppenmodus auf 5.3 mit beiden Datenbanken. Einzelheiten: `docs/TRACEABILITY.md`, Abschnitt Läufe.
+Stand 03.11.2026, Version 0.4.1: siehe `docs/ISSUE_NACHWEISE_0.4.1.md`, Abschnitt „Läufe“. Alle Läufe dort liefen auf dem GitHub-Checkout (`checkout.sh`) des entpackten Auslieferungs-ZIP.
 
 Nicht lokal nachgebildet: der Selenium-Container (stattdessen ChromeDriver mit demselben Chromium, Profil `chrome`) und die GitHub-Dienste für PostgreSQL und MariaDB (stattdessen lokale Server derselben Hauptversionen).

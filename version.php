@@ -29,7 +29,7 @@ $plugin->version   = 2026110300;
 $plugin->requires  = 2024100700; // Moodle 4.5.
 $plugin->supported = [405, 503];
 $plugin->maturity  = MATURITY_BETA;
-$plugin->release   = '0.4.0';
+$plugin->release   = '0.4.1';
 
 // Declare the MINIMUM version of each dependency that provides the API in use - never the current
 // build number. An exact pin breaks installation as soon as a sibling lags by a single release,

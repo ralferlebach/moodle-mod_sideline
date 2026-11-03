@@ -164,7 +164,7 @@ class scope_resolver {
      * Whether the teacher who added a source may still manage activities there.
      *
      * Sources saved before 0.3.0 carry no teacher (0). Without a verifiable teacher there is no current
-     * authorisation, so they do not count (issue #5) until a teacher who may manage activities there
+     * authorisation, so they do not count until a teacher who may manage activities there
      * confirms them by saving the settings (instance_config::save_sources records that teacher).
      *
      * @param int $editorid Teacher.

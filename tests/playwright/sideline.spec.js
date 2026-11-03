@@ -117,24 +117,44 @@ test('a learner selects several options with the keyboard and sees both in the a
     await expect(coach.getByText('Little time, Tired')).toBeVisible();
 });
 
-test('a group member sees a named statement only while the other person shares', async({page}) => {
-    await login(page, env.user('student1'));
-    await page.goto(`/mod/sideline/view.php?id=${env.groupcmid}`);
-    await expect(panel(page).getByText('Student2 from your group recently completed "Unit one".').first()).toBeAttached();
-    await expectAccessible(page);
+test('a group member sees a named statement only while the other person shares', async({browser}) => {
+    const named = 'Student2 from your group recently completed "Unit one".';
+    // Every visit in a browser context of its own: clearing the cookies under a page that is still
+    // running lets its pending requests redirect to the login page in the middle of the next navigation.
+    const visit = async(name, journey) => {
+        const context = await browser.newContext();
+        try {
+            const page = await context.newPage();
+            await login(page, env.user(name));
+            await page.goto(`/mod/sideline/view.php?id=${env.groupcmid}`);
+            await journey(page, panel(page));
+        } finally {
+            await context.close();
+        }
+    };
+    const share = async(coach, on) => {
+        const publish = coach.getByRole('checkbox', {name: 'Share my completed activities with my group'});
+        await expect(publish).toBeVisible();
+        if (await publish.isChecked() === on) {
+            return;
+        }
+        await publish.setChecked(on);
+        if (on) {
+            await coach.getByRole('checkbox', {name: 'My first name may be shown'}).check();
+        }
+        await coach.getByRole('button', {name: 'Save'}).click();
+        await expect(publish).toBeChecked({checked: on});
+    };
 
-    await page.context().clearCookies();
-    await login(page, env.user('student2'));
-    await page.goto(`/mod/sideline/view.php?id=${env.groupcmid}`);
-    const share = panel(page).getByRole('checkbox', {name: 'Share my completed activities with my group'});
-    await expect(share).toBeChecked();
-    await share.uncheck();
-    await panel(page).getByRole('button', {name: 'Save'}).click();
-    await expect(share).not.toBeChecked();
-
-    await page.context().clearCookies();
-    await login(page, env.user('student1'));
-    await page.goto(`/mod/sideline/view.php?id=${env.groupcmid}`);
-    await expect(panel(page).locator('[data-region="commentary"]')).toBeAttached();
-    await expect(panel(page)).not.toContainText('Student2');
+    // The journey sets its own starting state, so it gives the same result on every run.
+    await visit('student2', (page, coach) => share(coach, true));
+    await visit('student1', async(page, coach) => {
+        await expect(coach.getByText(named).first()).toBeAttached();
+        await expectAccessible(page);
+    });
+    await visit('student2', (page, coach) => share(coach, false));
+    await visit('student1', async(page, coach) => {
+        await expect(coach.locator('[data-region="commentary"]')).toBeAttached();
+        await expect(coach).not.toContainText('Student2');
+    });
 });

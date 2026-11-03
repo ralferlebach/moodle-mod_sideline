@@ -39,7 +39,7 @@ use mod_sideline\local\rules\rule_store;
  * the text, so any change in state, rights, visibility, answers or group facts that changes what
  * is said changes the fingerprint, with or without an event.
  *
- * Delivery is atomic with respect to withdrawals and invalidations (issue #3):
+ * Delivery is atomic with respect to withdrawals and invalidations:
  * - The cache write is a compare and swap. If it fails, something changed while the text was being
  *   generated, and the text is discarded: the whole computation runs again from fresh state, once.
  *   If it fails again, only the non-personal generic text is delivered and nothing is stored.
@@ -238,7 +238,7 @@ class commentary_service {
             if ($aiallowed) {
                 $texts = $this->gateway->phrase($recommendations, $user, $context, $persona, $lang, $now, (int) $sideline->id);
                 if ($texts !== null) {
-                    // A translated text is labelled as such, a template never is (issue #17).
+                    // A translated text is labelled as such, a template never is.
                     $commentary = $composer->with_texts(
                         $recommendations,
                         $cms,
@@ -293,11 +293,6 @@ class commentary_service {
                 // Invalidated (event, withdrawal, deletion) while we worked: this text may be stale. Discard it.
                 return $last ? $this->neutral($sideline, $userid, $consent, $persona, $lang) : null;
             }
-            // Write, then check: a withdrawal that happened after the check above is seen here (see class doc).
-            if (!self::deliverable($sideline, $userid)) {
-                commentary_cache::invalidate_user((int) $sideline->id, $userid);
-                return $this->consent_required($sideline, $userid);
-            }
             $new = array_filter(
                 array_diff($keys, $ctx->currentkeys),
                 static fn(string $k): bool => str_starts_with($k, 'custom_')
@@ -305,14 +300,14 @@ class commentary_service {
             if ($new) {
                 rule_store::record_hits((int) $sideline->id, $userid, $new, $now);
             }
-            trace_recorder::record((int) $sideline->id, $userid, [
+            $traceid = trace_recorder::record((int) $sideline->id, $userid, [
                 'states' => array_map(static fn($s) => $s->to_fingerprint_array(), array_values($states)),
                 'effects' => $effects,
                 'candidates' => array_map(static fn(recommendation $r) => $r->key, $candidates),
                 'selected' => $keys,
                 'source' => $commentary['source'] ?? '',
                 'aistatus' => $aiallowed ? $this->gateway->last_status() : 'not_allowed',
-                // What the provider exchanged (tokens only) and what the learner actually got (issue #14).
+                // What the provider exchanged (tokens only) and what the learner actually got.
                 'ai' => $aiallowed ? $this->gateway->last_exchange() : [],
                 'output' => array_map(
                     static fn(array $b): array => ['key' => $b['key'], 'text' => $b['text']],
@@ -324,6 +319,21 @@ class commentary_service {
                 'persona' => $persona,
                 'groupstatements' => count($groupfacts),
             ], $now);
+
+            // Write, then check, after the LAST write: a withdrawal that happened after the checks above is seen
+            // here, and everything written about the person is removed again (see class doc).
+            if (!self::deliverable($sideline, $userid)) {
+                consent_manager::forget_generated((int) $sideline->id, $userid);
+                return $this->consent_required($sideline, $userid);
+            }
+            // The same for the people a group statement is about, even when the sharing lock was not obtained.
+            if ($contributors && !(new group_service())->contributors_still_share($fresh, $contributors, $namedneeded)) {
+                commentary_cache::invalidate_user((int) $sideline->id, $userid);
+                if ($traceid) {
+                    $DB->delete_records('sideline_trace', ['id' => $traceid]);
+                }
+                return $last ? $this->neutral($sideline, $userid, $consent, $persona, $lang) : null;
+            }
 
             return $this->result($consent, $composer->sanitize($commentary, $cms), $sideline, $userid, $keys, $now, $persona);
         } finally {

@@ -60,8 +60,9 @@ if ($action === 'edit') {
     if ($data = $form->get_data()) {
         $definition = json_decode($data->definition, true);
         if (!empty($data->previewbutton)) {
+            // The form has validated the definition; a preview never runs on an invalid one.
             [$clean] = rule_schema::validate($definition, $cmids);
-            $preview = rule_preview::preview($sideline, $clean, $data->scenario);
+            $preview = $clean === null ? null : rule_preview::preview($sideline, $clean, $data->scenario);
         } else {
             rule_store::save($sideline, $definition, (int) $data->ruleid, !empty($data->enabled));
             redirect($url);

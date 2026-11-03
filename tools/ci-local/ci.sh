@@ -8,7 +8,8 @@
 # Results: $CI_WORK/<tag>/ci-logs/rc.txt (one "step rc=N" line per step) and one log per step.
 #
 # Differences to GitHub, none of which changes what is checked:
-#   - Moodle is cloned from the local tree of the branch when there is one (file://), else from GitHub;
+#   - Moodle is cloned from the local tree of the branch when there is one (file://), else from GitHub
+#     (MOODLE_REPO=github forces GitHub);
 #   - the database servers are the local ones (PostgreSQL 17 on 5432, MariaDB 11.4 on 3307);
 #   - Behat runs against chromedriver under Xvfb instead of the Selenium container (no Docker here).
 set -u
@@ -23,7 +24,8 @@ W=$CI_WORK/$TAG
 declare -A TREE=([MOODLE_405_STABLE]=/home/claude/moodle405 [MOODLE_500_STABLE]=/home/claude/moodle500
     [MOODLE_501_STABLE]=/home/claude/moodle501 [MOODLE_502_STABLE]=/home/claude/moodle502 [MOODLE_503_STABLE]=/home/claude/moodle)
 REPO=https://github.com/moodle/moodle.git
-[[ -d ${TREE[$BRANCH]:-}/.git ]] && REPO=file://${TREE[$BRANCH]}
+# MOODLE_REPO=github: always the current branch head from GitHub, as the GitHub jobs get it.
+[[ ${MOODLE_REPO:-} != github && -d ${TREE[$BRANCH]:-}/.git ]] && REPO=file://${TREE[$BRANCH]}
 
 export PATH=$MPCI/wrap:$MPCI/ci/bin:$MPCI/ci/vendor/bin:$PATH
 # moodle-plugin-ci creates the MariaDB database with the "mysql" client of the local MariaDB.

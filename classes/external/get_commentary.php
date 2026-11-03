@@ -21,6 +21,7 @@ use core_external\external_function_parameters;
 use core_external\external_multiple_structure;
 use core_external\external_single_structure;
 use core_external\external_value;
+use mod_sideline\local\ai\language_detector;
 use mod_sideline\local\ai\persona_registry;
 use mod_sideline\local\group\sharing_manager;
 use mod_sideline\local\instance_config;
@@ -92,9 +93,10 @@ class get_commentary extends external_api {
             'status' => $result['status'],
             'consent' => $result['consent'],
             'source' => $commentary['source'] ?? '',
-            // The language the text is in, and whether it differs from the learner's (missing pack, issue #17).
+            // The language the text is in, and whether it differs from the learner's (missing pack).
             'locale' => (string) ($commentary['locale'] ?? ''),
-            'langfallback' => !empty($commentary['locale']) && $commentary['locale'] !== current_language(),
+            'langfallback' => !empty($commentary['locale']) && language_detector::base_language((string) $commentary['locale'])
+                !== language_detector::base_language(current_language()),
             'persona' => $result['persona'] ?? '',
             'blocks' => $blocks,
             'question' => $result['question'] ? [$result['question']] : [],

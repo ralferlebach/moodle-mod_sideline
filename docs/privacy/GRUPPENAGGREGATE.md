@@ -1,6 +1,6 @@
 # Gruppenmodus: Ereignismatrix, Freigabekreis und Schutz der Aggregate
 
-Stand 0.4.0. Bezug: Issues #6, #7, #9, #12; L-G02 bis L-G08, P-G01 bis P-G06, N-02, N-04.
+Stand 0.4.1. Bezug: Issues #6, #7, #9, #12; L-G02 bis L-G08, P-G01 bis P-G06, N-02, N-04.
 
 ## 1. Ereignismatrix (#6) – zur fachlichen Freigabe
 
@@ -45,7 +45,8 @@ Neue Mitglieder einer zugelassenen Gruppe gelten **nicht** als Erweiterung. Die 
 |---|---|---|---|
 | Kleine Gruppe | k = 2, die empfangende Person kennt eine der beiden | Mindestgröße **3** (nicht konfigurierbar darunter; Upgrade hebt 2 auf 3) | bei k = 3 und zwei bekannten Personen ableitbar → akzeptiert nur mit Freigabe |
 | Exakte Anzahl | „4 haben abgeschlossen“, gestern „3“ | **keine Zahl**, nur Bänder: einige (3–5), mehrere (6–11), viele (≥ 12) | Bandwechsel an der Grenze |
-| Sequenzielle Abfragen | zweimal am Tag nachsehen, Differenz = die Person, die gerade fertig wurde | anonymes Zeitfenster **endet am Tagesbeginn**: innerhalb eines Tages dieselbe Aussage | Tageswechsel zeigt die Änderung des Vortags |
+| Sequenzielle Abfragen | zweimal am Tag nachsehen, Differenz = die Person, die gerade fertig wurde | anonymes Zeitfenster **endet am Tagesbeginn**: innerhalb eines Tages dieselbe Aussage. Wer am Tag einmal gezählt wurde, bleibt für den Tag gezählt (Tagesschnappschuss, Cache `groupsnapshot`), auch wenn Moodle die Erledigung neu abstempelt (ab- und wieder angehakt) | Tageswechsel zeigt die Änderung des Vortags; wer das Teilen beendet oder das Ereignis verliert, fällt sofort heraus; nach einer Cache-Leerung wird neu gezählt |
+| Ganze Gruppe | Gruppe aus der empfangenden Person und drei anderen, „einige andere haben abgeschlossen“ | keine anonyme Aussage, die **alle anderen Mitglieder** einer Gruppe umfassen würde (gezählt werden alle Mitglieder, nicht nur die teilenden, denn die Gruppengröße kennt die empfangende Person) | bei einer Person ohne Ereignis bleibt die Aussage über die übrigen; deren Zahl verrät das Band nicht genau |
 | Überlappende Gruppen | Person in G1 und G2, Differenz der Aussagen | **höchstens eine Gruppenaussage** je Kommentar; nur Bänder | bei sehr kleinen Schnittmengen theoretisch ableitbar |
 | Verschiedene Sichten | offen/geschlossen, verschiedene Empfänger | Sichtbarkeit der Gruppenmitgliedschaft wird beachtet (`OWN`/`NONE` → nichts) | – |
 | Aktivitäts- oder Zeitdaten | seltene Aktivität, genaue Uhrzeit | keine Zeitpunkte, nur „kürzlich“; nur Aktivitäten, die die empfangende Person sieht | seltene Aktivität mit kleinem Band |
@@ -54,7 +55,7 @@ Neue Mitglieder einer zugelassenen Gruppe gelten **nicht** als Erweiterung. Die 
 
 Namensaussagen betreffen nur Personen, die der Nennung zugestimmt haben. Ihr Zeitfenster endet „jetzt“, denn die Nennung ist gewollt. Für sie gelten weder Mindestgröße noch Bänder.
 
-Tests: `group_privacy_test` (k = 2 und k = 3, Bänder, Tagesstabilität, überlappende Gruppen, Sichtbarkeitswechsel, N+1) und `group_mode_test`.
+Tests: `group_privacy_test` (k = 2 und k = 3, Bänder, Tagesstabilität auch bei neu abgestempelter Erledigung, ganze Gruppe, überlappende Gruppen, Sichtbarkeitswechsel, N+1) und `group_mode_test`. Unabhängiges Review: `docs/security/REVIEW_0.4.1.md`.
 
 **Akzeptierte Restrisiken:** stehen in der Tabelle in der Spalte „Restrisiko“. Sie sind von der oder dem DSB zu bestätigen (D4).
 

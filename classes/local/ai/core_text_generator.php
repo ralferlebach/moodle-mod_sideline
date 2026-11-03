@@ -52,11 +52,30 @@ class core_text_generator implements text_generator {
         return true;
     }
 
+    /**
+     * Generate a text through the AI subsystem.
+     *
+     * The action is registered in the learner's user context, not in the activity's: Moodle's AI usage
+     * report shows teachers every AI call in their course with the person's name, which would tell them
+     * who uses the coach and so who consented (P-40). Whether AI may be used in the activity is decided
+     * with the activity's context in is_available(). Withdrawal empties these records again
+     * (consent_manager::forget_generated()).
+     *
+     * @param string $prompt Prompt.
+     * @param int $userid Learner.
+     * @param int $contextid Context of the activity (not used for the registration, see above).
+     * @return string|null
+     */
     #[\Override]
     public function generate(string $prompt, int $userid, int $contextid): ?string {
         $this->lasttokens = null;
         try {
-            $action = new generate_text(contextid: $contextid, userid: $userid, prompttext: $prompt);
+            $usercontext = \context_user::instance($userid, IGNORE_MISSING);
+            $action = new generate_text(
+                contextid: $usercontext ? $usercontext->id : $contextid,
+                userid: $userid,
+                prompttext: $prompt
+            );
             $response = \core\di::get(manager::class)->process_action($action);
         } catch (\Throwable $e) {
             // Provider failure, timeout or misconfiguration: the caller falls back to templates.

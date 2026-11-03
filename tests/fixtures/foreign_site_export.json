@@ -1,0 +1,66 @@
+{
+    "format": "mod_sideline_config",
+    "version": 3,
+    "settings": {
+        "consentrequired": 1,
+        "persona": "mentor"
+    },
+    "scope": {
+        "section": 0,
+        "activities": [
+            {
+                "modname": "page",
+                "name": "Lab report",
+                "section": 1
+            }
+        ]
+    },
+    "rules": [
+        {
+            "enabled": 1,
+            "definition": {
+                "key": "custom_foreign",
+                "category": "next",
+                "priority": 10,
+                "match": "all",
+                "conditions": [
+                    {
+                        "type": "activity",
+                        "cmid": 999,
+                        "field": "completion",
+                        "is": "no",
+                        "activity": {
+                            "modname": "page",
+                            "name": "Lab report"
+                        }
+                    }
+                ],
+                "action": "open",
+                "templates": {
+                    "en": "Do not forget {label}."
+                }
+            }
+        }
+    ],
+    "questions": [],
+    "sources": {
+        "courses": [
+            {
+                "shortname": "NOWHERE",
+                "idnumber": ""
+            }
+        ],
+        "categories": []
+    },
+    "groups": {
+        "all": false,
+        "items": [
+            {
+                "type": "group",
+                "name": "Ghost team",
+                "idnumber": ""
+            }
+        ]
+    },
+    "personas": []
+}

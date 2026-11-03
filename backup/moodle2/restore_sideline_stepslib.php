@@ -55,7 +55,7 @@ class restore_sideline_activity_structure_step extends restore_activity_structur
         $data = (object) $data;
         $oldid = $data->id;
         $data->course = $this->get_courseid();
-        // Backups of older versions: the same minimum as the form (issue #12), completions as event type.
+        // Backups of older versions: the same minimum as the form, completions as event type.
         $data->groupminsize = max(\mod_sideline\local\instance_config::MIN_GROUP_SIZE, (int) ($data->groupminsize ?? 3));
         $data->groupevents = $data->groupevents ?? 'completed';
         $data->groupcircle = null;
@@ -94,7 +94,7 @@ class restore_sideline_activity_structure_step extends restore_activity_structur
         if ($data->groupid || $data->groupingid) {
             $DB->insert_record('sideline_group', $data);
         } else {
-            // The admitted group was not restored. An empty list would admit every group (issue #9, #18).
+            // The admitted group was not restored. An empty list would admit every group.
             $this->droppedgroups = true;
         }
     }
@@ -143,27 +143,42 @@ class restore_sideline_activity_structure_step extends restore_activity_structur
         if ($this->droppedgroups && !$DB->record_exists('sideline_group', ['sidelineid' => $newid])) {
             $DB->set_field('sideline', 'sharingmode', \mod_sideline\local\instance_config::GROUP_INDIVIDUAL, ['id' => $newid]);
         }
-        // The restored circle becomes the reference for later changes (issue #9).
+        // The restored circle becomes the reference for later changes.
         \mod_sideline\local\instance_config::refresh_group_circle((int) $newid);
         // Custom rules: activity references follow the restored course modules; a rule whose reference
-        // cannot be mapped is disabled rather than pointed at a wrong activity.
+        // cannot be mapped is disabled rather than pointed at a wrong activity. A backup file is input from
+        // outside: a definition that the rule form would refuse is not restored at all.
+        $courseid = (int) $DB->get_field('sideline', 'course', ['id' => $newid]);
+        $validcmids = array_map('intval', array_keys(get_fast_modinfo($courseid)->get_cms()));
         foreach ($DB->get_records('sideline_rule', ['sidelineid' => $newid]) as $row) {
             $definition = json_decode($row->definition, true);
             if (!is_array($definition)) {
+                $DB->delete_records('sideline_rule', ['id' => $row->id]);
                 continue;
             }
             $enabled = (int) $row->enabled;
-            foreach ($definition['conditions'] ?? [] as $i => $condition) {
-                if (!empty($condition['cmid'])) {
+            $unmapped = [];
+            foreach ((array) ($definition['conditions'] ?? []) as $i => $condition) {
+                if (is_array($condition) && !empty($condition['cmid'])) {
                     $mapped = restore_dbops::get_backup_ids_record($this->get_restoreid(), 'course_module', $condition['cmid']);
                     if ($mapped && !empty($mapped->newitemid)) {
                         $definition['conditions'][$i]['cmid'] = (int) $mapped->newitemid;
                     } else {
                         $enabled = 0;
+                        $unmapped[] = (int) $condition['cmid'];
                     }
                 }
             }
-            $DB->update_record('sideline_rule', (object) ['id' => $row->id, 'definition' => json_encode($definition),
+            // A reference that could not be mapped only disables the rule; everything else must be valid.
+            [$normalised, $errors] = \mod_sideline\local\rules\rule_schema::validate(
+                $definition,
+                array_merge($validcmids, $unmapped)
+            );
+            if ($normalised === null || $errors) {
+                $DB->delete_records('sideline_rule', ['id' => $row->id]);
+                continue;
+            }
+            $DB->update_record('sideline_rule', (object) ['id' => $row->id, 'definition' => json_encode($normalised),
                 'enabled' => $enabled]);
         }
         foreach ($DB->get_records('sideline_scope', ['sidelineid' => $newid]) as $row) {

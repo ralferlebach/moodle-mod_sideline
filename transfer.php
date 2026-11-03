@@ -57,7 +57,7 @@ if ($data = $form->get_data()) {
     $content = $form->get_file_content('importfile');
     $parts = array_values(array_filter(config_transfer::PARTS, static fn($p) => !empty($data->{'part_' . $p})));
     try {
-        $migrated = config_transfer::migrate(json_decode((string) $content, true));
+        $migrated = config_transfer::decode((string) $content);
         $report = config_transfer::preview($sideline, $migrated, $parts, $data->conflict);
         if (!empty($data->confirm)) {
             config_transfer::apply($sideline, $report['plan']);

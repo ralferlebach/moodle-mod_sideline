@@ -77,7 +77,7 @@ class question_form extends \moodleform {
         $mform->setType('mcoptions', PARAM_TEXT);
         $mform->addHelpButton('mcoptions', 'qmcoptions', 'mod_sideline');
         $mform->hideIf('mcoptions', 'qtype', 'neq', question_type::MC);
-        // Multiple selection (issue #11): how many options may be chosen, and how their effects combine.
+        // Multiple selection: how many options may be chosen, and how their effects combine.
         $mform->addElement('advcheckbox', 'mcmultiple', get_string('qmcmultiple', 'mod_sideline'));
         $mform->addHelpButton('mcmultiple', 'qmcmultiple', 'mod_sideline');
         $mform->hideIf('mcmultiple', 'qtype', 'neq', question_type::MC);

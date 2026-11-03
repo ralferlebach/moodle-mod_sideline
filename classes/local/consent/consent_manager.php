@@ -58,7 +58,7 @@ class consent_manager {
     }
 
     /**
-     * The same decision as allows_processing() as an SQL condition, for set-based queries (issue #7).
+     * The same decision as allows_processing() as an SQL condition, for set-based queries.
      *
      * The query must LEFT JOIN {sideline_consent} under the given alias on user and instance.
      *
@@ -80,7 +80,7 @@ class consent_manager {
     }
 
     /**
-     * Which of the given users currently allow processing, in one query (issue #7).
+     * Which of the given users currently allow processing, in one query.
      *
      * @param \stdClass $sideline Instance record.
      * @param int[] $userids Users.
@@ -206,7 +206,7 @@ class consent_manager {
         // status is written above, before the rows are deleted here; a generation writes its row before it
         // reads the status again (commentary_service, write then check). So a generation in flight either
         // sees this decision and deletes its own row, or its row is deleted here. The lock only shortens the
-        // window; if it cannot be obtained in time, the rows are deleted all the same (issue #3).
+        // window; if it cannot be obtained in time, the rows are deleted all the same.
         if ($new !== self::ACCEPTED) {
             // No processing means no publication either: group sharing ends with the consent (L-G06).
             if ($DB->record_exists('sideline_publish', ['sidelineid' => $sideline->id, 'userid' => $userid, 'publish' => 1])) {
@@ -215,7 +215,7 @@ class consent_manager {
             $lock = ($locks ?? \core\lock\lock_config::get_lock_factory('mod_sideline'))
                 ->get_lock('gen_' . $sideline->id . '_' . $userid, 10);
             try {
-                commentary_cache::invalidate_user((int) $sideline->id, $userid);
+                self::forget_generated((int) $sideline->id, $userid);
             } finally {
                 if ($lock) {
                     $lock->release();
@@ -223,5 +223,37 @@ class consent_manager {
             }
         }
         return $new;
+    }
+
+    /**
+     * Remove what was generated about a person in an instance: the cached commentary, the decision traces
+     * with the delivered texts, the rule hits, and the prompts and answers that Moodle's AI subsystem kept
+     * of the person's AI calls (all of them, as the subsystem does not tell instances apart; P-47).
+     *
+     * Interview answers, consent evidence and sharing decisions are the person's own records and stay.
+     *
+     * @param int $sidelineid Instance id.
+     * @param int $userid User id.
+     */
+    public static function forget_generated(int $sidelineid, int $userid): void {
+        global $DB;
+
+        commentary_cache::invalidate_user($sidelineid, $userid);
+        $DB->delete_records('sideline_trace', ['sidelineid' => $sidelineid, 'userid' => $userid]);
+        $DB->delete_records('sideline_rulehit', ['sidelineid' => $sidelineid, 'userid' => $userid]);
+        // The plugin's AI calls run in the person's user context (core_text_generator); core's privacy API
+        // empties prompt and answer there. Never an error for the decision itself.
+        $user = \core_user::get_user($userid);
+        if ($user && class_exists(\core_ai\privacy\provider::class)) {
+            try {
+                \core_ai\privacy\provider::delete_data_for_user(new \core_privacy\local\request\approved_contextlist(
+                    $user,
+                    'core_ai',
+                    [\context_user::instance($userid)->id]
+                ));
+            } catch (\Throwable $e) {
+                debugging('mod_sideline: the AI subsystem kept its records: ' . $e->getMessage(), DEBUG_DEVELOPER);
+            }
+        }
     }
 }

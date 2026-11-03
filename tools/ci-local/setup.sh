@@ -20,11 +20,7 @@ if [[ ! -x $MPCI/ci/bin/moodle-plugin-ci ]]; then
 fi
 install -m 755 "$HERE/npm" "$HERE/composer" "$MPCI/wrap/"
 
-# Jest toolchain for the AMD panel tests (Moodle's Babel 7.17 is too old for current babel-jest).
-if [[ ! -x $MPCI/jest-amd/node_modules/.bin/jest ]]; then
-    mkdir -p "$MPCI/jest-amd" && (cd "$MPCI/jest-amd" && npm init -y > /dev/null &&
-        npm install --no-progress --no-audit --no-fund jest@30 jest-environment-jsdom@30 babel-jest@30 @babel/core@7 @babel/preset-env@7 jest-axe@10)
-fi
+# The pinned Jest toolchain of the AMD panel tests (tools/ci-local/jest-amd) is installed by js-checks.sh itself.
 
 mkdir -p /opt/google/chrome
 rm -f /opt/google/chrome/chrome

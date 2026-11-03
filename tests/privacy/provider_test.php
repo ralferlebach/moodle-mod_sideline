@@ -140,4 +140,42 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         // The instance itself and its configuration stay.
         $this->assertSame(1, $DB->count_records('sideline'));
     }
+
+    public function test_teachers_who_authorised_sources_and_authors_of_personas_are_covered(): void {
+        global $DB;
+        $gen = $this->getDataGenerator();
+        $teacher = $gen->create_and_enrol($this->course, 'editingteacher');
+        $further = $gen->create_course();
+        $DB->insert_record('sideline_source', (object) ['sidelineid' => $this->sideline->id, 'courseid' => $further->id,
+            'usermodified' => $teacher->id]);
+        $this->setAdminUser();
+        $gen->get_plugin_generator('mod_sideline')->create_persona(['shortname' => 'chess']);
+        $admin = get_admin();
+
+        $this->assertEquals([$this->context->id], provider::get_contexts_for_userid($teacher->id)->get_contextids());
+        $this->assertContains((int) \context_system::instance()->id, array_map(
+            'intval',
+            provider::get_contexts_for_userid($admin->id)->get_contextids()
+        ));
+        $userlist = new userlist($this->context, 'mod_sideline');
+        provider::get_users_in_context($userlist);
+        $this->assertContains((int) $teacher->id, array_map('intval', $userlist->get_userids()));
+
+        provider::export_user_data(new approved_contextlist($teacher, 'mod_sideline', [$this->context->id]));
+        $exported = writer::with_context($this->context)->get_data([get_string('privacy:path:sideline_source', 'mod_sideline')]);
+        $this->assertEquals([['course' => (int) $further->id]], $exported->items);
+
+        // Deleting the teacher's data leaves the source waiting for a new confirmation, never evaluated without one.
+        provider::delete_data_for_user(new approved_contextlist($teacher, 'mod_sideline', [$this->context->id]));
+        $this->assertSame(0, (int) $DB->get_field('sideline_source', 'usermodified', ['courseid' => $further->id]));
+        $this->assertSame(1, \mod_sideline\local\instance_config::count_unconfirmed_sources((int) $this->sideline->id));
+
+        provider::delete_data_for_user(new approved_contextlist($admin, 'mod_sideline', [\context_system::instance()->id]));
+        $this->assertFalse($DB->record_exists_select(
+            'sideline_persona',
+            'usermodified = ? OR approvedby = ?',
+            [$admin->id, $admin->id]
+        ));
+        $this->assertTrue($DB->record_exists('sideline_persona', ['shortname' => 'chess']), 'The persona itself stays');
+    }
 }

@@ -155,14 +155,45 @@ final class language_matrix_test extends \advanced_testcase {
      * Install a minimal language pack, as the CI sites have only English.
      *
      * @param string $lang Language code.
+     * @param string $parent Parent language, empty for none.
      */
-    private function install_language(string $lang): void {
+    private function install_language(string $lang, string $parent = ''): void {
         global $CFG;
         $dir = $CFG->dataroot . '/lang/' . $lang;
         check_dir_exists($dir);
         file_put_contents($dir . '/langconfig.php', "<?php\n\$string['thislanguage'] = '$lang';\n"
-            . "\$string['parentlanguage'] = '';\n\$string['strftimedatetimeshort'] = '%d.%m.%Y %H:%M';\n");
+            . "\$string['parentlanguage'] = '$parent';\n\$string['strftimedatetimeshort'] = '%d.%m.%Y %H:%M';\n");
         get_string_manager()->reset_caches(true);
+    }
+
+    public function test_an_installed_pack_without_texts_of_the_plugin_is_labelled_as_fallback(): void {
+        global $CFG;
+        // A pack from the Moodle language server: installed, but without this plugin.
+        $this->install_language('pl');
+        $result = $this->ask_in('pl', new fake_text_generator());
+        $this->assertSame('template', $result['commentary']['source']);
+        $this->assertSame('en', $result['commentary']['locale'], 'English text, labelled as English');
+        $this->assertStringContainsString('You have completed', $result['commentary']['blocks'][0]['text']);
+
+        // A local customisation in that language makes it the language of the text.
+        check_dir_exists($CFG->langlocalroot . '/pl_local');
+        file_put_contents($CFG->langlocalroot . '/pl_local/sideline.php', "<?php\n\$string['tpl_progress'] = 'Ukończono "
+            . "{\$a->done} z {\$a->total}.';\n");
+        get_string_manager()->reset_caches(true);
+        $this->assertSame('pl', \mod_sideline\local\service\message_composer::text_language('pl'));
+    }
+
+    public function test_a_child_language_takes_the_texts_of_its_parent_without_a_fallback_label(): void {
+        $this->install_language('de');
+        $this->install_language('de_du', 'de');
+        $this->assertSame('de', \mod_sideline\local\service\message_composer::text_language('de_du'));
+        $this->assertSame('de', \mod_sideline\local\service\message_composer::text_language('de'));
+        $this->assertSame('en', \mod_sideline\local\service\message_composer::text_language('en_us'));
+        $silent = new fake_text_generator();
+        $silent->responder = static fn(): string => 'no answer';
+        $result = $this->ask_in('de_du', $silent);
+        $this->assertStringContainsString('Du hast bisher', $result['commentary']['blocks'][0]['text']);
+        $this->assertSame('de', language_detector::base_language($result['commentary']['locale']));
     }
 
     public function test_switching_the_language_at_runtime_changes_text_and_cache(): void {

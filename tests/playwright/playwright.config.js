@@ -32,7 +32,8 @@ module.exports = defineConfig({
     expect: {timeout: 15000},
     fullyParallel: false,
     workers: 1,
-    retries: process.env.CI ? 1 : 0,
+    // No retries: a journey that only passes on the second attempt is a failure.
+    retries: 0,
     reporter: process.env.CI ? [['list'], ['html', {open: 'never', outputFolder: 'playwright-report'}]] : 'list',
     use: {
         baseURL: process.env.SL_BASE_URL,

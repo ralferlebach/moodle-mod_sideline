@@ -66,7 +66,8 @@ jobs:
           rm -rf "$web/mod/sideline/.git"
           (cd moodle && composer install --no-dev --no-interaction --quiet)
           mkdir -p /tmp/moodledata
-          php "$web/admin/cli/install.php" \
+          # admin/cli stays in the Moodle root in every layout, also when the web root is public/.
+          php moodle/admin/cli/install.php \
             --non-interactive --agree-license \
             --dbtype=pgsql --dbhost=127.0.0.1 --dbport=5432 --dbname=moodle --dbuser=moodle --dbpass=moodle \
             --wwwroot="$WWWROOT" --dataroot=/tmp/moodledata \

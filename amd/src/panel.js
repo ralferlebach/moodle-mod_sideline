@@ -291,7 +291,7 @@ export const init = (rootid) => {
         show(el('div', {'data-region': 'consent'}, nodes));
     };
 
-    // The message blocks, labelled when translated or in a fallback language (issue #17).
+    // The message blocks, labelled when translated or in a fallback language.
     const renderCommentary = (data) => {
         const commentary = el('div', {'data-region': 'commentary'}, data.blocks.map((b) => renderBlock(b, !!props.typing)));
         if (data.locale) {

@@ -1,6 +1,6 @@
 # Datenschutz: Datenregister, KI-Protokolle, Löschung und offene Entscheidungen
 
-Stand 0.4.0 (03.11.2026). Bezug: Issues #4, #14, #6, #12, #18; Lastenheft L-13, L-16, L-17, L-20; Pflichtenheft P-22, P-23, P-26, P-40, P-41, P-45 bis P-48, N-04.
+Stand 0.4.1 (03.11.2026). Bezug: Issues #3, #4, #14, #6, #12, #18, #24; Lastenheft L-13, L-16, L-17, L-20; Pflichtenheft P-22, P-23, P-26, P-40, P-41, P-45 bis P-48, N-04.
 
 Dieses Dokument ist die **technische Grundlage** für die fachliche Datenschutzprüfung. Es ersetzt sie nicht. Rechtsgrundlagen, Fristen und die DSFA-Entscheidung legt die oder der Datenschutzbeauftragte der Einrichtung fest. Die Stellen, an denen diese Entscheidung aussteht, sind mit **[Entscheidung DSB]** markiert.
 
@@ -18,7 +18,7 @@ Dieses Dokument ist die **technische Grundlage** für die fachliche Datenschutzp
 | `sideline_trace` | Entscheidungsprotokoll nur bei aktiver Ablaufverfolgung: Zustände, Kandidaten, Auswahl, **ausgelieferter Text**, KI-Austausch mit Tokens (Prompt-Hash, validierte Tokentexte) | ja | Support, Auskunft (P-41) | nur Website-Admins über den Debug-Export | `traceretentiondays` (14), Ablaufverfolgung schaltet sich zum gesetzten Ende ab | Privacy-API |
 | `sideline_debuglog` | Zugriffsprotokoll des Debug-Exports: Admin, Zweck, Zeitraum | ja (Admin, betroffene Person) | Zugriffsaudit | Admins | `auditretentiondays` (365) | Privacy-API anonymisiert den Admin |
 | `sideline_aiusage` | KI-Kostenbuch: Instanz, Zweck, Erfolg, Tokens, Zeit, Abschluss | nein | Kostenobergrenzen (P-31) | Admin (Zusammenfassung) | 31 Tage | – |
-| `ai_action_register`, `ai_action_generate_text` (Moodle-Kern) | KI-Aktion mit Nutzer- und Kontext-ID, Prompt und Antwort | ja (IDs); Prompt/Antwort enthalten nur Tokens | Kernprotokoll des KI-Subsystems | Admins; KI-Anbieter erhält den Prompt | Kern-Einstellung bzw. Privacy-API des Kerns **[Entscheidung DSB]** | Privacy-API von `core_ai` leert Prompt und Antwort (Test `ai_integration_test::test_translation_step_through_core_keeps_tokens_and_core_stores_only_tokens`) |
+| `ai_action_register`, `ai_action_generate_text` (Moodle-Kern) | KI-Aktion mit Nutzer- und Kontext-ID, Prompt und Antwort | ja (IDs); Prompt/Antwort enthalten nur Tokens | Kernprotokoll des KI-Subsystems | Admins; KI-Anbieter erhält den Prompt | unbegrenzt, der Kern löscht nicht von selbst (Abschnitt 5) **[Entscheidung DSB]** | Privacy-API von `core_ai` leert Prompt und Antwort (Test `ai_integration_test::test_translation_step_through_core_keeps_tokens_and_core_stores_only_tokens`) |
 
 Lehrende haben keinen Zugriff auf persönliche Daten, Antworten, Zustimmungen oder Gruppenfreigaben anderer (L-16, P-40; Tests `access_security_test`, Behat „Teachers manage questions but never see answers“).
 
@@ -32,17 +32,39 @@ Nur der Prompt, den `prompt_builder` aus `pseudonymizer` zusammensetzt:
 
 `prompt_text_guard` weist einen frei konfigurierten Text zurück, wenn er eines davon enthält: E-Mail-Adressen, Links und Domains, @-Handles, IP-Adressen, Telefonnummern, genaue Daten (numerisch, ISO, Monatsnamen in sieben Sprachen), Uhrzeiten, Zahlen ab drei Stellen, Kennungen wie „id 42“, fremde oder gefälschte Tokens, Markup, Anweisungen an das Modell (Prompt-Injection) oder **Vor- und Nachnamen aller in den Kurs eingeschriebenen Personen** und der lernenden Person selbst. Dann wird **nichts gesendet**; ausgeliefert wird der lokale Vorlagentext (statischer Fallback, Status `unsafe_input:<grund>`). Persona-Stile (von Admins, websiteweit) laufen durch dieselbe Prüfung, ohne Namensliste.
 
+**Namensprüfung ohne Namensliste (Issue #24):** Die Namen der Kursteilnehmenden werden nicht in den Speicher geladen. `prompt_text_guard::course_name()` bildet aus dem Freitext alle Wortfolgen aus einem bis vier Wörtern und fragt die Datenbank, ob eine davon der Vor- oder Nachname einer in den Kurs eingeschriebenen Person ist (aktiv oder nicht, jede Rolle; Groß- und Kleinschreibung egal, auf MariaDB auch Akzente). Ein Text hat höchstens 500 Zeichen, also höchstens zwei Abfragen, unabhängig von der Kursgröße. Gemessen (`tools/bench_names.php`, Worst-Case-Text): bei 20 000 Einschreibungen zwei Abfragen, 70 ms (PostgreSQL) bzw. 121 ms (MariaDB), unter 1 KiB Speicher. Bei einem Datenbankfehler wird **nichts gesendet** (Grund `budget`).
+
+**Inventar: was ein Prompt enthält und was davon auf eine Person schließen lassen kann (#4)**
+
+| Feld | Inhalt | Identifizierend? | Restrisiko |
+|---|---|---|---|
+| Sicherheitsregeln, Ausgabeformat | fester Text des Plugins | nein | – |
+| Persona-Stil | Text der Admins, geprüft | nein (Prüfung wie oben, ohne Namensliste) | ein Name außerhalb des Kurses bliebe unerkannt |
+| Zielsprache | z. B. „German (de)“ | nein | sehr seltene Sprache in einem kleinen Kurs als Merkmal |
+| `learner_token` | `[anonuser1]` | nein | – |
+| Kategorie und Schlüssel je Baustein | z. B. `next`, `custom_reminder` | nein | eigene Regelschlüssel könnten sprechend sein (`custom_reminder_mueller`) |
+| Aktivitäten | Tokens `[anonmod1]` | nein | – |
+| Termine | Tokens `[anondate1]` und grobe Kategorie (`this_week`) | nein | – |
+| Fortschrittszahlen | `progress_done`, `progress_total` | mittelbar | mit Kurswissen zusammen ein Merkmal; ohne Kursname und Zeitpunkt nicht zuordenbar |
+| Gruppenaussagen | Tokens für Personen und Gruppe, Band statt Anzahl, Ereignisart | nein | siehe `GRUPPENAGGREGATE.md` |
+| Intent eigener Regeln | Text der Lehrperson, geprüft | nein, wenn die Prüfung greift | Name außerhalb des Kurses, unbekannte Kennungsformen, sprechender Regelschlüssel |
+| Feld `user` der Anfrage (vom Kern, nicht vom Plugin) | Die Kern-Anbieter OpenAI, Azure AI, DeepSeek und Ollama senden `sha256(siteidentifier + Nutzer-ID)` (`core_ai\provider::generate_userid()`) | **pseudonym, verkettbar:** gleich für alle Anfragen derselben Person auf derselben Website | Der Anbieter kann Anfragen einer Person über die Zeit verbinden, ohne sie zu kennen. Das Plugin kann das nicht abschalten; `core_ai` braucht die echte Nutzer-ID für Richtlinie und Protokoll. **[Entscheidung DSB, D5]** |
+| Lokale Metadaten | `core_ai` speichert Nutzer- und Kontext-ID, Prompt und Antwort | lokal ja | Aufbewahrung im Kern, siehe Abschnitt 5 |
+
 Unabhängig vom Prompt wird jede Antwort lokal geprüft (Struktur, Tokens, Zahlen, Links, Sprache, Behauptungen je Sprache). Eine Prompt-Injection, die durchkäme, kann deshalb keine erfundenen Fakten, Namen, Links oder Zahlen ausliefern (Test `prompt_guard_test::test_an_injected_answer_is_still_checked_independently_of_the_persona`, für jede eingebaute Persona).
 
 **Restrisiken (#4):**
 
-- Namen von Personen außerhalb des Kurses und Kennungen in unbekannten Formen erkennt die Prüfung nicht.
+- Namen von Personen außerhalb des Kurses und Kennungen in unbekannten Formen erkennt die Prüfung nicht. Ebenso wenig sprechende Schlüssel eigener Regeln.
 - Häufige Wörter, die zugleich Namen in einem Kurs sind (etwa „Will“, „May“), führen zum Fallback. Das ist ein Fehlalarm, also kein Datenabfluss. Der Text kommt dann ohne KI aus.
 - Pseudonymisierung ist keine Anonymisierung. Aus dem Kontext kann eine Person mittelbar identifizierbar bleiben (P-23).
 
 **Falsifikationsfälle, die getestet werden:** `tests/local/ai/prompt_guard_test.php` (21 Muster, Namen, Injection, alle Personas) und `tests/local/ai/ai_integration_test.php` (HTTP-Body am echten Moodle-KI-Adapter `aiprovider_openai` mit Guzzle-Mock: kein Klarname, kein Aktivitätsname, kein Kursname im Request).
 
 ## 3. Widerruf und Nebenläufigkeit (#3)
+
+- **Was ein Widerruf entfernt (ab 0.4.1):** Cache, Entscheidungsprotokolle (Traces), Regeltreffer und, über die Privacy-API des Kerns, Prompt und Antwort aller KI-Aufrufe des Plugins für diese Person (`consent_manager::forget_generated()`). Es bleiben die Interviewantworten, das Zustimmungsprotokoll und die Freigabeentscheidungen; sie gehören der Person und werden über ihre eigenen Wege gelöscht.
+- **KI-Aufrufe im Nutzerkontext:** Das Plugin registriert KI-Aufrufe im Nutzerkontext der lernenden Person, nicht im Kurs. Der KI-Nutzungsbericht des Kurses zeigt Lehrenden deshalb nicht, wer den Coach nutzt (sonst ließe sich die Zustimmung ablesen, P-40).
 
 - Ein Widerruf schreibt zuerst den neuen Status und löscht dann die Cachezeilen. Eine Erzeugung schreibt ihre Zeile und liest danach die Zustimmung erneut. Deshalb sieht in jeder Reihenfolge entweder die Erzeugung den Widerruf und löscht ihre eigene Zeile, oder der Widerruf löscht sie. Das hängt nicht an einer Sperre.
 - Ein Cache-Schreibvorgang, der wegen einer zwischenzeitlichen Invalidierung scheitert (CAS), verwirft den Text. Die Berechnung läuft einmal neu. Scheitert sie erneut, wird nur der nicht personenbezogene Grundtext gezeigt.
@@ -64,7 +86,8 @@ Siehe `docs/privacy/GRUPPENAGGREGATE.md`: Ereignismatrix (#6), Freigabekreis und
 - **KI-Protokolle des Kerns:**
   - Moodle speichert jede KI-Aktion mit Nutzer- und Kontext-ID (`ai_action_register`) sowie Prompt und Antwort (`ai_action_generate_text`). Durch die Pseudonymisierung enthalten beide nur Tokens (getestet).
   - Die Privacy-API des Kerns leert Prompt und Antwort einer Person (getestet).
-  - Ob und wie lange der Kern die Aktionen aufbewahrt, regelt der Kern. **[Entscheidung DSB]** Prüfen, ob die Kern-Aufbewahrung auf dem Zielsystem ausreichend begrenzt ist. Prüfen, welche Protokolle der Anbieter selbst führt (Auftragsverarbeitung).
+  - **Aufbewahrung im Kern (geprüft am Quelltext von Moodle 4.5 und 5.3):** Es gibt keine geplante Aufgabe und keine Einstellung, die alte Einträge in `ai_action_register` oder `ai_action_generate_text` löscht. Prompt und Antwort bleiben, bis eine Datenschutzanfrage sie leert (`core_ai\privacy\provider` setzt `prompt` und `generatedcontent` auf leer) oder ein Admin sie entfernt. Das Plugin greift nicht in Tabellen des Kerns ein.
+  - **[Entscheidung DSB, D3]** Aufbewahrungsfrist für diese Kern-Tabellen festlegen und auf dem Zielsystem umsetzen (z. B. regelmäßige Löschanfragen über `tool_dataprivacy` oder ein Wartungsskript des Betriebs). Prüfen, welche Protokolle der Anbieter selbst führt (D5).
 
 ## 6. Offene Entscheidungen (nicht technisch lösbar)
 
@@ -74,6 +97,6 @@ Siehe `docs/privacy/GRUPPENAGGREGATE.md`: Ereignismatrix (#6), Freigabekreis und
 | D2 | DSFA erforderlich? Bei KI-Einsatz mit Lernständen ist das wahrscheinlich | DSB | Abschnitte 1, 2, 4 |
 | D3 | Aufbewahrungsfristen Zustimmungsprotokoll, Antworten, Kern-KI-Protokolle | DSB | Einstellungen der Website |
 | D4 | Freigabe der Ereignismatrix des Gruppenmodus und der akzeptierten Restrisiken | Produktverantwortung und DSB | `GRUPPENAGGREGATE.md` |
-| D5 | Auftragsverarbeitung mit dem KI-Anbieter, Protokolle beim Anbieter | Verwaltung und DSB | Abschnitt 2 |
+| D5 | Auftragsverarbeitung mit dem KI-Anbieter, Protokolle beim Anbieter, verkettbare Nutzerkennung `user` des Kerns | Verwaltung und DSB | Abschnitt 2 (Inventar) |
 
 Solange D1 bis D5 offen sind, sind die Datenschutz-AK der Issues #4, #12 und #14 **technisch erfüllt, fachlich aber nicht abgenommen**.

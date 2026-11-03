@@ -71,7 +71,7 @@ final class config_transfer_test extends \advanced_testcase {
      * @return array
      */
     private function roundtrip(\stdClass $sideline): array {
-        return config_transfer::migrate(json_decode(json_encode(config_transfer::export($sideline)), true));
+        return config_transfer::decode(json_encode(config_transfer::export($sideline)));
     }
 
     public function test_sources_groups_and_personas_travel_and_are_resolved_by_name(): void {
@@ -235,5 +235,101 @@ final class config_transfer_test extends \advanced_testcase {
         $this->assertCount(1, $preview['plan']['rules']);
         $this->assertSame((int) $page->cmid, $preview['plan']['rules'][0]['definition']['conditions'][0]['cmid']);
         $this->assertCount(2, $preview['warnings'], 'The duplicate and the bare id');
+    }
+
+    /**
+     * Files that exceed a limit: the reason, and the file content.
+     *
+     * @return array
+     */
+    public static function limit_provider(): array {
+        $file = static fn(array $parts): string => json_encode(['format' => 'mod_sideline_config', 'version' => 3] + $parts);
+        $deep = [];
+        for ($i = 0; $i < config_transfer::MAX_DEPTH; $i++) {
+            $deep = [$deep];
+        }
+        $activity = ['modname' => 'page', 'name' => 'Lab'];
+        return [
+            'not json' => ['err_transfer_json', '{"format": "mod_sideline_config", "version": 3,'],
+            'not json at all' => ['err_transfer_json', 'sideline'],
+            'too deep' => ['err_transfer_limit', $file(['scope' => ['activities' => [['name' => $deep]]]])],
+            'too large' => ['err_transfer_limit',
+                $file(['settings' => ['persona' => str_repeat('x', config_transfer::MAX_BYTES)]])],
+            'text too long' => ['err_transfer_limit',
+                $file(['settings' => ['persona' => str_repeat('x', config_transfer::MAX_STRING + 1)]])],
+            'one rule too many' => ['err_transfer_limit',
+                $file(['rules' => array_fill(0, config_transfer::LIMITS['rules'] + 1, [])])],
+            'one activity too many' => ['err_transfer_limit',
+                $file(['scope' => ['activities' => array_fill(0, config_transfer::LIMITS['scope.activities'] + 1, $activity)]])],
+            'one source too many' => ['err_transfer_limit', $file(['sources' => ['courses' => array_fill(
+                0,
+                config_transfer::LIMITS['sources.courses'] + 1,
+                ['shortname' => 'X']
+            ), 'categories' => []]])],
+        ];
+    }
+
+    /**
+     * Test with data provider.
+     *
+     * @dataProvider limit_provider
+     * @param string $error Expected error string.
+     * @param string $content File content.
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('limit_provider')]
+    public function test_a_file_beyond_a_limit_is_rejected_as_a_whole(string $error, string $content): void {
+        try {
+            config_transfer::decode($content);
+            $this->fail('The file must be rejected');
+        } catch (\moodle_exception $e) {
+            $this->assertSame($error, $e->errorcode);
+        }
+    }
+
+    public function test_a_file_at_every_limit_is_read_completely(): void {
+        $activity = ['modname' => 'page', 'name' => 'Lab'];
+        $data = config_transfer::decode(json_encode(['format' => 'mod_sideline_config', 'version' => 3,
+            'settings' => ['persona' => str_repeat('x', config_transfer::MAX_STRING)],
+            'scope' => ['activities' => array_fill(0, config_transfer::LIMITS['scope.activities'], $activity)],
+            'rules' => array_fill(0, config_transfer::LIMITS['rules'], []),
+            'sources' => ['courses' => array_fill(0, config_transfer::LIMITS['sources.courses'], ['shortname' => 'X']),
+                'categories' => []],
+        ]));
+        $this->assertCount(config_transfer::LIMITS['scope.activities'], $data['scope']['activities']);
+        $this->assertCount(config_transfer::LIMITS['rules'], $data['rules']);
+        $this->assertSame(config_transfer::MAX_STRING, mb_strlen($data['settings']['persona']));
+    }
+
+    public function test_sources_beyond_the_limit_of_the_union_are_never_dropped_silently(): void {
+        $gen = $this->getDataGenerator();
+        $sideline = $this->coach($this->target);
+        $courses = [];
+        for ($i = 0; $i <= instance_config::MAX_SOURCES; $i++) {
+            $courses[$i] = $gen->create_course(['shortname' => 'U' . $i]);
+            $gen->enrol_user($this->teacher->id, $courses[$i]->id, 'editingteacher');
+        }
+        $existing = array_map(static fn($c) => (int) $c->id, array_slice($courses, 0, instance_config::MAX_SOURCES - 1));
+        instance_config::save_sources($sideline, $existing, (int) $this->teacher->id);
+        $file = static fn(array $names): string => json_encode(['format' => 'mod_sideline_config', 'version' => 3,
+            'sources' => ['courses' => array_map(static fn($n) => ['shortname' => $n], $names), 'categories' => []]]);
+
+        // One more fits: exactly at the limit.
+        $last = 'U' . (instance_config::MAX_SOURCES - 1);
+        $preview = config_transfer::preview($sideline, config_transfer::decode($file([$last])), ['sources'], 'replace');
+        $this->assertCount(1, $preview['plan']['sources']['courseids']);
+
+        // Two more do not: the import is refused, the union stays as it was.
+        try {
+            config_transfer::preview(
+                $sideline,
+                config_transfer::decode($file([$last, 'U' . instance_config::MAX_SOURCES])),
+                ['sources'],
+                'replace'
+            );
+            $this->fail('The import must be refused');
+        } catch (\moodle_exception $e) {
+            $this->assertSame('err_transfer_limit', $e->errorcode);
+        }
+        $this->assertCount(instance_config::MAX_SOURCES - 1, instance_config::get_sources((int) $sideline->id));
     }
 }

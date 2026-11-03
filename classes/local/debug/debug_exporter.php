@@ -83,7 +83,7 @@ class debug_exporter {
             'timecreated'
         );
         // The simulation shows what the learner would get now, as template text without AI. Every trace
-        // shows what was actually delivered then; whether it differs from the simulation is marked (issue #14).
+        // shows what was actually delivered then; whether it differs from the simulation is marked.
         $simulated = array_map(static fn(array $b): string => (string) $b['text'], $result['commentary']['blocks'] ?? []);
         foreach ($rows as $row) {
             $trace = json_decode($row->trace, true) ?: [];

@@ -37,6 +37,18 @@ class behat_mod_sideline_generator extends behat_generator_base {
                 'required' => ['activity', 'key', 'template'],
                 'switchids' => ['activity' => 'cmid'],
             ],
+            'sources' => [
+                'singular' => 'source',
+                'datagenerator' => 'source',
+                'required' => ['activity', 'course'],
+                'switchids' => ['activity' => 'cmid', 'course' => 'courseid'],
+            ],
+            'source categories' => [
+                'singular' => 'source category',
+                'datagenerator' => 'source_category',
+                'required' => ['activity', 'category'],
+                'switchids' => ['activity' => 'cmid', 'category' => 'categoryid'],
+            ],
         ];
     }
 
@@ -85,5 +97,47 @@ class behat_mod_sideline_generator extends behat_generator_base {
             'conditions' => [['type' => 'activity', 'cmid' => 0, 'field' => 'completion', 'is' => 'no']],
             'action' => 'none', 'templates' => ['en' => $data['template']],
         ]);
+    }
+
+    /**
+     * Add a further course to the course union of an instance.
+     *
+     * The column "editor" names the teacher whose rights authorise it; empty stands for a source that
+     * an installation before 0.3.0 left without a teacher (issue #5).
+     *
+     * @param array $data activity, course, editor.
+     */
+    protected function process_source(array $data): void {
+        global $DB;
+        $DB->insert_record('sideline_source', (object) [
+            'sidelineid' => $DB->get_field('course_modules', 'instance', ['id' => $data['cmid']]),
+            'courseid' => $data['courseid'],
+            'usermodified' => $this->editor_id($data['editor'] ?? ''),
+        ]);
+    }
+
+    /**
+     * Add a course branch (category) to the course union of an instance.
+     *
+     * @param array $data activity, category, editor.
+     */
+    protected function process_source_category(array $data): void {
+        global $DB;
+        $DB->insert_record('sideline_sourcecat', (object) [
+            'sidelineid' => $DB->get_field('course_modules', 'instance', ['id' => $data['cmid']]),
+            'categoryid' => $data['categoryid'],
+            'usermodified' => $this->editor_id($data['editor'] ?? ''),
+        ]);
+    }
+
+    /**
+     * User id of an editor by user name, 0 for none.
+     *
+     * @param string $username User name or empty.
+     * @return int
+     */
+    private function editor_id(string $username): int {
+        global $DB;
+        return $username === '' ? 0 : (int) $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
     }
 }

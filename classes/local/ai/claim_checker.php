@@ -34,7 +34,7 @@ use mod_sideline\local\model\recommendation;
  * and removed from the text, so that the positive form is not found inside them.
  *
  * Supported languages are those with phrase lists: English and German here, French, Spanish,
- * Italian, Dutch and Portuguese in claim_patterns (issue #13). AI text is only ever delivered in a
+ * Italian, Dutch and Portuguese in claim_patterns. AI text is only ever delivered in a
  * supported language, after the check in that language; for any other language the localised
  * template is served (P-24).
  *
@@ -409,7 +409,7 @@ class claim_checker {
         }
         if (str_starts_with($rec->key, 'group_') && ($rec->facts['event'] ?? 'completed') !== 'viewed') {
             // Others completed something; the learner's own state is not part of a group statement. Somebody
-            // who only opened an activity has not completed it (issue #6).
+            // who only opened an activity has not completed it.
             $allowed[] = self::DONE;
             $allowed[] = self::SUCCESS;
         }

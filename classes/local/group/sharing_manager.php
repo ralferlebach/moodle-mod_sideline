@@ -170,7 +170,7 @@ class sharing_manager {
             'userid, named'
         );
         // Sharing without (or after withdrawing) the analysis consent is no sharing (L-G06), checked for all
-        // candidates in one query (issue #7).
+        // candidates in one query.
         $allowed = array_flip(\mod_sideline\local\consent\consent_manager::users_allowing_processing($sideline, array_keys($rows)));
         $result = [];
         foreach ($rows as $userid => $row) {

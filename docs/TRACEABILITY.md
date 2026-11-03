@@ -1,10 +1,12 @@
-# Abdeckungsmatrix mod_sideline 0.4.0
+# Abdeckungsmatrix mod_sideline 0.4.1
 
 Stand: 03.11.2026. Jede Zeile nennt die Umsetzung und den **ausgeführten** Nachweis. Ausgeführt heißt: lokal im Container gelaufen, nicht in GitHub-CI (siehe P-37).
 
 Legende: ✔ umgesetzt und getestet · ◐ teilweise / mit benannter Lücke · ✘ offen
 
-Testorte: `tests/**/*_test.php` (PHPUnit, mod_sideline_testsuite), `adapter/*/tests` (slcmod-Suites), `tests/behat/sideline.feature` (Behat), `js/esm/tests` (Jest).
+Testorte: `tests/**/*_test.php` (PHPUnit, mod_sideline_testsuite), `adapter/*/tests` (slcmod-Suites), `tests/behat/*.feature` (Behat), `js/esm/tests` und `tests/js` (Jest), `tests/playwright` (Playwright).
+Läufe (0.4.1, 03.11.2026): auf dem GitHub-Checkout (`tools/ci-local/checkout.sh`) des entpackten Auslieferungs-ZIP, mit moodle-plugin-ci 4.5.11 lokal. Ergebnisse und Einzelheiten: `docs/ISSUE_NACHWEISE_0.4.1.md`, Abschnitt „Gesamtergebnis“. Neu gegenüber 0.4.0: PHPUnit 461 (vorher 421), Behat 30 Szenarien (vorher 17; `course_union.feature`, `transfer.feature`, `languages.feature`), Playwright 10 Journeys (vorher 6; `a11y.spec.js`), Upgrade von 0.4.0 und von 0.3.2, `tools/bench_names.php`, unabhängiges Security-/Privacy-Review (`docs/security/REVIEW_0.4.1.md`).
+
 Läufe (0.4.0, 03.11.2026), alle auf dem entpackten Auslieferungs-ZIP, mit moodle-plugin-ci 4.5.11 lokal:
 - CI-Matrix 8/8 Zellen grün (4.5/8.2/pgsql, 4.5/8.3/mariadb, 5.0/8.2/pgsql, 5.0/8.3/mariadb, 5.1/8.3/pgsql, 5.2/8.3/mariadb, 5.3/8.3/pgsql, 5.3/8.3/mariadb), je 14 Schritte;
 - PHPUnit 421/421 ohne Skips; Adapter-Suites grün; Behat 17/17 Szenarien, 225 Schritte; Races 5/5 (PG und MariaDB);
@@ -59,7 +61,7 @@ Läufe (0.3.0, 29.10.2026):
 | L-12 Selektiver Export/Import ohne Personendaten | ✔ | `config_transfer`, `transfer.php` | `custom_rules_test` (Rundreise, Konflikte, Migration), Behat |
 | L-13 Pseudonymisierung, lokale Auflösung | ✔ | `pseudonymizer`, Tokens für Personen, Gruppen, Aktivitäten, Daten | `ai_integration_test` (HTTP-Ebene), `group_mode_test` |
 | L-14 Ohne KI / bei Ausfall | ✔ | Fallback-Kette | `ai_integration_test` (HTTP 500), `commentary_service_test` |
-| L-15 Vollständige automatisierte Abdeckung | ✔ / ◐ | 305 PHPUnit (Line Coverage 89,4 %, CI-Untergrenze 80 %), Property-Test der Regeln (2000 Fälle), 13 Behat, 37 Jest, 4 Playwright, k6-Lasttest | Lücke: GitHub-CI-Lauf steht aus; die CI-Schritte laufen lokal 1:1 (`tools/ci-local/`) |
+| L-15 Vollständige automatisierte Abdeckung | ✔ / ◐ | 461 PHPUnit (Line Coverage 87,1 %, CI-Untergrenze 80 %), Property-Test der Regeln (2000 Fälle), 30 Behat, 42 Jest, 10 Playwright, k6-Lasttest | Lücke: GitHub-CI-Lauf steht aus; die CI-Schritte laufen lokal 1:1 auf dem GitHub-Checkout (`tools/ci-local/`) |
 | L-16 Vertraulichkeit | ✔ | keine Lehrenden-Endpunkte, `manage` ohne Leserechte | `external_test`, `dialog_test`, Behat |
 | L-17 Admin-Debug-Export | ✔ | `debug_exporter`, `debug.php`, Audit-Log | `debug_export_test`, Behat |
 | L-18 Persona-Freigabe | ✔ | `persona_manager`, `personas.php`, Teilmenge, Lernendenwahl | `persona_test`, Behat |

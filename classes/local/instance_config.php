@@ -57,10 +57,10 @@ class instance_config {
     /** @var int Upper bound of courses observed for one learner through course branches (N-02). */
     public const MAX_BRANCH_COURSES = 20;
 
-    /** @var string[] Event types that group mode may publish (issue #6): none of them is negative. */
+    /** @var string[] Event types that group mode may publish: none of them is negative. */
     public const GROUP_EVENTS = ['viewed', 'completed', 'passed'];
 
-    /** @var int Smallest anonymous aggregate (issue #12: two people are never enough). */
+    /** @var int Smallest anonymous aggregate (: two people are never enough). */
     public const MIN_GROUP_SIZE = 3;
 
     /**
@@ -132,7 +132,7 @@ class instance_config {
         $wider = array_search($new->grouppublish, $levels) > array_search($old->grouppublish, $levels)
             || ($modes[$new->sharingmode] ?? 0) > ($modes[$old->sharingmode] ?? 0)
             || (int) $new->groupminsize < (int) $old->groupminsize;
-        // A new event type tells recipients more about the same people (issue #6, #9).
+        // A new event type tells recipients more about the same people.
         $wider = $wider || array_diff(self::group_events($new), self::group_events($old));
         $new->groupversion = (int) $old->groupversion + ($wider ? 1 : 0);
     }
@@ -151,7 +151,7 @@ class instance_config {
     }
 
     /**
-     * The release circle of the group mode: which groups may be recipients or sources (issue #9).
+     * The release circle of the group mode: which groups may be recipients or sources.
      *
      * Every admitted group whose membership is visible to members ("m") can be a learner's own circle;
      * in open mode every admitted group visible to everybody ("p") can be another circle. The circle is
@@ -184,7 +184,7 @@ class instance_config {
     }
 
     /**
-     * Compare the release circle with the stored one and raise the group version when it grew (issue #9).
+     * Compare the release circle with the stored one and raise the group version when it grew.
      *
      * Called after every change of admitted groups (form, import, restore) and by the observers of
      * group, grouping and visibility changes. Only a growth needs new decisions: a group that leaves the
@@ -319,7 +319,7 @@ class instance_config {
     }
 
     /**
-     * Number of course sources and course branches that wait for a teacher's confirmation (issue #5).
+     * Number of course sources and course branches that wait for a teacher's confirmation.
      *
      * @param int $sidelineid Instance id.
      * @return int

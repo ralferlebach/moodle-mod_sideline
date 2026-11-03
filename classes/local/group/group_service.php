@@ -25,11 +25,11 @@ use mod_sideline\local\instance_config;
  * people are published only after their active opt-in; only positive event types are used, never
  * failed attempts, grades or other negative events. No exact times are ever published.
  *
- * Event types (issue #6), configured per instance: "viewed" (the activity was opened), "completed"
+ * Event types, configured per instance: "viewed" (the activity was opened), "completed"
  * (it counts as completed), "passed" (completed with a pass grade). An activity whose completion is
  * not tracked has an unknown state for "completed" and "passed": nothing is said about it.
  *
- * Protection of aggregates (issue #12, docs/privacy/GRUPPENAGGREGATE.md):
+ * Protection of aggregates (docs/privacy/GRUPPENAGGREGATE.md):
  * - Anonymous statements need at least groupminsize persons (never fewer than three) and give a
  *   coarse band ("a few", "several", "many") instead of an exact number.
  * - For anonymous statements the time window ends at the start of the current day: the statement
@@ -37,7 +37,7 @@ use mod_sideline\local\instance_config;
  *   Named statements are about people who agreed to be named, so their window ends now.
  * - Only one statement per commentary, and only about activities the recipient can see.
  *
- * Cost (issue #7): one query for the recipient's groups, one for all groups of the course, and one
+ * Cost: one query for the recipient's groups, one for all groups of the course, and one
  * query per configured event type that returns only sharing, consenting, actively enrolled members
  * of the admitted circles with an event in the window. No query per group or per member.
  *
@@ -55,6 +55,9 @@ use mod_sideline\local\instance_config;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class group_service {
+    /** @var int Instance of the current facts() call, part of the snapshot keys. */
+    private int $sidelineid = 0;
+
     /** @var int Length of the window before the start of the current day. */
     public const RECENT = WEEKSECS;
     /** @var int Upper bound of names in one statement. */
@@ -78,6 +81,7 @@ class group_service {
             return [[], []];
         }
         $courseid = (int) $sideline->course;
+        $this->sidelineid = (int) $sideline->id;
         // Only learners receive group statements. Teachers and managers never do: a statement would
         // tell them who opted in to sharing (L-16, P-40). The recipient must also be a member of an
         // admitted group whose membership is visible to members; open mode only adds further groups.
@@ -100,7 +104,7 @@ class group_service {
         }
 
         // Named statements: the last RECENT seconds. Anonymous statements: a window of the same length that
-        // ends at the start of today, stable within the day (issue #12).
+        // ends at the start of today, stable within the day.
         $daystart = self::day_start($now);
         $types = array_values(array_intersect(self::EVENT_ORDER, instance_config::group_events($sideline)));
         $events = $this->events(
@@ -156,7 +160,7 @@ class group_service {
     }
 
     /**
-     * The coarse band of a number of people, never the number itself (issue #12).
+     * The coarse band of a number of people, never the number itself.
      *
      * @param int $count Number of people, at least the minimum size.
      * @return string few, several or many.
@@ -211,10 +215,20 @@ class group_service {
             }
         }
         // Anonymous statements: never about fewer than minsize people, never with an exact number, and only
-        // with events before today, so that two visits on one day see the same statement.
-        $ids = array_keys(array_filter($people, static fn(array $p): bool =>
-            $p['time'] < $daystart && $p['time'] >= $daystart - self::RECENT));
+        // with events before today, so that two visits on one day see the same statement. The people counted
+        // are fixed for the day when they are first counted: an event that Moodle stamps again today (a
+        // completion ticked off and on) does not move a person out of the count. Who no longer shares, or
+        // no longer has the event, drops out at once.
+        $ids = $this->day_snapshot($circle['id'] ?? 0, (int) $cm->id, $type, $daystart, array_keys(array_filter(
+            $people,
+            static fn(array $p): bool => $p['time'] < $daystart && $p['time'] >= $daystart - self::RECENT
+        )));
+        $ids = array_values(array_intersect($ids, array_keys($people)));
         if (count($ids) < $minsize) {
+            return null;
+        }
+        // A statement about every other member of the group would tell the recipient what each of them did.
+        if (isset($circle['others']) && count($ids) >= $circle['others']) {
             return null;
         }
         $band = self::band(count($ids));
@@ -225,12 +239,36 @@ class group_service {
     }
 
     /**
+     * The people of an anonymous count, fixed for one day: the first count of the day is kept, later ones
+     * only add people.
+     *
+     * @param int $groupid Group.
+     * @param int $cmid Activity.
+     * @param string $type Event type.
+     * @param int $daystart Start of the day.
+     * @param int[] $now People counted from the current data.
+     * @return int[]
+     */
+    private function day_snapshot(int $groupid, int $cmid, string $type, int $daystart, array $now): array {
+        $cache = \cache::make('mod_sideline', 'groupsnapshot');
+        $key = $this->sidelineid . '_' . $groupid . '_' . $cmid . '_' . $type . '_' . $daystart;
+        $kept = $cache->get($key);
+        $ids = array_values(array_unique(array_merge(is_array($kept) ? $kept : [], array_map('intval', $now))));
+        sort($ids);
+        if ($kept === false || $ids !== $kept) {
+            $cache->set($key, $ids);
+        }
+        return $ids;
+    }
+
+    /**
      * The recipient circles: own admitted groups and, in open mode, other admitted public groups.
      *
      * @param \stdClass $sideline Instance record.
      * @param int $recipientid Recipient.
      * @param int $courseid Course id.
-     * @return array[] Group id => own (bool), groupname (string|null); own groups first.
+     * @return array[] Group id => own (bool), groupname (string|null), others (int, members without the
+     *     recipient); own groups first.
      */
     private function circles(\stdClass $sideline, int $recipientid, int $courseid): array {
         $admitted = instance_config::admitted_group_ids((int) $sideline->id, $courseid);
@@ -248,20 +286,37 @@ class group_service {
             if (in_array($gid, $own, true)) {
                 // Members may only learn about each other if membership is visible to members.
                 if (in_array($visibility, [GROUPS_VISIBILITY_ALL, GROUPS_VISIBILITY_MEMBERS], true)) {
-                    $owncircles[$gid] = ['own' => true, 'groupname' => null];
+                    $owncircles[$gid] = ['id' => $gid, 'own' => true, 'groupname' => null];
                 }
             } else if ($sideline->sharingmode === instance_config::GROUP_OPEN && $visibility === GROUPS_VISIBILITY_ALL) {
-                $othercircles[$gid] = ['own' => false, 'groupname' => clean_param(
+                $othercircles[$gid] = ['id' => $gid, 'own' => false, 'groupname' => clean_param(
                     format_string($group->name, true, ['context' => $context]),
                     PARAM_NOTAGS,
                 )];
             }
         }
-        return $owncircles + $othercircles;
+        $circles = $owncircles + $othercircles;
+        if ($circles) {
+            // How many other people each circle has: an anonymous statement may never cover all of them.
+            global $DB;
+            [$insql, $params] = $DB->get_in_or_equal(array_keys($circles), SQL_PARAMS_NAMED);
+            $counts = $DB->get_records_sql_menu(
+                "SELECT groupid, COUNT(userid)
+                   FROM {groups_members}
+                  WHERE groupid $insql AND userid <> :recipient
+               GROUP BY groupid",
+                $params + ['recipient' => $recipientid]
+            );
+            foreach ($circles as $gid => &$circle) {
+                $circle['others'] = (int) ($counts[$gid] ?? 0);
+            }
+            unset($circle);
+        }
+        return $circles;
     }
 
     /**
-     * Events of sharing members of the circles, set-based (issue #7).
+     * Events of sharing members of the circles, set-based.
      *
      * One query per event type. It returns only members who are actively enrolled, publish under the
      * current group version, whose consent allows processing, and who had the event in the window.

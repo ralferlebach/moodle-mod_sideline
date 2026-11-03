@@ -1,3 +1,28 @@
+/**
+ * This file is part of Moodle - https://moodle.org/
+ *
+ * Moodle is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Moodle is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+/**
+ * Styles of the Sideline Learning Coach panel.
+ *
+ * @package    mod_sideline
+ * @copyright  2026 Ralf Erlebach
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
 /* Sideline Learning Coach: touch targets of at least 24 px (WCAG 2.5.8) in Bootstrap 4 and 5. */
 .mod_sideline-panel .form-check {
     min-height: 1.75rem;
@@ -22,4 +47,13 @@
     width: 1.5rem;
     height: 1.5rem;
     margin: 0 0.25rem;
+}
+
+/* Buttons styled as links ("Show my answers", "Withdraw my consent") are targets of their own, not words in a
+   sentence: at least 24 by 24 CSS pixels as well (WCAG 2.5.8). */
+.mod_sideline-panel .btn-link.btn-sm {
+    min-height: 1.5rem;
+    min-width: 1.5rem;
+    display: inline-flex;
+    align-items: center;
 }

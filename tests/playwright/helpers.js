@@ -29,6 +29,7 @@ const env = {
     typingcmid: process.env.SL_TYPING_CMID,
     multicmid: process.env.SL_MULTI_CMID,
     groupcmid: process.env.SL_GROUP_CMID,
+    a11ycmid: process.env.SL_A11Y_CMID,
     password: process.env.SL_PASSWORD,
     user: (name) => process.env['SL_' + name.toUpperCase()],
 };

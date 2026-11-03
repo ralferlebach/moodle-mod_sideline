@@ -19,8 +19,10 @@
  *
  * Creates a fresh course (so repeated runs never share state) with two pages that learners complete
  * themselves, an inline coach with consent gate and an interview question, a second coach on its own
- * page with typing animation, one teacher and three learners. Prints the values the tests need as
- * shell "export" lines.
+ * page with typing animation, one teacher and five learners. For the accessibility checks a coach with
+ * consent gate and a question of several selections on its own page, and a minimal right-to-left language
+ * pack "he" (only when the site has no such pack) for the fifth learner. Prints the values the tests need
+ * as shell "export" lines.
  *
  * Usage: php tests/playwright/seed.php
  *
@@ -86,13 +88,34 @@ $gen->get_plugin_generator('mod_sideline')->create_question([
 $groupcoach = $gen->create_module('sideline', ['course' => $course->id, 'name' => 'Group coach', 'display' => 'page',
     'typing' => 0, 'sharingmode' => 'closed', 'grouppublish' => 'named']);
 
+// Accessibility checks (issue #25): consent gate and checkboxes on a page of their own.
+$a11y = $gen->create_module('sideline', ['course' => $course->id, 'name' => 'A11y coach', 'display' => 'page',
+    'typing' => 0, 'consentrequired' => 1, 'dialogenabled' => 1, 'dialogcooldown' => 0]);
+$gen->get_plugin_generator('mod_sideline')->create_question([
+    'sidelineid' => $a11y->id,
+    'prompt' => 'What helps you most?',
+    'config' => ['options' => [['label' => 'A plan', 'effect' => 'focus_deadlines'],
+        ['label' => 'A break', 'effect' => 'pause_ok'], ['label' => 'Nothing', 'effect' => 'none']],
+        'multiple' => 1, 'minselect' => 1, 'maxselect' => 2],
+]);
+// A right-to-left language without texts of its own, as the CI site has English only. A real pack is never touched.
+$rtl = $CFG->dataroot . '/lang/he';
+if (!file_exists($rtl . '/langconfig.php')) {
+    check_dir_exists($rtl);
+    file_put_contents($rtl . '/langconfig.php', "<?php\n\$string['thislanguage'] = 'he';\n\$string['thislanguageint'] = 'Hebrew';\n"
+        . "\$string['parentlanguage'] = '';\n\$string['thisdirection'] = 'rtl';\n");
+    get_string_manager()->reset_caches();
+}
+
 $exports = ['SL_BASE_URL' => $CFG->wwwroot, 'SL_COURSEID' => $course->id, 'SL_TYPING_CMID' => $typing->cmid,
-    'SL_MULTI_CMID' => $multi->cmid, 'SL_GROUP_CMID' => $groupcoach->cmid, 'SL_PASSWORD' => $password];
+    'SL_MULTI_CMID' => $multi->cmid, 'SL_GROUP_CMID' => $groupcoach->cmid, 'SL_A11Y_CMID' => $a11y->cmid,
+    'SL_PASSWORD' => $password];
 $users = [];
-$roles = ['teacher' => 'editingteacher', 'student1' => 'student', 'student2' => 'student', 'student3' => 'student'];
+$roles = ['teacher' => 'editingteacher', 'student1' => 'student', 'student2' => 'student', 'student3' => 'student',
+    'student4' => 'student', 'student5' => 'student'];
 foreach ($roles as $key => $role) {
     $user = $gen->create_user(['username' => 'slpw' . $stamp . $key, 'password' => $password, 'firstname' => ucfirst($key),
-        'lastname' => 'Test', 'policyagreed' => 1]);
+        'lastname' => 'Test', 'policyagreed' => 1, 'lang' => $key === 'student5' ? 'he' : 'en']);
     $gen->enrol_user($user->id, $course->id, $role);
     $exports['SL_' . strtoupper($key)] = $user->username;
     $users[$key] = $user;

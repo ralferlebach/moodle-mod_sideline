@@ -90,11 +90,13 @@ class mod_sideline_mod_form extends moodleform_mod {
                 'requiredcapabilities' => ['moodle/course:manageactivities'],
             ]);
             $mform->addHelpButton('sourcecourses', 'sourcecourses', 'mod_sideline');
-            // Sources from before 0.3.0 without a verifiable teacher count only after a confirmation (issue #5).
+            // Sources without a verifiable teacher count only after a confirmation. The notice must be seen: the
+            // section is opened for it.
             $unconfirmed = empty($this->current->instance) ? 0 : instance_config::count_unconfirmed_sources(
                 (int) $this->current->instance
             );
             if ($unconfirmed) {
+                $mform->setExpanded('scopehdr', true);
                 $mform->addElement('static', 'unconfirmedsources', '', \html_writer::div(
                     get_string('sources_unconfirmed', 'mod_sideline', $unconfirmed),
                     'alert alert-warning'
@@ -138,7 +140,9 @@ class mod_sideline_mod_form extends moodleform_mod {
             'duration',
             'dialogcooldown',
             get_string('dialogcooldown', 'mod_sideline'),
-            ['units' => [HOURSECS, DAYSECS, WEEKSECS]],
+            // Every stored value must be displayable: 0 takes the default unit, other values the largest unit
+            // that divides them (an imported or generated value need not be a whole number of hours).
+            ['units' => [MINSECS, HOURSECS, DAYSECS, WEEKSECS], 'defaultunit' => HOURSECS],
         );
         $mform->setDefault('dialogcooldown', DAYSECS);
         $mform->hideIf('dialogcooldown', 'dialogenabled', 'notchecked');
@@ -164,7 +168,7 @@ class mod_sideline_mod_form extends moodleform_mod {
         $mform->setDefault('groupminsize', 3);
         $mform->addHelpButton('groupminsize', 'groupminsize', 'mod_sideline');
         $mform->hideIf('groupminsize', 'sharingmode', 'eq', instance_config::GROUP_INDIVIDUAL);
-        // Which events of others may be told (issue #6): only positive ones, never failures or grades.
+        // Which events of others may be told: only positive ones, never failures or grades.
         $events = [];
         foreach (instance_config::GROUP_EVENTS as $type) {
             $events[$type] = get_string('groupevent_' . $type, 'mod_sideline');
@@ -202,6 +206,10 @@ class mod_sideline_mod_form extends moodleform_mod {
     #[\Override]
     public function data_preprocessing(&$defaultvalues) {
         parent::data_preprocessing($defaultvalues);
+        if (isset($defaultvalues['dialogcooldown'])) {
+            // Shown in whole minutes, the smallest unit of the field.
+            $defaultvalues['dialogcooldown'] = (int) ceil((int) $defaultvalues['dialogcooldown'] / MINSECS) * MINSECS;
+        }
         if (!empty($this->current->instance)) {
             $id = (int) $this->current->instance;
             $defaultvalues['scopecmids'] = instance_config::get_scope_activities($id);

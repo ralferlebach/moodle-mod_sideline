@@ -43,7 +43,7 @@ class question_type {
     /** @var string[] Allowed effects. */
     public const EFFECTS = ['none', 'focus_deadlines', 'small_steps', 'pause_ok'];
 
-    /** @var string[] Precedence of effects when several selected options carry one (multiple choice, issue #11). */
+    /** @var string[] Precedence of effects when several selected options carry one (multiple choice). */
     public const EFFECT_PRIORITY = ['focus_deadlines', 'small_steps', 'pause_ok'];
 
     /** @var string[] How the effects of several selected options combine: by precedence, or not at all. */

@@ -426,7 +426,7 @@ final class ai_language_test extends \advanced_testcase {
     }
 
     /**
-     * A responder for two blocks.
+     * A responder for two blocks; the provider sees the block ids b1 and b2, never the recommendation keys.
      *
      * @param string $first Text of the first block.
      * @param string $second Text of the second block.
@@ -437,12 +437,12 @@ final class ai_language_test extends \advanced_testcase {
         return static function (string $prompt) use ($first, $second, $translation): ?string {
             if (fake_text_generator::translation_blocks($prompt) !== null) {
                 return $translation === null ? null : json_encode(['blocks' => [
-                    ['key' => 'deadline_soon', 'text' => $translation[0]],
-                    ['key' => 'locked_completion', 'text' => $translation[1]],
+                    ['key' => 'b1', 'text' => $translation[0]],
+                    ['key' => 'b2', 'text' => $translation[1]],
                 ]]);
             }
-            return json_encode(['blocks' => [['key' => 'deadline_soon', 'text' => $first],
-                ['key' => 'locked_completion', 'text' => $second]]]);
+            return json_encode(['blocks' => [['key' => 'b1', 'text' => $first],
+                ['key' => 'b2', 'text' => $second]]]);
         };
     }
 

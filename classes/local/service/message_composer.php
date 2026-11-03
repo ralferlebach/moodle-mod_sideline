@@ -55,7 +55,7 @@ class message_composer {
             $persona = persona_registry::DEFAULT_KEY;
         }
         $sm = get_string_manager();
-        $lang = $sm->translation_exists($lang) || $lang === 'en' ? $lang : 'en';
+        $lang = self::text_language($lang);
 
         $blocks = [];
         $versions = [];
@@ -152,6 +152,39 @@ class message_composer {
     }
 
     /**
+     * The language in which the texts of this plugin exist for a language.
+     *
+     * An installed language pack does not mean that it translates this plugin: packs of the Moodle
+     * language server contain only the plugins listed there. The language counts when the plugin
+     * ships its texts in it, when the installed pack or a local customisation (tool_customlang) has
+     * them; otherwise its parent language is tried, and in the end English. So the template text is
+     * labelled with the language it is really written in.
+     *
+     * @param string $lang Language code of the user.
+     * @return string Language code of the texts.
+     */
+    public static function text_language(string $lang): string {
+        global $CFG;
+
+        $sm = get_string_manager();
+        $plugindir = \core_component::get_component_directory('mod_sideline') . '/lang';
+        for ($depth = 0; $lang !== '' && $lang !== 'en' && $depth < 5 && $sm->translation_exists($lang, false); $depth++) {
+            $files = [
+                "$plugindir/$lang/sideline.php",
+                "$CFG->langotherroot/$lang/sideline.php",
+                "$CFG->langlocalroot/{$lang}_local/sideline.php",
+            ];
+            foreach ($files as $file) {
+                if (is_readable($file)) {
+                    return $lang;
+                }
+            }
+            $lang = (string) $sm->get_string('parentlanguage', 'langconfig', null, $lang);
+        }
+        return 'en';
+    }
+
+    /**
      * The safe generic commentary used when everything else failed (P-08, last step).
      *
      * @param string $persona Persona key.
@@ -160,7 +193,7 @@ class message_composer {
      */
     public function generic(string $persona, string $lang): array {
         $sm = get_string_manager();
-        $lang = $sm->translation_exists($lang) || $lang === 'en' ? $lang : 'en';
+        $lang = self::text_language($lang);
         return [
             'version' => 1,
             'locale' => $lang,
@@ -186,7 +219,7 @@ class message_composer {
         $format = get_string_manager()->get_string('strftimedatetimeshort', 'langconfig', null, $lang);
         $a->deadline = isset($rec->facts['deadline']) ? userdate((int) $rec->facts['deadline'], $format) : '';
         $a->opensat = isset($rec->facts['opensat']) ? userdate((int) $rec->facts['opensat'], $format) : '';
-        // Group statements: a coarse band of people and the kind of event, never a number (issues #6, #12).
+        // Group statements: a coarse band of people and the kind of event, never a number.
         $sm = get_string_manager();
         $string = static fn(string $id): string => $sm->get_string($id, 'mod_sideline', null, $lang);
         $a->people = isset($rec->facts['band']) ? $string('groupband_' . $rec->facts['band']) : '';
