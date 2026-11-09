@@ -266,6 +266,9 @@ class commentary_service {
             // same lock before it deletes, so either we see it here or it deletes what we store.
             $fresh = $DB->get_record('sideline', ['id' => $sideline->id]);
             if (!$fresh || !consent_manager::allows_processing($fresh, $userid)) {
+                // The AI subsystem records a call only after the provider answered, so after the withdrawal's own
+                // cleanup: remove that entry (and anything else of the person) here.
+                consent_manager::forget_generated((int) $sideline->id, $userid);
                 return $this->consent_required($sideline, $userid);
             }
             $namedneeded = (bool) array_filter($groupfacts, static fn($f) => !empty($f['names']));

@@ -332,4 +332,43 @@ final class config_transfer_test extends \advanced_testcase {
         }
         $this->assertCount(instance_config::MAX_SOURCES - 1, instance_config::get_sources((int) $sideline->id));
     }
+
+    public function test_the_preview_of_a_file_at_the_limits_costs_no_query_per_entry(): void {
+        global $DB;
+        $gen = $this->getDataGenerator();
+        $sideline = $this->coach($this->target);
+        for ($i = 0; $i < 20; $i++) {
+            $gen->create_group(['courseid' => $this->target->id, 'name' => "Group $i", 'idnumber' => "g$i"]);
+            $gen->create_module('page', ['course' => $this->target->id, 'name' => "Unit $i"]);
+        }
+        $file = static fn(int $count): array => config_transfer::migrate(['format' => config_transfer::FORMAT, 'version' => 3,
+            'scope' => ['section' => 0, 'activities' => array_map(
+                static fn(int $i): array => ['modname' => 'page', 'name' => 'Unit ' . ($i % 30), 'section' => 0],
+                range(1, $count)
+            )],
+            'groups' => ['all' => false, 'items' => array_map(
+                static fn(int $i): array => ['type' => 'group', 'name' => 'Group ' . ($i % 30), 'idnumber' => ''],
+                range(1, $count)
+            )],
+        ]);
+        $queries = function (int $count) use ($sideline, $file, $DB): int {
+            $data = $file($count);
+            $before = $DB->perf_get_queries();
+            config_transfer::preview($sideline, $data, ['scope', 'groups'], 'replace');
+            return $DB->perf_get_queries() - $before;
+        };
+        // Once to fill the course and string caches.
+        $queries(10);
+        $small = $queries(10);
+        $large = $queries(config_transfer::LIMITS['groups.items']);
+        $this->assertSame($small, $large, "No query per group or activity ($small vs $large)");
+
+        // Exact names on every database: a name in another case is not taken for the group.
+        $data = config_transfer::migrate(['format' => config_transfer::FORMAT, 'version' => 3, 'groups' => ['all' => false,
+            'items' => [['type' => 'group', 'name' => 'group 1'], ['type' => 'group', 'name' => 'Group 2'],
+            ['type' => 'group', 'name' => 'x', 'idnumber' => 'g3']]]]);
+        $plan = config_transfer::preview($sideline, $data, ['groups'], 'replace')['plan']['groups'];
+        $this->assertCount(2, $plan['groupids']);
+        $this->assertSame(1, $plan['unresolved']);
+    }
 }

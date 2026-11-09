@@ -358,5 +358,42 @@
         <INDEX NAME="timecreated" UNIQUE="false" FIELDS="timecreated"/>
       </INDEXES>
     </TABLE>
+    <TABLE NAME="sideline_daycount" COMMENT="Who counted in an anonymous group statement on one day, so that the statement stays stable within the day. Deleted with sharing, consent, group, enrolment and privacy changes; only the current day is read, older rows are deleted with the next statement and by the daily task.">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="sidelineid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="groupid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="cmid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="eventtype" TYPE="char" LENGTH="20" NOTNULL="true" SEQUENCE="false" COMMENT="viewed, completed or passed"/>
+        <FIELD NAME="daystart" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Start of the day the person was counted on"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="sidelineid" TYPE="foreign" FIELDS="sidelineid" REFTABLE="sideline" REFFIELDS="id"/>
+        <KEY NAME="userid" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="statement" UNIQUE="true" FIELDS="sidelineid, daystart, groupid, cmid, eventtype, userid"/>
+        <INDEX NAME="daystart" UNIQUE="false" FIELDS="daystart"/>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="sideline_aicall" COMMENT="Which entries of the AI subsystem an instance made for a learner, so that a withdrawal empties exactly these">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="sidelineid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="actionid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="ai_action_register.id"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="sidelineid" TYPE="foreign" FIELDS="sidelineid" REFTABLE="sideline" REFFIELDS="id"/>
+        <KEY NAME="userid" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="actionid" UNIQUE="true" FIELDS="actionid"/>
+      </INDEXES>
+    </TABLE>
   </TABLES>
 </XMLDB>

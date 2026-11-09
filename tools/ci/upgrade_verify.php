@@ -35,7 +35,9 @@ $check = static function (string $name, bool $ok, string $detail = '') use (&$fa
 };
 
 $marker = $CFG->dataroot . '/sideline_upgrade_from.txt';
-$from = is_readable($marker) ? (int) file_get_contents($marker) : 0;
+$seeded = is_readable($marker) ? trim(file_get_contents($marker)) : '';
+$from = (int) $seeded;
+$is041 = str_ends_with($seeded, ' 0.4.1');
 $check('seeded version known', $from > 0, (string) $from);
 $check(
     'version',
@@ -69,8 +71,118 @@ if ($from < 2026110300) {
     $check('confirmed source still confirmed', $unconfirmed === 0, (string) $unconfirmed);
     $check('confirmed source evaluated', in_array('Further source unit', $names, true), implode(', ', $names));
 }
+
+// Cache configuration right after the upgrade, before any code of the plugin ran: the definition of 0.4.1
+// is gone (the upgrade reread the definitions because the version number changed), and so is its data.
+$muc = $CFG->dataroot . '/muc/config.php';
+$configuration = [];
+if (is_readable($muc)) {
+    include($muc);
+}
+$check('cache configuration read', !empty($configuration['definitions']), $muc);
+$check(
+    'no cache definition groupsnapshot any more',
+    !isset($configuration['definitions']['mod_sideline/groupsnapshot']),
+    implode(', ', array_filter(
+        array_keys($configuration['definitions'] ?? []),
+        static fn($k) => str_starts_with($k, 'mod_sideline/')
+    ))
+);
+// The file store keeps a definition in a directory named after its id, and every entry in a .cache file.
+$dirname = 'mod_sideline_groupsnapshot';
+$left = [];
+foreach ([$CFG->cachedir, $CFG->dataroot . '/cache', $CFG->localcachedir] as $dir) {
+    foreach (glob($dir . '/cachestore_file/*/' . $dirname, GLOB_ONLYDIR) ?: [] as $store) {
+        $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($store, FilesystemIterator::SKIP_DOTS));
+        foreach ($iterator as $file) {
+            if (str_ends_with((string) $file, '.cache')) {
+                $left[] = (string) $file;
+            }
+        }
+    }
+}
+if ($is041) {
+    $seededfiles = (int) @file_get_contents($CFG->dataroot . '/sideline_upgrade_snapshots.txt');
+    $check('the seed of 0.4.1 had written its entry to the cache store', $seededfiles > 0, (string) $seededfiles);
+}
+$check('no user ids of 0.4.1 left in the cache store', !$left, implode(', ', $left));
+
+// Group statement directly after the upgrade, with the day count in its table.
 \core\session\manager::set_user($student);
 [, $cm] = get_course_and_cm_from_instance($sideline->id, 'sideline');
+$debugging = $CFG->debug;
+$CFG->debug = DEBUG_DEVELOPER;
+ob_start();
+[$statements] = (new \mod_sideline\local\group\group_service())->facts(
+    $sideline,
+    (int) $student->id,
+    get_fast_modinfo($course, $student->id)->get_cms(),
+    time()
+);
+$output = ob_get_clean();
+$CFG->debug = $debugging;
+$check('group statement after the upgrade', count($statements) === 1, json_encode($statements));
+$check('no debugging messages while stating it', trim($output) === '', $output);
+$member = $DB->get_record('user', ['username' => 'upgrade_member1'], '*', MUST_EXIST);
+$check('day count stored for the counted people', $DB->count_records('sideline_daycount', ['sidelineid' => $sideline->id]) === 3);
+$modulecontextid = context_module::instance($cm->id)->id;
+\mod_sideline\local\group\sharing_manager::record($sideline, (int) $member->id, false, false, $modulecontextid, time());
+$check('stopped sharing removes the day count', !$DB->record_exists('sideline_daycount', ['sidelineid' => $sideline->id,
+    'userid' => $member->id]));
+
+// AI calls of the old release: attributed when the old release registered them in the activity's context and the
+// prompt has the plugin's form, never an entry of another plugin or of the editor in the same activity context; a
+// withdrawal empties only what belongs to the instance.
+$sidelineprompt = $DB->get_record_select(
+    'ai_action_generate_text',
+    $DB->sql_like('prompt', '?'),
+    ['Sideline prompt of the old release.%'],
+    '*',
+    MUST_EXIST
+);
+$editorprompt = $DB->get_record_select(
+    'ai_action_generate_text',
+    $DB->sql_compare_text('prompt') . ' = ?',
+    ['Prompt of the editor in the activity'],
+    '*',
+    MUST_EXIST
+);
+$foreignprompt = $DB->get_record_select(
+    'ai_action_generate_text',
+    $DB->sql_compare_text('prompt') . ' = ?',
+    ['Prompt of another plugin'],
+    '*',
+    MUST_EXIST
+);
+$attributed = $DB->get_fieldset_select('sideline_aicall', 'actionid', 'sidelineid = ?', [$sideline->id]);
+$sidelineregister = (int) $DB->get_field('ai_action_register', 'id', ['actionid' => $sidelineprompt->id]);
+$foreignregister = (int) $DB->get_field('ai_action_register', 'id', ['actionid' => $foreignprompt->id]);
+$editorregister = (int) $DB->get_field('ai_action_register', 'id', ['actionid' => $editorprompt->id]);
+$check('AI entry of another plugin never attributed', !in_array($foreignregister, array_map('intval', $attributed), true));
+$check(
+    'AI entry of the editor in the activity context never attributed',
+    !in_array($editorregister, array_map('intval', $attributed), true)
+);
+$check(
+    $is041 ? 'AI entry of 0.4.1 in the user context stays unattributed' : 'AI entry in the activity context attributed',
+    in_array($sidelineregister, array_map('intval', $attributed), true) === !$is041
+);
+\mod_sideline\local\consent\consent_manager::forget_generated((int) $sideline->id, (int) $student->id);
+$check(
+    'withdrawal keeps the AI entry of the editor',
+    $DB->get_field('ai_action_generate_text', 'generatedcontent', ['id' => $editorprompt->id])
+        === 'Answer to Prompt of the editor in the activity'
+);
+$check(
+    'withdrawal keeps the AI entry of another plugin',
+    $DB->get_field('ai_action_generate_text', 'generatedcontent', ['id' => $foreignprompt->id])
+        === 'Answer to Prompt of another plugin'
+);
+$check(
+    $is041 ? 'withdrawal leaves the unattributed entry of 0.4.1 (documented)' : 'withdrawal empties the attributed AI entry',
+    ($DB->get_field('ai_action_generate_text', 'generatedcontent', ['id' => $sidelineprompt->id]) === '') === !$is041
+);
+
 $result = (new \mod_sideline\local\service\commentary_service())->get(
     $sideline,
     $course,
@@ -86,5 +198,5 @@ $check(
 $check('no outdated cached text delivered', !$DB->record_exists('sideline_cache', ['sidelineid' => $sideline->id,
     'fingerprint' => 'old']));
 
-echo $failures ? "$failures check(s) failed.\n" : "Upgrade verified (from $from).\n";
+echo $failures ? "$failures check(s) failed.\n" : "Upgrade verified (from $seeded).\n";
 exit($failures ? 1 : 0);

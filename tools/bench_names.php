@@ -18,12 +18,23 @@
  * Cost of the name check of configured free text (prompt_text_guard::course_name). Development and CI sites only.
  *
  * For every course size (default 100, 1000, 5000, 20000 enrolments, half of them historical: suspended
- * or ended) it measures one check of a free text of the maximum length that contains no name, the
- * worst case, because every query runs: database reads, wall time and the memory the check keeps.
- * Then it checks that a name of the last person enrolled is found. Budgets per check: at most 3 reads,
- * 200 ms, 256 KiB of memory.
+ * or ended) it runs a set of adversarial free texts of the maximum length many times (--runs, default 30
+ * per text) and reports the distribution of one check: database queries and their time, wall time
+ * (p50, p95, p99, maximum), CPU time and the peak memory of the check above the memory before it.
+ * Every check starts without the request cache of the guard; the database is warm after the first run.
+ * The texts:
+ *   distinct  only different words of two letters: the most phrases, every query runs (no name in it);
+ *   unicode   different words with umlauts, accents, combining marks and Cyrillic letters;
+ *   nearmiss  words that differ from enrolled names by one character (firstname12x, lastname1y ...);
+ *   hyphens   hyphenated pairs, so that every word also forms phrases with its neighbours;
+ *   repeated  one word repeated (few phrases, the cheap case of real texts);
+ *   letters   words of one letter or digit in an order where almost every sequence differs: the most phrases;
+ *   namelast  the distinct text with the last name of the last person enrolled at its end (found).
+ * A text above the maximum length is refused before any query (checked once).
+ * Budgets per check: at most 2 queries, p99 at most 200 ms, peak memory at most 1 MiB, and the name at
+ * the end is found.
  *
- * Usage: php tools/bench_names.php [--sizes=100,1000,5000,20000]
+ * Usage: php tools/bench_names.php [--sizes=100,1000,5000,20000] [--runs=30] [--json=file]
  *
  * @package    mod_sideline
  * @copyright  2026 Ralf Erlebach
@@ -41,27 +52,86 @@ if (file_exists($CFG->libdir . '/testing/classes/util.php')) {
 
 use mod_sideline\local\ai\prompt_text_guard;
 
-[$options] = cli_get_params(['sizes' => '100,1000,5000,20000', 'help' => false]);
+[$options] = cli_get_params(['sizes' => '100,1000,5000,20000', 'runs' => 30, 'json' => '', 'help' => false]);
 if ($options['help'] || $CFG->wwwroot === 'https://moodle.example.org') {
-    echo "php tools/bench_names.php [--sizes=100,1000,5000,20000]\n";
+    echo "php tools/bench_names.php [--sizes=100,1000,5000,20000] [--runs=30] [--json=file]\n";
     exit(0);
 }
 \core\session\manager::set_user(get_admin());
 $gen = new testing_data_generator();
 $stamp = time();
-$budgetreads = 3;
-$budgetms = 200;
-$budgetbytes = 256 * 1024;
+$runs = max(1, (int) $options['runs']);
+$budget = ['queries' => 2, 'p99ms' => 200, 'peakkib' => 1024];
 $failures = 0;
-// The worst case: as long as allowed and only different short words, so that it has the most phrases and
-// every query runs. Two letters each ("ab cd ..."), no name of the course among them.
-$text = '';
-for ($i = 0; mb_strlen($text) + 3 <= prompt_text_guard::MAX_LENGTH; $i++) {
-    $text .= chr(97 + intdiv($i, 26) % 26) . chr(97 + $i % 26) . ' ';
-}
-$text = trim($text);
 
-printf("%-7s %-6s %-8s %-8s %-9s %s\n", 'size', 'reads', 'ms', 'ms2', 'keptKiB', 'found');
+/**
+ * Fill a text up to the maximum length with words from a generator.
+ *
+ * @param callable $word Word number => word.
+ * @param string $glue Separator.
+ * @return string
+ */
+function bench_names_fill(callable $word, string $glue = ' '): string {
+    $text = '';
+    for ($i = 0;; $i++) {
+        $next = ($text === '' ? '' : $text . $glue) . $word($i);
+        if (mb_strlen($next) > prompt_text_guard::MAX_LENGTH) {
+            return $text;
+        }
+        $text = $next;
+    }
+}
+
+/**
+ * Percentile of sorted values (nearest rank).
+ *
+ * @param float[] $sorted Sorted values.
+ * @param float $p Percentile, 0 to 100.
+ * @return float
+ */
+function bench_names_percentile(array $sorted, float $p): float {
+    return $sorted[max(0, (int) ceil($p / 100 * count($sorted)) - 1)];
+}
+
+/**
+ * CPU time of this process in milliseconds.
+ *
+ * @return float
+ */
+function bench_names_cpu(): float {
+    $u = getrusage();
+    return ($u['ru_utime.tv_sec'] + $u['ru_stime.tv_sec']) * 1000 + ($u['ru_utime.tv_usec'] + $u['ru_stime.tv_usec']) / 1000;
+}
+
+$two = static fn(int $i): string => chr(97 + intdiv($i, 26) % 26) . chr(97 + $i % 26);
+$letters = ['ä', 'é', 'ø', 'ñ', 'ş', 'ж', 'ю', 'ő', 'ł', 'å'];
+$symbols = str_split('abcdefghijklmnopqrstuvwxyz0123456789');
+$texts = [
+    'distinct' => bench_names_fill($two),
+    'unicode' => bench_names_fill(static fn(int $i): string => $letters[$i % 10] . $two($i) . "\u{0301}"),
+    'nearmiss' => bench_names_fill(static fn(int $i): string => ($i % 2 ? 'Lastname' : 'Firstname') . $i . 'x'),
+    'hyphens' => bench_names_fill(static fn(int $i): string => $two(2 * $i) . '-' . $two(2 * $i + 1)),
+    'repeated' => bench_names_fill(static fn(int $i): string => 'again'),
+    // A fixed pseudo-random order of the 36 symbols: 250 words and over 700 different phrases.
+    'letters' => bench_names_fill(static fn(int $i): string => $symbols[hexdec(substr(md5((string) $i), 0, 6)) % 36]),
+];
+
+printf(
+    "%-6s %-9s %-4s %-6s %-7s %-7s %-7s %-7s %-7s %-8s %s\n",
+    'size',
+    'text',
+    'qry',
+    'dbms',
+    'p50',
+    'p95',
+    'p99',
+    'max',
+    'cpu99',
+    'peakKiB',
+    'result'
+);
+$report = ['budget' => $budget, 'runs' => $runs, 'db' => $DB->get_dbfamily(), 'dbversion' => $DB->get_server_info()['version'],
+    'php' => PHP_VERSION, 'sizes' => []];
 foreach (array_map('intval', explode(',', $options['sizes'])) as $size) {
     $course = $gen->create_course(['shortname' => "bn{$stamp}_$size"]);
     $enrol = $DB->get_record('enrol', ['courseid' => $course->id, 'enrol' => 'manual'], '*', MUST_EXIST);
@@ -90,32 +160,78 @@ foreach (array_map('intval', explode(',', $options['sizes'])) as $size) {
             $DB->execute('ANALYZE {' . $table . '}');
         }
     }
-    $runs = [];
-    foreach (['first', 'second'] as $kind) {
-        prompt_text_guard::reset();
-        gc_collect_cycles();
-        $memory = memory_get_usage();
-        $reads = $DB->perf_get_reads();
-        $start = microtime(true);
-        $result = prompt_text_guard::course_name($text, (int) $course->id);
-        $runs[$kind] = [$DB->perf_get_reads() - $reads, (microtime(true) - $start) * 1000, memory_get_usage() - $memory, $result];
-    }
     $last = $size - 1;
-    $found = prompt_text_guard::course_name("Ask lastname$last about it.", (int) $course->id) === 'name';
-    $ok = $runs['first'][3] === null && $found && $runs['first'][0] <= $budgetreads && $runs['first'][1] <= $budgetms
-        && $runs['first'][2] <= $budgetbytes;
-    $failures += $ok ? 0 : 1;
-    printf(
-        "%-7d %-6d %-8.1f %-8.1f %-9.1f %s%s\n",
-        $size,
-        $runs['first'][0],
-        $runs['first'][1],
-        $runs['second'][1],
-        $runs['first'][2] / 1024,
-        $found ? 'yes' : 'NO',
-        $ok ? '' : '  OVER BUDGET'
-    );
+    $sizetexts = $texts + ['namelast' => mb_substr($texts['distinct'], 0, prompt_text_guard::MAX_LENGTH - 20) . " lastname$last"];
+    $expected = ['namelast' => 'name'];
+    $toolong = prompt_text_guard::course_name(str_repeat('a', prompt_text_guard::MAX_LENGTH + 1), (int) $course->id);
+    if ($toolong !== 'length') {
+        $failures++;
+        echo "A text above the maximum length was not refused.\n";
+    }
+    foreach ($sizetexts as $name => $text) {
+        $wall = [];
+        $cpu = [];
+        $peak = 0;
+        $queries = 0;
+        $dbms = 0.0;
+        $results = [];
+        for ($r = 0; $r < $runs; $r++) {
+            prompt_text_guard::reset();
+            gc_collect_cycles();
+            if (function_exists('memory_reset_peak_usage')) {
+                memory_reset_peak_usage();
+            }
+            $before = memory_get_usage();
+            $q = $DB->perf_get_queries();
+            $qt = $DB->perf_get_queries_time();
+            $c = bench_names_cpu();
+            $start = hrtime(true);
+            $result = prompt_text_guard::course_name($text, (int) $course->id);
+            $wall[] = (hrtime(true) - $start) / 1e6;
+            $cpu[] = bench_names_cpu() - $c;
+            $peak = max($peak, memory_get_peak_usage() - $before);
+            $queries = max($queries, $DB->perf_get_queries() - $q);
+            $dbms = max($dbms, ($DB->perf_get_queries_time() - $qt) * 1000);
+            $results[$result ?? 'none'] = true;
+        }
+        sort($wall);
+        sort($cpu);
+        $row = [
+            'queries' => $queries,
+            'dbmsmax' => round($dbms, 1),
+            'p50' => round(bench_names_percentile($wall, 50), 1),
+            'p95' => round(bench_names_percentile($wall, 95), 1),
+            'p99' => round(bench_names_percentile($wall, 99), 1),
+            'max' => round(end($wall), 1),
+            'cpup99' => round(bench_names_percentile($cpu, 99), 1),
+            'peakkib' => round($peak / 1024, 1),
+            'result' => implode('/', array_keys($results)),
+        ];
+        $ok = $row['queries'] <= $budget['queries'] && $row['p99'] <= $budget['p99ms'] && $row['peakkib'] <= $budget['peakkib']
+            && $row['result'] === ($expected[$name] ?? 'none');
+        $failures += $ok ? 0 : 1;
+        $report['sizes'][$size][$name] = $row + ['ok' => $ok];
+        printf(
+            "%-6d %-9s %-4d %-6.1f %-7.1f %-7.1f %-7.1f %-7.1f %-7.1f %-8.1f %s%s\n",
+            $size,
+            $name,
+            $row['queries'],
+            $row['dbmsmax'],
+            $row['p50'],
+            $row['p95'],
+            $row['p99'],
+            $row['max'],
+            $row['cpup99'],
+            $row['peakkib'],
+            $row['result'],
+            $ok ? '' : '  OVER BUDGET'
+        );
+    }
 }
-echo $failures ? "$failures size(s) over budget.\n"
-    : "All sizes within budget ($budgetreads reads, $budgetms ms, " . ($budgetbytes / 1024) . " KiB per check).\n";
+if ($options['json'] !== '') {
+    file_put_contents($options['json'], json_encode($report, JSON_PRETTY_PRINT));
+}
+echo $failures ? "$failures case(s) over budget.\n"
+    : "All cases within budget ({$budget['queries']} queries, p99 {$budget['p99ms']} ms, "
+        . "{$budget['peakkib']} KiB peak per check).\n";
 exit($failures ? 1 : 0);

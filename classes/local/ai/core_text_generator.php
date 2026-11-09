@@ -58,8 +58,8 @@ class core_text_generator implements text_generator {
      * The action is registered in the learner's user context, not in the activity's: Moodle's AI usage
      * report shows teachers every AI call in their course with the person's name, which would tell them
      * who uses the coach and so who consented (P-40). Whether AI may be used in the activity is decided
-     * with the activity's context in is_available(). Withdrawal empties these records again
-     * (consent_manager::forget_generated()).
+     * with the activity's context in is_available(). The entry the call causes is recorded for the
+     * instance (ai_records), so that a withdrawal empties exactly the entries of this instance.
      *
      * @param string $prompt Prompt.
      * @param int $userid Learner.
@@ -69,18 +69,35 @@ class core_text_generator implements text_generator {
     #[\Override]
     public function generate(string $prompt, int $userid, int $contextid): ?string {
         $this->lasttokens = null;
+        $usercontext = \context_user::instance($userid, IGNORE_MISSING);
+        $registered = $usercontext ? (int) $usercontext->id : $contextid;
+        $sidelineid = self::instance_of($contextid);
+        // One call of the plugin per person at a time, so that the entry it causes is known for certain.
+        $lock = ai_records::lock($userid);
+        if (!$lock) {
+            return null;
+        }
         try {
-            $usercontext = \context_user::instance($userid, IGNORE_MISSING);
+            $after = ai_records::last_id();
             $action = new generate_text(
-                contextid: $usercontext ? $usercontext->id : $contextid,
+                contextid: $registered,
                 userid: $userid,
                 prompttext: $prompt
             );
-            $response = \core\di::get(manager::class)->process_action($action);
+            try {
+                $response = \core\di::get(manager::class)->process_action($action);
+            } finally {
+                // Also a failed call leaves its prompt with the subsystem.
+                if ($sidelineid) {
+                    ai_records::attribute($sidelineid, $userid, $registered, $after, $prompt, time());
+                }
+            }
         } catch (\Throwable $e) {
             // Provider failure, timeout or misconfiguration: the caller falls back to templates.
             debugging('mod_sideline: AI generation failed: ' . $e->getMessage(), DEBUG_DEVELOPER);
             return null;
+        } finally {
+            $lock->release();
         }
         if (!$response->get_success()) {
             return null;
@@ -91,6 +108,21 @@ class core_text_generator implements text_generator {
         }
         $content = $data['generatedcontent'] ?? null;
         return is_string($content) && trim($content) !== '' ? $content : null;
+    }
+
+    /**
+     * The Sideline instance of an activity context, or 0 (a persona preview has none).
+     *
+     * @param int $contextid Context id.
+     * @return int
+     */
+    private static function instance_of(int $contextid): int {
+        $context = \context::instance_by_id($contextid, IGNORE_MISSING);
+        if (!$context instanceof \context_module) {
+            return 0;
+        }
+        $cm = get_coursemodule_from_id('sideline', $context->instanceid, 0, false, IGNORE_MISSING);
+        return $cm ? (int) $cm->instance : 0;
     }
 
     #[\Override]

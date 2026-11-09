@@ -38,3 +38,6 @@ tests/state_model_test.php
 tests/template_registry_test.php
 .phpcsignore
 tools/amd-build.js
+
+# 0.4.2: the day counts of group statements moved from the application cache to the table sideline_daycount.
+db/caches.php

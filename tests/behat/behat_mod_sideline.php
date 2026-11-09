@@ -519,4 +519,74 @@ class behat_mod_sideline extends behat_base {
         }
         return $headers;
     }
+
+    /**
+     * A learner completed an activity yesterday, or completes it again today: Moodle stamps a completion that is
+     * ticked off and on with the current time. Every cached text of the course is computed anew afterwards, so that
+     * the next statement comes from the data and the day count, not from a cached text.
+     *
+     * @Given /^"(?P<username>[^"]*)" completed "(?P<activity>[^"]*)" (?P<when>yesterday|again today)$/
+     * @param string $username User name.
+     * @param string $activity Activity name.
+     * @param string $when yesterday or again today.
+     */
+    public function completed_the_activity(string $username, string $activity, string $when): void {
+        global $DB;
+        $cm = $this->get_cm_by_activity_name('page', $activity);
+        $userid = (int) $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
+        $time = $when === 'yesterday' ? \mod_sideline\local\group\group_service::day_start(time()) - HOURSECS : time();
+        $row = $DB->get_record('course_modules_completion', ['coursemoduleid' => $cm->id, 'userid' => $userid]);
+        if ($row) {
+            $DB->set_field('course_modules_completion', 'timemodified', $time, ['id' => $row->id]);
+        } else {
+            $DB->insert_record('course_modules_completion', (object) ['coursemoduleid' => $cm->id, 'userid' => $userid,
+                'completionstate' => COMPLETION_COMPLETE, 'viewed' => 0, 'timemodified' => $time]);
+        }
+        \cache::make('core', 'completion')->purge();
+        \mod_sideline\local\cache\commentary_cache::mark_course_dirty((int) $cm->course);
+    }
+
+    /**
+     * A learner starts or stops sharing completions with the group, in another tab or device.
+     *
+     * @Given /^"(?P<username>[^"]*)" (?P<decision>shares|stops sharing) completions in "(?P<activity>[^"]*)" elsewhere$/
+     * @param string $username User name.
+     * @param string $decision shares or stops sharing.
+     * @param string $activity Activity name or idnumber.
+     */
+    public function shares_elsewhere(string $username, string $decision, string $activity): void {
+        global $DB;
+        $cm = $this->get_cm_by_activity_name('sideline', $activity);
+        $sideline = $DB->get_record('sideline', ['id' => $cm->instance], '*', MUST_EXIST);
+        $userid = (int) $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
+        \mod_sideline\local\group\sharing_manager::record(
+            $sideline,
+            $userid,
+            $decision === 'shares',
+            false,
+            \context_module::instance($cm->id)->id,
+            time()
+        );
+    }
+
+    /**
+     * Whether the day count of anonymous group statements of an instance holds a learner (issue #30).
+     *
+     * @Then /^the day count of "(?P<activity>[^"]*)" should (?P<not>not )?include "(?P<username>[^"]*)"$/
+     * @param string $activity Activity name or idnumber.
+     * @param string $not "not " or empty.
+     * @param string $username User name.
+     */
+    public function the_day_count_should_include(string $activity, string $not, string $username): void {
+        global $DB;
+        $cm = $this->get_cm_by_activity_name('sideline', $activity);
+        $userid = (int) $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
+        $found = $DB->record_exists('sideline_daycount', ['sidelineid' => $cm->instance, 'userid' => $userid]);
+        if ($found === ($not !== '')) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                "The day count of \"$activity\" " . ($found ? 'includes' : 'does not include') . " \"$username\"",
+                $this->getSession()
+            );
+        }
+    }
 }

@@ -167,7 +167,9 @@ SRC=/tmp/co bash /tmp/co/tools/ci-local/upgrade.sh MOODLE_405_STABLE pgsql 8.3 /
 SRC=/tmp/co bash /tmp/co/tools/ci-local/playwright.sh MOODLE_503_STABLE 3 10           # Workflow "playwright": 3 volle Läufe, Gruppen-Journey 10-mal
 ```
 
-`upgrade.sh` installiert Moodle mit einem älteren Release und legt mit dessen Code Daten an (`tools/ci/upgrade_seed.php`). Dann ersetzt es das Plugin durch die volle aktuelle Codebasis, führt das Upgrade aus, prüft das Schema (`check_database_schema.php`) und die Daten (`tools/ci/upgrade_verify.php`). Was angelegt und geprüft wird, hängt vom Ausgangsrelease ab: Daten wie vor 0.4.0 (damit die Upgrade-Schritte von 0.4.0 auf echten Daten laufen) oder Daten wie ab 0.4.0 (sie müssen unverändert bleiben). Der GitHub-Job prüft beide Ausgangsstände, den direkten Vorgänger und 0.3.2, auf 4.5/pgsql und 5.3/mariadb.
+`upgrade.sh` installiert Moodle mit einem älteren Release und legt mit dessen Code Daten an (`tools/ci/upgrade_seed.php`). Dann ersetzt es das Plugin durch die volle aktuelle Codebasis, führt das Upgrade aus, prüft das Schema (`check_database_schema.php`) und die Daten (`tools/ci/upgrade_verify.php`). Was angelegt und geprüft wird, hängt vom Ausgangsrelease ab: Daten wie vor 0.4.0 (damit die Upgrade-Schritte von 0.4.0 auf echten Daten laufen) oder Daten wie ab 0.4.0 (sie müssen unverändert bleiben). Jeder Ausgangsstand bekommt eine Gruppe mit teilenden Mitgliedern und einen KI-Aufruf so, wie das alte Release ihn registriert hat, neben dem Aufruf eines anderen Plugins; 0.4.1 zusätzlich einen Eintrag in seinem Anwendungscache `groupsnapshot`. Die Prüfung liest danach die Cache-Konfiguration (`muc/config.php`) und den Dateispeicher, bevor Code des Plugins läuft, erzeugt sofort eine Gruppenaussage ohne Debug-Meldung und prüft Zuordnung und gezieltes Leeren der KI-Einträge. Der GitHub-Job prüft drei Ausgangsstände, den direkten Vorgänger (0.4.1), 0.4.0 und 0.3.2, jeden auf 4.5 und 5.3 und auf PostgreSQL und MariaDB.
+
+Alte Releases für `upgrade.sh` aus der Historie: `git archive <commit> | tar -x -C /home/claude/prev-<release>` (0.4.1 = `afabccc`, 0.4.0 = `af87491`; 0.3.2 aus dem ZIP).
 
 `playwright.sh` macht, was der manuelle Workflow macht: frischer Moodle-Klon, `install.php`, `seed.php`, `php -S 127.0.0.1:8000`, `npm ci`, `npx playwright test`. Ohne Wiederholung fehlgeschlagener Tests (`retries: 0`).
 
@@ -243,11 +245,11 @@ Ab 5.1 muss `pcov.directory` auf `public/mod/sideline` zeigen, sonst misst pcov 
 
 Reihenfolge, ohne Ausnahme:
 
-1. Version in `version.php` anheben (die Adapter nur, wenn sie sich ändern; es gibt keinen Versionsgleichlauf).
+1. Version in `version.php` anheben: **Datum plus laufende Nummer** (`JJJJMMTTNN`, am selben Tag `…00`, `…01`, `…02`), immer höher als die zuletzt ausgelieferte, auch bei kleinen Änderungen. Jede Änderung unter `db/` (Tabellen, Caches, Aufgaben, Rechte, Ereignisse, Dienste) braucht eine höhere Nummer, sonst liest Moodle sie beim Update nicht ein (#29). Die Adapter nur, wenn sie sich ändern; es gibt keinen Versionsgleichlauf.
 2. `docs/CHANGELOG.md` ergänzen. Entfernte oder verschobene Dateien in `db/removed_files.txt` eintragen.
 3. ZIP bauen: volle Codebase ohne `.git`, `node_modules`, `test-results`, `playwright-report`. Name `mod_sideline-<release>.zip`, Wurzelordner `sideline/`.
 4. ZIP in ein leeres Verzeichnis entpacken und daraus mit `checkout.sh` den GitHub-Checkout bauen (Abschnitt 4.2). Meldet `checkout.sh` eine ignorierte Datei, ist `.gitignore` zu korrigieren.
-5. Auf diesem Checkout: die Matrix aus Abschnitt 4.3, `js-checks.sh` mit leerem `MPCI`, `upgrade.sh` vom direkten Vorgänger und von 0.3.2 auf 4.5/pgsql und 5.3/mariadb, `playwright.sh` auf 4.5 und 5.3.
+5. Auf diesem Checkout: die Matrix aus Abschnitt 4.3, `js-checks.sh` mit leerem `MPCI`, `upgrade.sh` mit den sechs Zellen des Upgrade-Jobs, `playwright.sh` auf 4.5 und 5.3. Bei Änderungen an Namensprüfung, Import oder Gruppenpfad zusätzlich `tools/bench_names.php`, `tools/bench_import.php`, `tools/bench_groups.php` auf PostgreSQL und MariaDB (Workflow `bench.yml`).
 6. Zusätzlich: die Stale-Files-Liste (kein Pfad aus `db/removed_files.txt` existiert).
 7. Erst wenn alles grün ist, wird ausgeliefert.
 
@@ -281,9 +283,12 @@ Reihenfolge, ohne Ausnahme:
 - **`admin/cli` liegt im Moodle-Wurzelverzeichnis,** auch ab 5.1, wenn das Web-Root `public/` ist. Workflows rufen `moodle/admin/cli/install.php` auf, nicht `$web/admin/cli/...`.
 - **Testdatenbank für `install.php`:** Lokal mit `CREATE DATABASE` anlegen; auf GitHub legt sie der PostgreSQL-Dienst an.
 - `core_ai\manager::user_policy_accepted()` **schreibt**; zum Lesen `get_user_policy_status()`.
+- **Personenbezogenes nie in den Moodle-Cache (MUC).** Der Dateispeicher löscht abgelaufene Einträge erst beim nächsten Lesen; Schlüssel mit Datum werden nie wieder gelesen und bleiben liegen. Zudem lässt sich ein gezieltes Löschen über alle Knoten und Speicherarten nicht nachweisen. Für Daten von Personen eine Tabelle mit Privacy-API (Beispiel `sideline_daycount`).
+- **Privacy-API von `core_ai` nie für den Nutzerkontext aufrufen,** um eigene KI-Einträge zu löschen: Sie leert die Einträge aller Plugins dort und löscht die Zustimmung zur KI-Richtlinie. Eigene Einträge über `ai_records` (#28).
+- **Behat ohne JavaScript zeigt kein Panel.** Kommentare lädt das Panel per AJAX; Szenarien, die Text des Coachs prüfen, brauchen `@javascript`. Ein Feature, das nach der Installation hinzukommt, kennt Behat erst nach `php public/admin/tool/behat/cli/util.php --enable`.
 
 ## 10. Verifikationsstand
 
-Stand 03.11.2026, Version 0.4.1: siehe `docs/ISSUE_NACHWEISE_0.4.1.md`, Abschnitt „Läufe“. Alle Läufe dort liefen auf dem GitHub-Checkout (`checkout.sh`) des entpackten Auslieferungs-ZIP.
+Stand 03.11.2026, Version 0.4.2: siehe `docs/ISSUE_NACHWEISE_0.4.2.md`, Abschnitt „Gesamtergebnis“. Alle Läufe dort liefen auf dem GitHub-Checkout (`checkout.sh`) des entpackten Auslieferungs-ZIP.
 
 Nicht lokal nachgebildet: der Selenium-Container (stattdessen ChromeDriver mit demselben Chromium, Profil `chrome`) und die GitHub-Dienste für PostgreSQL und MariaDB (stattdessen lokale Server derselben Hauptversionen).

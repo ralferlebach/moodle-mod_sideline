@@ -99,6 +99,9 @@ function sideline_update_instance($data, $mform = null) {
     $DB->update_record('sideline', $data);
     sideline_save_relations($data);
     \mod_sideline\local\cache\commentary_cache::invalidate_instance($data->id);
+    // The day counts of group statements belong to the sharing terms they were made under; saving the relations
+    // may have widened the circle as well.
+    \mod_sideline\local\group\day_count::forget_if_terms_changed($old, $DB->get_record('sideline', ['id' => $data->id]));
 
     return true;
 }
@@ -115,10 +118,12 @@ function sideline_delete_instance($id) {
     if (!$DB->record_exists('sideline', ['id' => $id])) {
         return false;
     }
+    // What the AI subsystem kept of this activity's calls goes with it, and with it the records of origin.
+    \mod_sideline\local\ai\ai_records::forget($id);
     foreach (
         ['sideline_cache', 'sideline_consent', 'sideline_consent_log', 'sideline_scope', 'sideline_source',
         'sideline_group', 'sideline_pref', 'sideline_answer', 'sideline_question', 'sideline_rule',
-        'sideline_rulehit', 'sideline_publish', 'sideline_trace', 'sideline_sourcecat'] as $table
+        'sideline_rulehit', 'sideline_publish', 'sideline_trace', 'sideline_sourcecat', 'sideline_daycount'] as $table
     ) {
         $DB->delete_records($table, ['sidelineid' => $id]);
     }

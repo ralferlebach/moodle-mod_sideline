@@ -16,7 +16,9 @@
 
 namespace mod_sideline\local\consent;
 
+use mod_sideline\local\ai\ai_records;
 use mod_sideline\local\cache\commentary_cache;
+use mod_sideline\local\group\day_count;
 
 /**
  * Optional per-activity consent gate and its state machine (P-45 to P-47, ADR-04).
@@ -227,8 +229,8 @@ class consent_manager {
 
     /**
      * Remove what was generated about a person in an instance: the cached commentary, the decision traces
-     * with the delivered texts, the rule hits, and the prompts and answers that Moodle's AI subsystem kept
-     * of the person's AI calls (all of them, as the subsystem does not tell instances apart; P-47).
+     * with the delivered texts, the rule hits, the person's day counts of group statements, and the prompts
+     * and answers that Moodle's AI subsystem kept of this instance's AI calls for the person (P-47).
      *
      * Interview answers, consent evidence and sharing decisions are the person's own records and stay.
      *
@@ -241,19 +243,9 @@ class consent_manager {
         commentary_cache::invalidate_user($sidelineid, $userid);
         $DB->delete_records('sideline_trace', ['sidelineid' => $sidelineid, 'userid' => $userid]);
         $DB->delete_records('sideline_rulehit', ['sidelineid' => $sidelineid, 'userid' => $userid]);
-        // The plugin's AI calls run in the person's user context (core_text_generator); core's privacy API
-        // empties prompt and answer there. Never an error for the decision itself.
-        $user = \core_user::get_user($userid);
-        if ($user && class_exists(\core_ai\privacy\provider::class)) {
-            try {
-                \core_ai\privacy\provider::delete_data_for_user(new \core_privacy\local\request\approved_contextlist(
-                    $user,
-                    'core_ai',
-                    [\context_user::instance($userid)->id]
-                ));
-            } catch (\Throwable $e) {
-                debugging('mod_sideline: the AI subsystem kept its records: ' . $e->getMessage(), DEBUG_DEVELOPER);
-            }
-        }
+        // What Moodle's AI subsystem kept of this instance's calls for the person, and nothing of other
+        // instances or plugins (ai_records).
+        ai_records::forget($sidelineid, [$userid]);
+        day_count::forget($sidelineid, [$userid]);
     }
 }

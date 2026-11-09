@@ -55,8 +55,8 @@ use mod_sideline\local\instance_config;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class group_service {
-    /** @var int Instance of the current facts() call, part of the snapshot keys. */
-    private int $sidelineid = 0;
+    /** @var day_count|null Day counts of the current facts() call. */
+    private ?day_count $daycount = null;
 
     /** @var int Length of the window before the start of the current day. */
     public const RECENT = WEEKSECS;
@@ -81,7 +81,6 @@ class group_service {
             return [[], []];
         }
         $courseid = (int) $sideline->course;
-        $this->sidelineid = (int) $sideline->id;
         // Only learners receive group statements. Teachers and managers never do: a statement would
         // tell them who opted in to sharing (L-16, P-40). The recipient must also be a member of an
         // admitted group whose membership is visible to members; open mode only adds further groups.
@@ -124,6 +123,7 @@ class group_service {
 
         $statements = [];
         $contributors = [];
+        $this->daycount = new day_count($sideline, $daystart, array_keys($circles));
         foreach ($circles as $groupid => $circle) {
             foreach ($visiblecms as $cmid => $cm) {
                 foreach ($types as $type) {
@@ -143,6 +143,8 @@ class group_service {
                 }
             }
         }
+        $this->daycount->store();
+        $this->daycount = null;
         foreach ($statements as &$statement) {
             unset($statement['contributors']);
         }
@@ -219,11 +221,16 @@ class group_service {
         // are fixed for the day when they are first counted: an event that Moodle stamps again today (a
         // completion ticked off and on) does not move a person out of the count. Who no longer shares, or
         // no longer has the event, drops out at once.
-        $ids = $this->day_snapshot($circle['id'] ?? 0, (int) $cm->id, $type, $daystart, array_keys(array_filter(
-            $people,
-            static fn(array $p): bool => $p['time'] < $daystart && $p['time'] >= $daystart - self::RECENT
-        )));
-        $ids = array_values(array_intersect($ids, array_keys($people)));
+        $ids = $this->daycount->counted(
+            (int) ($circle['id'] ?? 0),
+            (int) $cm->id,
+            $type,
+            array_keys(array_filter(
+                $people,
+                static fn(array $p): bool => $p['time'] < $daystart && $p['time'] >= $daystart - self::RECENT
+            )),
+            array_keys($people)
+        );
         if (count($ids) < $minsize) {
             return null;
         }
@@ -236,29 +243,6 @@ class group_service {
             return $base + ['key' => 'group_only', 'band' => $band, 'group' => $circle['groupname'], 'contributors' => $ids];
         }
         return $base + ['key' => $circle['own'] ? 'group_together' : 'group_others', 'band' => $band, 'contributors' => $ids];
-    }
-
-    /**
-     * The people of an anonymous count, fixed for one day: the first count of the day is kept, later ones
-     * only add people.
-     *
-     * @param int $groupid Group.
-     * @param int $cmid Activity.
-     * @param string $type Event type.
-     * @param int $daystart Start of the day.
-     * @param int[] $now People counted from the current data.
-     * @return int[]
-     */
-    private function day_snapshot(int $groupid, int $cmid, string $type, int $daystart, array $now): array {
-        $cache = \cache::make('mod_sideline', 'groupsnapshot');
-        $key = $this->sidelineid . '_' . $groupid . '_' . $cmid . '_' . $type . '_' . $daystart;
-        $kept = $cache->get($key);
-        $ids = array_values(array_unique(array_merge(is_array($kept) ? $kept : [], array_map('intval', $now))));
-        sort($ids);
-        if ($kept === false || $ids !== $kept) {
-            $cache->set($key, $ids);
-        }
-        return $ids;
     }
 
     /**

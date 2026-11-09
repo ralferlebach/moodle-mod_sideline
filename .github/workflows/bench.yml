@@ -1,0 +1,112 @@
+name: Benchmarks (name check, import, group path)
+
+# Measured profiles on PostgreSQL and MariaDB (issues #24 and #26). Manual only, like the load test:
+# it builds a fresh Moodle per database, installs the plugin and runs
+#   tools/bench_names.php   name check of free text: queries, p50/p95/p99, CPU, peak memory, 100 to 20000 enrolments;
+#   tools/bench_import.php  configuration import with worst-case files of 512 KiB: decode, preview, apply;
+#   tools/bench_groups.php  group statements: queries and time for 100 to 5000 people and up to 200 groups.
+# The JSON reports are uploaded. The run is a measurement for the documentation, not a precondition of anything.
+on:
+  workflow_dispatch:
+    inputs:
+      moodle:
+        description: Moodle branch
+        type: choice
+        options: [MOODLE_503_STABLE, MOODLE_502_STABLE, MOODLE_501_STABLE, MOODLE_500_STABLE, MOODLE_405_STABLE]
+        default: MOODLE_503_STABLE
+      runs:
+        description: Runs per text (name check)
+        default: '30'
+
+jobs:
+  bench:
+    name: "Benchmarks / ${{ matrix.database }}"
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        database: [pgsql, mariadb]
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: moodle
+          POSTGRES_PASSWORD: moodle
+          POSTGRES_DB: moodle
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready" --health-interval=10s
+          --health-timeout=5s --health-retries=5
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: moodle
+          MARIADB_DATABASE: moodle
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized" --health-interval=10s
+          --health-timeout=5s --health-retries=5
+
+    steps:
+      - name: Check out plugin
+        uses: actions/checkout@v4
+        with:
+          path: plugin
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pgsql, mysqli, gd, intl, zip, soap, mbstring, curl, xml, exif, sodium
+          ini-values: max_input_vars=5000, memory_limit=1G
+          tools: composer
+
+      - name: Install Moodle with the plugin
+        id: install
+        env:
+          DB: ${{ matrix.database }}
+        run: |
+          git clone --depth 1 --branch "${{ github.event.inputs.moodle }}" https://github.com/moodle/moodle.git moodle
+          if [ -f moodle/public/version.php ]; then web=moodle/public; else web=moodle; fi
+          echo "web=$web" >> "$GITHUB_OUTPUT"
+          cp -a plugin "$web/mod/sideline"
+          rm -rf "$web/mod/sideline/.git"
+          (cd moodle && composer install --no-dev --no-interaction --quiet)
+          mkdir -p /tmp/moodledata
+          if [ "$DB" = pgsql ]; then
+            dbargs="--dbtype=pgsql --dbport=5432 --dbuser=moodle --dbpass=moodle"
+          else
+            dbargs="--dbtype=mariadb --dbport=3306 --dbuser=root --dbpass=moodle"
+          fi
+          php moodle/admin/cli/install.php --non-interactive --agree-license $dbargs \
+            --dbhost=127.0.0.1 --dbname=moodle --wwwroot=http://127.0.0.1:8000 --dataroot=/tmp/moodledata \
+            --fullname="Sideline bench" --shortname="bench" --adminpass="Admin!23" --adminemail=ci@example.invalid
+
+      - name: Name check of free text
+        run: |
+          web='${{ steps.install.outputs.web }}'
+          php "$web/mod/sideline/tools/bench_names.php" --runs='${{ github.event.inputs.runs }}' \
+            --json="$GITHUB_WORKSPACE/bench-names-${{ matrix.database }}.json"
+
+      - name: Configuration import with worst-case files
+        if: ${{ always() }}
+        run: |
+          web='${{ steps.install.outputs.web }}'
+          php "$web/mod/sideline/tools/bench_import.php" --json="$GITHUB_WORKSPACE/bench-import-${{ matrix.database }}.json"
+
+      - name: Group statements
+        if: ${{ always() }}
+        run: |
+          web='${{ steps.install.outputs.web }}'
+          php "$web/mod/sideline/tools/bench_groups.php"
+
+      - name: Upload the reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-${{ matrix.database }}
+          path: bench-*.json
+          retention-days: 30
+          if-no-files-found: ignore

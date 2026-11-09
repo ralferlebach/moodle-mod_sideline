@@ -24,13 +24,16 @@ use core_privacy\local\request\helper;
 use core_privacy\local\request\transform;
 use core_privacy\local\request\userlist;
 use core_privacy\local\request\writer;
+use mod_sideline\local\ai\ai_records;
 
 /**
  * Privacy provider for mod_sideline (P-48, P1-10, P-G03).
  *
  * Covers every table that holds data about a person: generated commentary, consent and its log,
- * persona choice, interview answers, rule display times, group sharing decisions, decision traces
- * and the audit log of administrator debug exports (as subject and as acting administrator).
+ * persona choice, interview answers, rule display times, group sharing decisions, decision traces,
+ * the day counts of anonymous group statements, the origin of the instance's AI calls, and the audit
+ * log of administrator debug exports (as subject and as acting administrator). Deleting a person's data
+ * also empties what Moodle's AI subsystem kept of this instance's calls for them, and nothing else there.
  * The learner's progress itself belongs to Moodle core and is neither exported nor deleted here.
  *
  * Group mode: another learner's cached commentary may contain a person's first name. When that
@@ -56,7 +59,12 @@ class provider implements
         'sideline_publish' => ['publish', 'named', 'infoversion', 'timemodified'],
         'sideline_trace' => ['trace', 'timecreated'],
         'sideline_debuglog' => ['adminid', 'purpose', 'timefrom', 'timeto', 'timecreated'],
+        'sideline_daycount' => ['groupid', 'cmid', 'eventtype', 'daystart'],
+        'sideline_aicall' => ['actionid', 'timecreated'],
     ];
+
+    /** @var string[] Tables of TABLES that ai_records::forget() deletes from, together with what they point to. */
+    private const DELETED_ELSEWHERE = ['sideline_aicall'];
 
     /** @var array Configuration tables with the user who authorised or wrote a row. */
     private const AUTHOR_TABLES = [
@@ -256,7 +264,9 @@ class provider implements
         if (!$cm) {
             return;
         }
-        foreach (array_keys(self::TABLES) as $table) {
+        // Before the records of origin go: what the AI subsystem kept of this instance's calls.
+        ai_records::forget((int) $cm->instance);
+        foreach (array_diff(array_keys(self::TABLES), self::DELETED_ELSEWHERE) as $table) {
             $DB->delete_records($table, ['sidelineid' => $cm->instance]);
         }
         // Sources without a teacher on record are no longer evaluated until a teacher confirms them again.
@@ -310,8 +320,10 @@ class provider implements
     private static function delete_users(int $sidelineid, array $userids): void {
         global $DB;
 
+        // Before the records of origin go: what the AI subsystem kept of this instance's calls for them.
+        ai_records::forget($sidelineid, $userids);
         [$insql, $inparams] = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED);
-        foreach (array_keys(self::TABLES) as $table) {
+        foreach (array_diff(array_keys(self::TABLES), self::DELETED_ELSEWHERE) as $table) {
             $DB->delete_records_select($table, "sidelineid = :sid AND userid $insql", ['sid' => $sidelineid] + $inparams);
         }
         // A source counts only while the teacher on record may manage activities there: without one it waits for
@@ -350,7 +362,7 @@ class provider implements
         $out = [];
         foreach ($fields as $field) {
             $value = $row->$field;
-            if (str_starts_with($field, 'time') && is_numeric($value)) {
+            if ((str_starts_with($field, 'time') || $field === 'daystart') && is_numeric($value)) {
                 $value = (int) $value ? transform::datetime($value) : null;
             } else if (in_array($field, ['commentary', 'trace', 'value'], true) && is_string($value)) {
                 $decoded = json_decode($value, true);

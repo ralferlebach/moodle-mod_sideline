@@ -396,11 +396,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # "previous": the last commit with a different release string. "0.3.2": the last release before
-        # the schema changes of 0.4.0, so that every upgrade step runs on real data at least once.
+        # "previous": the last commit with a different release string (0.4.1, whose application cache held
+        # user ids). "0.4.0": the release before the first cache definition, with the same version number as
+        # 0.4.1. "0.3.2": the last release before the schema changes of 0.4.0, so that every upgrade step runs
+        # on real data at least once. Each starting point on both Moodle versions and both databases.
         include:
           - { from: previous, moodle: MOODLE_405_STABLE, php: '8.3', database: pgsql }
           - { from: previous, moodle: MOODLE_503_STABLE, php: '8.3', database: mariadb }
+          - { from: '0.4.0', moodle: MOODLE_405_STABLE, php: '8.3', database: mariadb }
+          - { from: '0.4.0', moodle: MOODLE_503_STABLE, php: '8.3', database: pgsql }
           - { from: '0.3.2', moodle: MOODLE_405_STABLE, php: '8.3', database: pgsql }
           - { from: '0.3.2', moodle: MOODLE_503_STABLE, php: '8.3', database: mariadb }
     steps:

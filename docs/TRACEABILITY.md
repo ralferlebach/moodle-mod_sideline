@@ -1,10 +1,12 @@
-# Abdeckungsmatrix mod_sideline 0.4.1
+# Abdeckungsmatrix mod_sideline 0.4.2
 
 Stand: 03.11.2026. Jede Zeile nennt die Umsetzung und den **ausgeführten** Nachweis. Ausgeführt heißt: lokal im Container gelaufen, nicht in GitHub-CI (siehe P-37).
 
 Legende: ✔ umgesetzt und getestet · ◐ teilweise / mit benannter Lücke · ✘ offen
 
 Testorte: `tests/**/*_test.php` (PHPUnit, mod_sideline_testsuite), `adapter/*/tests` (slcmod-Suites), `tests/behat/*.feature` (Behat), `js/esm/tests` und `tests/js` (Jest), `tests/playwright` (Playwright).
+Läufe (0.4.2, 03.11.2026): auf dem GitHub-Checkout des entpackten Auslieferungs-ZIP, mit moodle-plugin-ci 4.5.11 lokal. Ergebnisse: `docs/ISSUE_NACHWEISE_0.4.2.md`, Abschnitt „Gesamtergebnis“. Neu gegenüber 0.4.1: PHPUnit 474 (vorher 461; `ai_records_test`, `day_count_test`), Behat 32 Szenarien (vorher 30; `group_daycount.feature`), Upgrade aus drei Ausgangsständen in sechs Zellen, Negativkontrolle zu #29, Messprofile `bench_names.php` und `bench_import.php` auf PostgreSQL und MariaDB.
+
 Läufe (0.4.1, 03.11.2026): auf dem GitHub-Checkout (`tools/ci-local/checkout.sh`) des entpackten Auslieferungs-ZIP, mit moodle-plugin-ci 4.5.11 lokal. Ergebnisse und Einzelheiten: `docs/ISSUE_NACHWEISE_0.4.1.md`, Abschnitt „Gesamtergebnis“. Neu gegenüber 0.4.0: PHPUnit 461 (vorher 421), Behat 30 Szenarien (vorher 17; `course_union.feature`, `transfer.feature`, `languages.feature`), Playwright 10 Journeys (vorher 6; `a11y.spec.js`), Upgrade von 0.4.0 und von 0.3.2, `tools/bench_names.php`, unabhängiges Security-/Privacy-Review (`docs/security/REVIEW_0.4.1.md`).
 
 Läufe (0.4.0, 03.11.2026), alle auf dem entpackten Auslieferungs-ZIP, mit moodle-plugin-ci 4.5.11 lokal:
@@ -116,8 +118,8 @@ Läufe (0.3.0, 29.10.2026):
 | P-44 Moodle AI Policy | ✔ | | `ai_integration_test` |
 | P-45 Einwilligung vor Verarbeitung | ✔ | | `commentary_service_test` |
 | P-46 Protokollierung | ✔ | `sideline_consent_log` mit Art (Analyse, Freigabe, Name) | `group_mode_test`, `commentary_service_test` |
-| P-47 Widerruf | ✔ | Status schreiben, dann löschen; Erzeugung schreibt, dann prüft; CAS-Konflikt verwirft den Text; letzte Prüfung vor jeder Auslieferung (0.4.0, #3) | `delivery_atomicity_test`, `access_security_test`, `group_mode_test`, `tools/race/run.php`, Behat „A withdrawal in another tab“ |
-| P-48 Privacy API | ✔ | alle 9 personenbezogenen Tabellen | `debug_export_test`, `provider_test` |
+| P-47 Widerruf | ✔ | Status schreiben, dann löschen; Erzeugung schreibt, dann prüft; CAS-Konflikt verwirft den Text; letzte Prüfung vor jeder Auslieferung (0.4.0, #3); im KI-Kern nur die Einträge der eigenen Instanz, auch bei Widerruf während der Antwort (0.4.2, #28); Tageszählung der Gruppenaussagen (0.4.2, #30) | `delivery_atomicity_test`, `ai_records_test`, `day_count_test`, `access_security_test`, `group_mode_test`, `tools/race/run.php`, Behat „A withdrawal in another tab“, `group_daycount.feature` |
+| P-48 Privacy API | ✔ | alle 11 personenbezogenen Tabellen (0.4.2: `sideline_daycount`, `sideline_aicall`) und die Autor-IDs der Konfiguration; keine Personendaten im MUC | `debug_export_test`, `provider_test`, `ai_records_test`, `day_count_test` |
 | P-49 Testabnahme | ✔ | | wie oben |
 
 ## Gruppenmodus (Konzept V1.2)
@@ -136,7 +138,7 @@ Entscheidungen (vom Auftraggeber mit „Alle umsetzen“ übernommen): nur inner
 | L-G08 Nichtteilnahme ohne Nachteil | ✔ | eigener Kommentar unabhängig von der Freigabe |
 | P-G01 Mitgliedschaften, Wechsel, unsichtbare Gruppen | ✔ | `group_mode_test` 4, 5 |
 | P-G02 Stufen als Obergrenze | ✔ | `group_mode_test` 2, 3 |
-| P-G03 Versionierte Entscheidungen, kleine Aggregate, Interviews privat | ✔ | Freigabekreis mit Version (#9), Mindestgröße 3, Bänder, tagesstabiles Fenster (#12) | `group_mode_test` 6, 7, 8, `group_privacy_test`; Restrisiken: `docs/privacy/GRUPPENAGGREGATE.md` |
+| P-G03 Versionierte Entscheidungen, kleine Aggregate, Interviews privat | ✔ | Freigabekreis mit Version (#9), Mindestgröße 3, Bänder, tagesstabiles Fenster (#12), Tageszählung in einer Tabelle mit gezielter Löschung (#30) | `group_mode_test` 6, 7, 8, `group_privacy_test`, `day_count_test`, `group_daycount.feature`; Restrisiken: `docs/privacy/GRUPPENAGGREGATE.md` |
 | P-G04 Positive Ereignisarten, keine Ranglisten | ✔ | geöffnet, abgeschlossen, bestanden, einstellbar; nie Fehlversuche oder Noten (0.4.0, #6) | `group_mode_test` 7, `group_privacy_test`; Matrix zur Freigabe: `docs/privacy/GRUPPENAGGREGATE.md` |
 | P-G05 Cache | ✔ | `group_mode_test` 6 |
 | P-G06 KI nur Tokens | ✔ | `group_mode_test` 9 |

@@ -61,6 +61,9 @@ class purge_cache extends \core\task\scheduled_task {
 
         $DB->delete_records_select('sideline_rulehit', 'timeshown < ?', [$now - 365 * DAYSECS]);
 
+        // Day counts of group statements are needed on their day only.
+        \mod_sideline\local\group\day_count::purge($now);
+
         // The AI usage ledger is needed for the hourly and daily caps only.
         \mod_sideline\local\ai\ai_usage::purge($now);
 

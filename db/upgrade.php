@@ -147,6 +147,47 @@ function xmldb_sideline_upgrade($oldversion) {
         upgrade_mod_savepoint(true, 2026110300, 'sideline');
     }
 
+    // 0.4.2: the day counts of anonymous group statements move from the application cache to a table
+    // that withdrawals and privacy requests delete from; the origin of the plugin's AI calls is recorded.
+    if ($oldversion < 2026110302) {
+        $table = new xmldb_table('sideline_daycount');
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('sidelineid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('userid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('groupid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('cmid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('eventtype', XMLDB_TYPE_CHAR, '20', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('daystart', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_key('sidelineid', XMLDB_KEY_FOREIGN, ['sidelineid'], 'sideline', ['id']);
+        $table->add_key('userid', XMLDB_KEY_FOREIGN, ['userid'], 'user', ['id']);
+        $table->add_index('statement', XMLDB_INDEX_UNIQUE, ['sidelineid', 'daystart', 'groupid', 'cmid', 'eventtype', 'userid']);
+        $table->add_index('daystart', XMLDB_INDEX_NOTUNIQUE, ['daystart']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        $table = new xmldb_table('sideline_aicall');
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('sidelineid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('userid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('actionid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('timecreated', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_key('sidelineid', XMLDB_KEY_FOREIGN, ['sidelineid'], 'sideline', ['id']);
+        $table->add_key('userid', XMLDB_KEY_FOREIGN, ['userid'], 'user', ['id']);
+        $table->add_index('actionid', XMLDB_INDEX_UNIQUE, ['actionid']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        mod_sideline_upgrade_attribute_ai_calls();
+        // The application cache "groupsnapshot" of 0.4.1 held user ids. Its definition is gone from db/caches.php;
+        // the purge of all caches that every regular upgrade runs (upgrade_noncore()) removes its entries. An upgrade
+        // without maintenance mode requires that purge afterwards, as Moodle itself states.
+        upgrade_mod_savepoint(true, 2026110302, 'sideline');
+    }
+
     return true;
 }
 
@@ -176,4 +217,38 @@ function mod_sideline_upgrade_report_legacy_sources(): void {
             'sideline instance ' . $id,
         );
     }
+}
+
+/**
+ * Record the origin of AI calls that releases before 0.4.1 registered in the activity's context.
+ *
+ * Only entries whose prompt has the form of this plugin's prompts are attributed: the activity's context is
+ * also where other placements register calls (for example the AI features of the text editor while a teacher
+ * edits the activity), and those are not the instance's to empty. 0.4.1 registered calls in the learner's user
+ * context, where the instance cannot be told apart any more; those stay unattributed.
+ */
+function mod_sideline_upgrade_attribute_ai_calls(): void {
+    global $DB;
+
+    if (!$DB->get_manager()->table_exists('ai_action_register')) {
+        return;
+    }
+    $rs = $DB->get_recordset_sql(
+        "SELECT r.id, r.userid, r.timecreated, cm.instance, t.prompt
+           FROM {ai_action_register} r
+           JOIN {ai_action_generate_text} t ON t.id = r.actionid
+           JOIN {context} ctx ON ctx.id = r.contextid AND ctx.contextlevel = :level
+           JOIN {course_modules} cm ON cm.id = ctx.instanceid
+           JOIN {modules} m ON m.id = cm.module AND m.name = :module
+          WHERE r.actionname = :action
+            AND NOT EXISTS (SELECT 1 FROM {sideline_aicall} a WHERE a.actionid = r.id)",
+        ['level' => CONTEXT_MODULE, 'module' => 'sideline', 'action' => 'generate_text']
+    );
+    foreach ($rs as $row) {
+        if (\mod_sideline\local\ai\ai_records::is_plugin_prompt((string) $row->prompt)) {
+            $DB->insert_record('sideline_aicall', (object) ['sidelineid' => $row->instance, 'userid' => $row->userid,
+                'actionid' => $row->id, 'timecreated' => $row->timecreated], false);
+        }
+    }
+    $rs->close();
 }

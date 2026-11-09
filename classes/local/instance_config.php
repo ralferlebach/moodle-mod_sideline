@@ -214,6 +214,10 @@ class instance_config {
         }
         $DB->update_record('sideline', $update);
         \mod_sideline\local\cache\commentary_cache::invalidate_instance($sidelineid);
+        if ($grown) {
+            // A wider circle: the day counts were made under the old one.
+            \mod_sideline\local\group\day_count::forget_instance($sidelineid);
+        }
         return (bool) $grown;
     }
 

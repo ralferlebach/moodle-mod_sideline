@@ -94,10 +94,12 @@ final class prompt_text_guard {
     public const NAME_WORDS = 4;
 
     /**
-     * @var int Phrases per query. A text of MAX_LENGTH characters has at most MAX_LENGTH / 2 words and so
-     * at most MAX_LENGTH / 2 * NAME_WORDS phrases: three queries, far below the parameter limits of every database.
+     * @var int Phrases per query. Each query reads the enrolments of the courses once, so one query is the aim: a text
+     * of MAX_LENGTH characters has at most MAX_LENGTH / 2 words, and phrases of one letter do not count, which leaves
+     * about 750 phrases at the very most (one-letter words, every sequence different; tools/bench_names.php, text
+     * "letters"). Two lists of this length stay below the parameter limits of every database Moodle supports.
      */
-    private const CHUNK = 400;
+    private const CHUNK = 750;
 
     /** @var int Results kept for the request, per course and text. */
     private const CACHE_SIZE = 200;

@@ -17,6 +17,7 @@
 namespace mod_sideline\local;
 
 use mod_sideline\local\cache\commentary_cache;
+use mod_sideline\local\group\day_count;
 use mod_sideline\local\instance_config;
 
 /**
@@ -39,6 +40,10 @@ class observer {
         $courseid = (int) $event->courseid;
         if ($userid > 0 && $courseid > 0) {
             commentary_cache::mark_user_dirty($courseid, $userid);
+            // Who leaves the course is no longer part of a day count of its group statements.
+            if ($event instanceof \core\event\user_enrolment_deleted || $event instanceof \core\event\user_enrolment_updated) {
+                day_count::forget_course_user($courseid, $userid);
+            }
         }
     }
 
@@ -61,6 +66,10 @@ class observer {
     public static function group_changed(\core\event\base $event): void {
         if ((int) $event->courseid > 0) {
             commentary_cache::mark_course_dirty((int) $event->courseid);
+            // Who leaves a group is no longer part of a day count; a count is kept per group, so all go.
+            if ($event instanceof \core\event\group_member_removed && (int) $event->relateduserid > 0) {
+                day_count::forget_course_user((int) $event->courseid, (int) $event->relateduserid);
+            }
         }
     }
 
@@ -77,6 +86,10 @@ class observer {
             return;
         }
         commentary_cache::mark_course_dirty($courseid);
+        // A deleted group loses its members without an event for each of them.
+        if ($event instanceof \core\event\group_deleted) {
+            day_count::forget_group((int) $event->objectid);
+        }
         $ids = $DB->get_fieldset_select(
             'sideline',
             'id',

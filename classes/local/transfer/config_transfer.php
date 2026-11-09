@@ -19,6 +19,7 @@ namespace mod_sideline\local\transfer;
 use mod_sideline\local\ai\persona_registry;
 use mod_sideline\local\cache\commentary_cache;
 use mod_sideline\local\dialog\dialog_manager;
+use mod_sideline\local\group\day_count;
 use mod_sideline\local\instance_config;
 use mod_sideline\local\persona\persona_manager;
 use mod_sideline\local\rules\rule_schema;
@@ -55,6 +56,9 @@ use mod_sideline\local\rules\rule_store;
 class config_transfer {
     /** @var int Largest file that is read at all (the upload form has the same limit). */
     public const MAX_BYTES = 512 * 1024;
+
+    /** @var \WeakMap|null Activities of a course structure by type and name (map_activity()). */
+    private static ?\WeakMap $activityindex = null;
 
     /** @var int Deepest nesting of the JSON; an export of this plugin needs less than half of it. */
     public const MAX_DEPTH = 16;
@@ -532,14 +536,23 @@ class config_transfer {
         $warnings = [];
         $plan = ['all' => !empty($groups['all']) && empty($groups['unknown']), 'groupids' => [], 'groupingids' => [],
             'unresolved' => 0];
+        // All groups and groupings of the course at once: a file may name a thousand of them. Names and ID numbers
+        // are compared exactly, on every database alike.
+        $known = [];
+        foreach (['groups', 'groupings'] as $table) {
+            $known[$table] = $DB->get_records($table, ['courseid' => $courseid], '', 'id, name, idnumber');
+        }
         foreach ((array) ($groups['items'] ?? []) as $ref) {
             $table = ($ref['type'] ?? '') === 'grouping' ? 'groupings' : 'groups';
             $rows = [];
             if (!empty($ref['idnumber'])) {
-                $rows = $DB->get_records($table, ['courseid' => $courseid, 'idnumber' => (string) $ref['idnumber']], '', 'id');
+                $rows = array_filter(
+                    $known[$table],
+                    static fn($row): bool => (string) $row->idnumber === (string) $ref['idnumber']
+                );
             }
             if (!$rows && isset($ref['name'])) {
-                $rows = $DB->get_records($table, ['courseid' => $courseid, 'name' => (string) $ref['name']], '', 'id');
+                $rows = array_filter($known[$table], static fn($row): bool => (string) $row->name === (string) $ref['name']);
             }
             $label = s((string) ($ref['name'] ?? '?'));
             if (count($rows) !== 1) {
@@ -671,6 +684,8 @@ class config_transfer {
         // Any change of mode or groups is compared with the circle learners decided for.
         instance_config::refresh_group_circle((int) $sideline->id);
         commentary_cache::invalidate_instance((int) $sideline->id);
+        // Day counts belong to the sharing terms they were made under (mode, level, minimum size, event types).
+        day_count::forget_if_terms_changed($sideline, $DB->get_record('sideline', ['id' => $sideline->id], '*', MUST_EXIST));
         $transaction->allow_commit();
         rebuild_course_cache((int) $sideline->course, true);
     }
@@ -706,12 +721,18 @@ class config_transfer {
      * @return array [course module id or null, problem: "unmapped" or "ambiguous"]
      */
     private static function map_activity(\course_modinfo $modinfo, array $activity): array {
-        $matches = [];
-        foreach ($modinfo->get_cms() as $cm) {
-            if ($cm->modname === ($activity['modname'] ?? null) && $cm->name === ($activity['name'] ?? null)) {
-                $matches[] = $cm;
+        // Index of the course's activities by type and name, built once per course structure.
+        self::$activityindex ??= new \WeakMap();
+        if (!isset(self::$activityindex[$modinfo])) {
+            $index = [];
+            foreach ($modinfo->get_cms() as $cm) {
+                $index[$cm->modname . "\0" . $cm->name][] = $cm;
             }
+            self::$activityindex[$modinfo] = $index;
         }
+        $modname = $activity['modname'] ?? null;
+        $name = $activity['name'] ?? null;
+        $matches = is_string($modname) && is_string($name) ? (self::$activityindex[$modinfo][$modname . "\0" . $name] ?? []) : [];
         if (count($matches) > 1 && isset($activity['section'])) {
             $matches = array_values(array_filter($matches, static fn(\cm_info $cm): bool =>
                 (int) $cm->sectionnum === (int) $activity['section']));

@@ -144,6 +144,10 @@ class sharing_manager {
         if (($old['publish'] && !$publish) || ($old['named'] && !$named)) {
             commentary_cache::invalidate_instance((int) $sideline->id);
         }
+        // Who no longer shares is no longer part of any day count.
+        if (!$publish) {
+            day_count::forget((int) $sideline->id, [$userid]);
+        }
         return self::status($sideline, $userid);
     }
 
