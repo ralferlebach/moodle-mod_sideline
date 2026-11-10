@@ -1,10 +1,11 @@
 # Files removed in earlier releases of this plugin.
 #
-# Updating a repository in place leaves a removed file behind, where it keeps being autoloaded and
-# executed. Moodle's own ZIP installation replaces the plugin directory as a whole and is not
-# affected, which is why this file is excluded from the release archive.
+# Copying a release over the old plugin directory, or updating a repository in place, leaves a
+# removed file behind, where it keeps being autoloaded and executed. Moodle's own ZIP installation
+# replaces the plugin directory as a whole and is not affected.
 #
-# The stale-files CI job fails while any of these paths still exists.
+# The upgrade stops with instructions while any of these paths still exists (db/upgrade.php),
+# cli/privacy_check.php reports them, and the stale-files CI job fails.
 
 # 0.3.0: template leftovers that referred to other plugins (replaced by tests/load/sideline-commentary.js).
 # The browser suite under tests/playwright/ was rewritten for this plugin in 0.3.1 and is no longer listed.

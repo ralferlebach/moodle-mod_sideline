@@ -122,7 +122,7 @@ if ($ADMIN->fulltree) {
     ));
     foreach (
         ['traceretentiondays' => 14, 'auditretentiondays' => 365, 'consentlogretentiondays' => 0,
-        'answerretentiondays' => 365, 'cacheretentiondays' => 90] as $name => $default
+        'answerretentiondays' => 365, 'cacheretentiondays' => 90, 'airetentiondays' => 90] as $name => $default
     ) {
         $page->add(new admin_setting_configtext(
             'mod_sideline/' . $name,

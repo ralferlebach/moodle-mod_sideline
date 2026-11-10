@@ -84,12 +84,23 @@ class core_text_generator implements text_generator {
                 userid: $userid,
                 prompttext: $prompt
             );
+            $response = null;
             try {
                 $response = \core\di::get(manager::class)->process_action($action);
             } finally {
-                // Also a failed call leaves its prompt with the subsystem.
+                // Also a failed call leaves its prompt with the subsystem. The provider's answer id tells this call
+                // apart from a call of another plugin with the same prompt in the same moment.
                 if ($sidelineid) {
-                    ai_records::attribute($sidelineid, $userid, $registered, $after, $prompt, time());
+                    $answerid = $response && $response->get_success() ? ($response->get_response_data()['id'] ?? null) : null;
+                    ai_records::attribute(
+                        $sidelineid,
+                        $userid,
+                        $registered,
+                        $after,
+                        $prompt,
+                        time(),
+                        $answerid === null ? null : (string) $answerid
+                    );
                 }
             }
         } catch (\Throwable $e) {

@@ -23,7 +23,13 @@
  * peak memory, cold (empty Moodle caches, so core rebuilds its group, course and capability caches)
  * and warm (only the plugin's own queries). Budgets per call: at most 12 reads warm, 300 ms cold.
  *
+ * --events chooses the event types of the instance (default: completions). With all five (issue #6) every
+ * learner also has 20 reading entries in the standard log, a third of them worked on the activity yesterday
+ * (log entries that change something) and a third improved a grade (grade history), so that the queries for
+ * use and improved results run against tables of a realistic shape.
+ *
  * Usage: php tools/bench_groups.php [--users=100,1000,5000] [--groups=0,10,50,200]
+ *     [--events=viewed,active,completed,passed,improved]
  *
  * @package    mod_sideline
  * @copyright  2026 Ralf Erlebach
@@ -35,13 +41,14 @@ define('CLI_SCRIPT', true);
 require(__DIR__ . '/../../../config.php');
 require_once($CFG->libdir . '/clilib.php');
 require_once($CFG->libdir . '/testing/generator/lib.php');
+require_once($CFG->libdir . '/gradelib.php');
 if (file_exists($CFG->libdir . '/testing/classes/util.php')) {
     require_once($CFG->libdir . '/testing/classes/util.php');
 }
 
-[$options] = cli_get_params(['users' => '100,1000,5000', 'groups' => '0,10,50,200', 'help' => false]);
+[$options] = cli_get_params(['users' => '100,1000,5000', 'groups' => '0,10,50,200', 'events' => 'completed', 'help' => false]);
 if ($options['help'] || $CFG->wwwroot === 'https://moodle.example.org') {
-    echo "php tools/bench_groups.php [--users=100,1000,5000] [--groups=0,10,50,200]\n";
+    echo "php tools/bench_groups.php [--users=100,1000,5000] [--groups=0,10,50,200] [--events=completed,...]\n";
     exit(0);
 }
 \core\session\manager::set_user(get_admin());
@@ -57,7 +64,12 @@ foreach (array_map('intval', explode(',', $options['users'])) as $size) {
     $course = $gen->create_course(['shortname' => "bg{$stamp}_$size", 'enablecompletion' => 1]);
     $page = $gen->create_module('page', ['course' => $course->id, 'name' => 'Unit A', 'completion' => COMPLETION_TRACKING_MANUAL]);
     $instance = $gen->create_module('sideline', ['course' => $course->id, 'sharingmode' => 'closed', 'grouppublish' => 'general',
-        'consentrequired' => 1]);
+        'consentrequired' => 1, 'groupevents' => $options['events']]);
+    $events = \mod_sideline\local\instance_config::group_events($DB->get_record('sideline', ['id' => $instance->id]));
+    $assign = in_array('improved', $events, true)
+        ? $gen->create_module('assign', ['course' => $course->id, 'name' => 'Essay', 'grade' => 100]) : null;
+    $gradeitem = $assign ? \grade_item::fetch(['itemtype' => 'mod', 'itemmodule' => 'assign', 'iteminstance' => $assign->id,
+        'itemnumber' => 0, 'courseid' => $course->id]) : null;
     $userids = [];
     $enrol = $DB->get_record('enrol', ['courseid' => $course->id, 'enrol' => 'manual'], '*', MUST_EXIST);
     $plugin = enrol_get_plugin('manual');
@@ -72,7 +84,35 @@ foreach (array_map('intval', explode(',', $options['users'])) as $size) {
     $consent = [];
     $publish = [];
     $completion = [];
+    $log = [];
+    $history = [];
+    $grades = [];
+    $yesterday = \mod_sideline\local\group\group_service::day_start(time()) - HOURSECS;
+    $pagecontext = \context_module::instance($page->cmid);
     foreach ($userids as $i => $userid) {
+        if (in_array('active', $events, true)) {
+            for ($k = 0; $k < 21; $k++) {
+                // Twenty reading entries and, for a third of the learners, one that changes something.
+                if ($k === 20 && $i % 3 !== 2) {
+                    continue;
+                }
+                $log[] = ['eventname' => '\\mod_page\\event\\course_module_viewed', 'component' => 'mod_page',
+                    'action' => $k === 20 ? 'created' : 'viewed', 'target' => 'course_module', 'crud' => $k === 20 ? 'c' : 'r',
+                    'edulevel' => 2, 'contextid' => $pagecontext->id, 'contextlevel' => CONTEXT_MODULE,
+                    'contextinstanceid' => $page->cmid, 'userid' => $userid, 'courseid' => $course->id, 'anonymous' => 0,
+                    'timecreated' => $yesterday - $k * HOURSECS, 'origin' => 'web'];
+            }
+        }
+        if ($gradeitem && $i % 3 === 0) {
+            $grades[] = ['itemid' => $gradeitem->id, 'userid' => $userid, 'finalgrade' => 75.0, 'rawgrademax' => 100,
+                'rawgrademin' => 0, 'hidden' => 0, 'timemodified' => $yesterday];
+            foreach ([$yesterday - 2 * DAYSECS => 40.0, $yesterday => 75.0] as $time => $grade) {
+                $history[] = ['action' => 2, 'oldid' => 0, 'source' => 'mod/assign', 'timemodified' => $time, 'loggeduser' => 2,
+                    'itemid' => $gradeitem->id, 'userid' => $userid, 'finalgrade' => $grade, 'rawgrademax' => 100,
+                    'rawgrademin' => 0, 'hidden' => 0, 'locked' => 0, 'locktime' => 0, 'exported' => 0, 'overridden' => 0,
+                    'excluded' => 0, 'informationformat' => 0, 'feedbackformat' => 0];
+            }
+        }
         $consent[] = ['sidelineid' => $sideline->id, 'userid' => $userid, 'status' => 'accepted',
             'infoversion' => (int) $sideline->consentversion, 'timecreated' => $stamp, 'timemodified' => $stamp];
         $publish[] = ['sidelineid' => $sideline->id, 'userid' => $userid, 'publish' => 1, 'named' => 0, 'infoversion' => 99,
@@ -85,6 +125,15 @@ foreach (array_map('intval', explode(',', $options['users'])) as $size) {
     $DB->insert_records('sideline_consent', $consent);
     $DB->insert_records('sideline_publish', $publish);
     $DB->insert_records('course_modules_completion', $completion);
+    foreach (array_chunk($log, 5000) as $chunk) {
+        $DB->insert_records('logstore_standard_log', $chunk);
+    }
+    foreach (array_chunk($history, 5000) as $chunk) {
+        $DB->insert_records('grade_grades_history', $chunk);
+    }
+    foreach (array_chunk($grades, 5000) as $chunk) {
+        $DB->insert_records('grade_grades', $chunk);
+    }
 
     foreach (array_map('intval', explode(',', $options['groups'])) as $groups) {
         $DB->delete_records_select('groups_members', 'groupid IN (SELECT id FROM {groups} WHERE courseid = ?)', [$course->id]);
@@ -106,7 +155,7 @@ foreach (array_map('intval', explode(',', $options['users'])) as $size) {
         // Bulk inserts leave PostgreSQL without statistics until autovacuum runs; a live site has them.
         if ($DB->get_dbfamily() === 'postgres') {
             $tables = ['groups', 'groups_members', 'user', 'user_enrolments', 'sideline_publish', 'sideline_consent',
-                'course_modules_completion'];
+                'course_modules_completion', 'logstore_standard_log', 'grade_grades_history', 'grade_grades'];
             foreach ($tables as $table) {
                 $DB->execute('ANALYZE {' . $table . '}');
             }

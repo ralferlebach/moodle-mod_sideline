@@ -146,7 +146,9 @@ final class pseudonymizer {
             if (isset($rec->facts['event'])) {
                 $facts['event'] = match ((string) $rec->facts['event']) {
                     'viewed' => 'opened_the_activity',
+                    'active' => 'worked_on_the_activity',
                     'passed' => 'passed_the_activity',
+                    'improved' => 'improved_a_result_in_the_activity',
                     default => 'completed_the_activity',
                 };
             }

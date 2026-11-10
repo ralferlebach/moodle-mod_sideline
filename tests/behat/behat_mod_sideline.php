@@ -570,6 +570,28 @@ class behat_mod_sideline extends behat_base {
     }
 
     /**
+     * A learner shares with the group and allows statements with the first name, in another tab or device.
+     *
+     * @Given /^"(?P<username>[^"]*)" shares by name completions in "(?P<activity>[^"]*)" elsewhere$/
+     * @param string $username User name.
+     * @param string $activity Activity name or idnumber.
+     */
+    public function shares_by_name_elsewhere(string $username, string $activity): void {
+        global $DB;
+        $cm = $this->get_cm_by_activity_name('sideline', $activity);
+        $sideline = $DB->get_record('sideline', ['id' => $cm->instance], '*', MUST_EXIST);
+        $userid = (int) $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
+        \mod_sideline\local\group\sharing_manager::record(
+            $sideline,
+            $userid,
+            true,
+            true,
+            \context_module::instance($cm->id)->id,
+            time()
+        );
+    }
+
+    /**
      * Whether the day count of anonymous group statements of an instance holds a learner (issue #30).
      *
      * @Then /^the day count of "(?P<activity>[^"]*)" should (?P<not>not )?include "(?P<username>[^"]*)"$/
@@ -588,5 +610,33 @@ class behat_mod_sideline extends behat_base {
                 $this->getSession()
             );
         }
+    }
+
+    /**
+     * A learner's grade in a graded activity rose yesterday, as the grade history records it: an earlier lower grade
+     * three days ago and a higher one yesterday.
+     *
+     * @Given /^"(?P<username>[^"]*)" improved the result in "(?P<activity>[^"]*)" yesterday$/
+     * @param string $username User name.
+     * @param string $activity Name of an assignment.
+     */
+    public function improved_the_result(string $username, string $activity): void {
+        global $CFG, $DB;
+        require_once($CFG->libdir . '/gradelib.php');
+        $cm = $this->get_cm_by_activity_name('assign', $activity);
+        $userid = (int) $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
+        $item = \grade_item::fetch(['itemtype' => 'mod', 'itemmodule' => 'assign', 'iteminstance' => $cm->instance,
+            'itemnumber' => 0, 'courseid' => $cm->course]);
+        $yesterday = \mod_sideline\local\group\group_service::day_start(time()) - HOURSECS;
+        foreach ([$yesterday - 2 * DAYSECS => 45.0, $yesterday => 80.0] as $time => $grade) {
+            $DB->insert_record('grade_grades_history', (object) ['action' => 2, 'oldid' => 0, 'source' => 'mod/assign',
+                'timemodified' => $time, 'loggeduser' => 2, 'itemid' => $item->id, 'userid' => $userid,
+                'finalgrade' => $grade, 'rawgrademax' => 100, 'rawgrademin' => 0, 'hidden' => 0, 'locked' => 0,
+                'locktime' => 0, 'exported' => 0, 'overridden' => 0, 'excluded' => 0, 'informationformat' => 0,
+                'feedbackformat' => 0]);
+        }
+        $DB->insert_record('grade_grades', (object) ['itemid' => $item->id, 'userid' => $userid, 'finalgrade' => 80.0,
+            'rawgrademax' => 100, 'rawgrademin' => 0, 'hidden' => 0, 'timemodified' => $yesterday]);
+        \mod_sideline\local\cache\commentary_cache::mark_course_dirty((int) $cm->course);
     }
 }

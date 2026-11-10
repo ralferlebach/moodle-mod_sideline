@@ -39,7 +39,7 @@ class backup_sideline_activity_structure_step extends backup_activity_structure_
             'name', 'intro', 'introformat', 'scopetype', 'scopesection', 'persona', 'aienabled', 'typing',
             'consentrequired', 'consentversion', 'configversion', 'timecreated', 'timemodified',
             'display', 'scopesubsections', 'personas', 'personachoice', 'dialogenabled', 'dialogcooldown',
-            'sharingmode', 'grouppublish', 'groupminsize', 'groupversion', 'groupevents',
+            'sharingmode', 'grouppublish', 'groupminsize', 'groupversion', 'groupevents', 'groupwindow',
         ]);
         $scopes = new backup_nested_element('scopes');
         $scope = new backup_nested_element('scope', ['id'], ['cmid']);

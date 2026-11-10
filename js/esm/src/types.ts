@@ -54,6 +54,7 @@ export interface PanelStrings {
     selectHint: string;
     translatedNote: string;
     languageFallback: string;
+    saved: string;
 }
 
 /** Props the PHP side passes in through data-react-props. */

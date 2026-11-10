@@ -29,7 +29,7 @@ const keys = ['region', 'loading', 'error', 'retry', 'consentTitle', 'consentTex
     'consentWithdraw', 'consentDeclined', 'questionSubmit', 'questionSkip', 'questionTitle', 'answersShow', 'answersHide',
     'answersEmpty', 'answerDelete', 'answerEffect', 'personaLabel', 'personaDefault', 'sharingTitle', 'sharingText',
     'sharingPublish', 'sharingNamed', 'sharingReconsent', 'sharingSave', 'sliderValue', 'textRemaining', 'selectHint',
-    'translatedNote', 'languageFallback'];
+    'translatedNote', 'languageFallback', 'saved'];
 const strings = Object.fromEntries(keys.map((k) => [k, `«${k}»`]));
 
 let axe = null;
@@ -155,6 +155,31 @@ describe('AMD panel', () => {
         expect(global.mockCall).toHaveBeenCalledWith({methodname: 'mod_sideline_answer_question',
             args: {cmid: 7, questionid: 5, value: '1', skip: false}});
         expect(document.activeElement.getAttribute('role')).toBe('region');
+        // The reload changes nothing visible here: a status message says that the answer was saved.
+        const notice = document.querySelector('[data-region="notice"]');
+        expect(notice.closest('[aria-live="polite"]').getAttribute('role')).toBe('region');
+        expect(notice.hasAttribute('role')).toBe(false);
+        expect(notice.textContent).toBe('«saved»');
+        expect(notice.parentElement.lastElementChild).toBe(notice);
+    });
+
+    it('announces a repeated action again and says nothing before an action', async() => {
+        const personas = [{key: 'mentor', name: 'Mentor'}, {key: 'reporter', name: 'Reporter'}];
+        respond(ok({personas}), {persona: 'reporter'}, ok({personas}), {persona: 'reporter'}, ok({personas}));
+        await mount();
+        expect(document.querySelector('[data-region="notice"]').textContent).toBe('');
+        const texts = [];
+        const observer = new MutationObserver(() => texts.push(document.querySelector('[data-region="notice"]').textContent));
+        observer.observe(document.body, {subtree: true, childList: true, characterData: true});
+        for (let i = 0; i < 2; i++) {
+            const select = document.querySelector('select');
+            select.value = 'reporter';
+            select.dispatchEvent(new Event('change'));
+            await settle();
+        }
+        observer.disconnect();
+        // Each action clears the message with the reload and sets it again: two announcements.
+        expect(texts.filter((t, i) => t === '«saved»' && texts[i - 1] !== '«saved»')).toHaveLength(2);
     });
 
     it('selects several options within the allowed number and sends them as a list', async() => {

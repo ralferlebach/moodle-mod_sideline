@@ -4,7 +4,10 @@ name: Benchmarks (name check, import, group path)
 # it builds a fresh Moodle per database, installs the plugin and runs
 #   tools/bench_names.php   name check of free text: queries, p50/p95/p99, CPU, peak memory, 100 to 20000 enrolments;
 #   tools/bench_import.php  configuration import with worst-case files of 512 KiB: decode, preview, apply;
-#   tools/bench_groups.php  group statements: queries and time for 100 to 5000 people and up to 200 groups.
+#   tools/bench_groups.php  group statements: queries and time for 100 to 5000 people and up to 200 groups, with
+#                           completions only and with all five event types (issue #6).
+# The name check runs twice: on the bare site, and with a million further users enrolled in other courses, where the
+# execution plan shows whether the cost grows with the site or with the course.
 # The JSON reports are uploaded. The run is a measurement for the documentation, not a precondition of anything.
 on:
   workflow_dispatch:
@@ -90,6 +93,13 @@ jobs:
           php "$web/mod/sideline/tools/bench_names.php" --runs='${{ github.event.inputs.runs }}' \
             --json="$GITHUB_WORKSPACE/bench-names-${{ matrix.database }}.json"
 
+      - name: Name check of free text on a site with a million users
+        if: ${{ always() }}
+        run: |
+          web='${{ steps.install.outputs.web }}'
+          php "$web/mod/sideline/tools/bench_names.php" --runs=10 --siteusers=1000000 --siteenrol \
+            --json="$GITHUB_WORKSPACE/bench-names-1m-${{ matrix.database }}.json"
+
       - name: Configuration import with worst-case files
         if: ${{ always() }}
         run: |
@@ -101,6 +111,7 @@ jobs:
         run: |
           web='${{ steps.install.outputs.web }}'
           php "$web/mod/sideline/tools/bench_groups.php"
+          php "$web/mod/sideline/tools/bench_groups.php" --events=viewed,active,completed,passed,improved
 
       - name: Upload the reports
         if: ${{ always() }}

@@ -45,7 +45,7 @@ const keys: (keyof PanelStrings)[] = [
     'consentDeclined', 'questionSubmit', 'questionSkip', 'questionTitle', 'answersShow', 'answersHide', 'answersEmpty',
     'answerDelete', 'answerEffect', 'personaLabel', 'personaDefault', 'sharingTitle', 'sharingText', 'sharingPublish',
     'sharingNamed', 'sharingReconsent', 'sharingSave', 'sliderValue', 'textRemaining', 'selectHint', 'translatedNote',
-    'languageFallback',
+    'languageFallback', 'saved',
 ];
 // Every UI string is recognisable, so the tests can prove that no text is hard-coded.
 const strings = Object.fromEntries(keys.map((k) => [k, `«${k}»`])) as unknown as PanelStrings;
@@ -169,6 +169,35 @@ describe('CommentaryPanel', () => {
         expect(mockFetchOne).toHaveBeenCalledWith({methodname: 'mod_sideline_answer_question',
             args: {cmid: 7, questionid: 5, value: '1', skip: false}});
         expect(document.activeElement?.getAttribute('role')).toBe('region');
+        // The reload changes nothing visible here: a message in the panel's live region says that it was saved.
+        const notice = document.querySelector('[data-region="notice"]');
+        expect(notice).toHaveTextContent('«saved»');
+        expect(notice?.closest('[aria-live="polite"]')?.getAttribute('role')).toBe('region');
+    });
+
+    it('announces every action again, also when it is repeated', async() => {
+        const personas = {personas: [{key: 'mentor', name: 'Mentor'}, {key: 'coach', name: 'Coach'}]};
+        mockFetchOne
+            .mockResolvedValueOnce(ok(personas))
+            .mockResolvedValueOnce({persona: 'coach'})
+            .mockResolvedValueOnce(ok(personas))
+            .mockResolvedValueOnce({persona: 'coach'})
+            .mockResolvedValueOnce(ok(personas));
+        await renderPanel();
+        const notice = () => document.querySelector('[data-region="notice"]');
+        expect(notice()).toHaveTextContent('');
+        const select = screen.getByLabelText('«personaLabel»');
+        await act(async() => {
+            fireEvent.change(select, {target: {value: 'coach'}});
+        });
+        const first = notice()?.textContent;
+        await act(async() => {
+            fireEvent.change(select, {target: {value: 'coach'}});
+        });
+        const second = notice()?.textContent;
+        expect(first?.trim()).toBe('«saved»');
+        expect(second?.trim()).toBe('«saved»');
+        expect(second).not.toBe(first);
     });
 
     it('selects several options within the allowed number and sends them as a list', async() => {

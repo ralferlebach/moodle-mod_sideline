@@ -5,7 +5,7 @@ Eine Moodle-Aktivität, die Lernenden einen kurzen, persönlichen „Sportreport
 PHP entscheidet deterministisch, was gesagt wird (Deadlines, Sperren, Erfolge); KI formuliert höchstens den Wortlaut.
 Fällt KI aus oder liefert ungültigen Text, greifen lokalisierte Vorlagen, zuletzt ein generischer Text.
 
-Status: **0.3.0 beta** – siehe `docs/CHANGELOG.md`, Nachweise in `docs/TRACEABILITY.md`.
+Status: **0.4.3 beta** (Version `2026110900`) – siehe `docs/CHANGELOG.md`, Nachweise in `docs/TRACEABILITY.md` und `docs/ISSUE_NACHWEISE_0.4.3.md`.
 
 Anforderungen
 -------------
@@ -22,6 +22,13 @@ ZIP über die Plugin-Installation hochladen oder nach `public/mod/sideline` entp
 (`php admin/cli/upgrade.php`). Die Adapter `slcmod_assign` und `slcmod_quiz` liegen unter `adapter/` und werden mitinstalliert.
 Die KI-Nutzung ist standardmäßig aus (Websiteeinstellung `aienabled`) und muss zusätzlich je Aktivität aktiviert werden.
 
+Aktualisieren
+-------------
+
+Das Verzeichnis `mod/sideline` (bzw. `public/mod/sideline`) **vollständig löschen und durch das neue Release ersetzen**, nicht das neue Release darüberkopieren oder ein Repository mit dem Inhalt des ZIP überschreiben. Beim Darüberkopieren bleiben Dateien stehen, die ein Release entfernt hat, und werden weiter geladen; so blieb nach 0.4.2 auf GitHub `db/caches.php` von 0.4.1 stehen (#31). Das Upgrade bricht deshalb ab, solange eine Datei aus `db/removed_files.txt` vorhanden ist, und nennt sie. Die Installation über die Plugin-Verwaltung von Moodle ersetzt das Verzeichnis ohnehin vollständig.
+
+Nach dem Upgrade prüft `php mod/sideline/cli/privacy_check.php` auf dem Zielsystem, was das Plugin aufbewahrt und ob die Fristen greifen (`docs/privacy/DATENSCHUTZ.md`, Abschnitt 7).
+
 Datenschutz
 -----------
 
@@ -32,7 +39,7 @@ Datenschutz
 * Gruppenmodus nur nach aktivem Opt-in der betroffenen Person, Namen nur nach gesonderter Zustimmung.
 * Debug-Export nur für Standortadministration, mit Zweckangabe und Audit-Log.
 * KI-Texte werden auf Sprache und auf Aussagen geprüft, die die Fakten nicht tragen (z. B. „bestanden“ bei einem nicht bestandenen Test). Im Zweifel erscheint die Vorlage.
-* Moodle-Core speichert jeden KI-Aufruf (mit Platzhaltern statt Namen) unbefristet. Die Aufbewahrung wird über das Datenregister von Moodle festgelegt (`docs/adr/ADR-AI-02.md`).
+* Moodle-Core speichert jeden KI-Aufruf (mit Platzhaltern statt Namen) ohne eigene Frist. Prompt und Antwort der Aufrufe des Plugins leert eine geplante Aufgabe nach `airetentiondays` (Voreinstellung 90 Tage); für Einträge anderer Plugins gilt das Datenregister von Moodle (`docs/adr/ADR-AI-02.md`, `docs/privacy/DATENSCHUTZ.md`).
 
 Administration
 --------------

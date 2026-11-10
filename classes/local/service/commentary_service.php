@@ -23,6 +23,7 @@ use mod_sideline\local\consent\consent_manager;
 use mod_sideline\local\debug\trace_recorder;
 use mod_sideline\local\dialog\dialog_manager;
 use mod_sideline\local\group\group_service;
+use mod_sideline\local\instance_config;
 use mod_sideline\local\model\recommendation;
 use mod_sideline\local\persona\persona_resolver;
 use mod_sideline\local\rules\rule_store;
@@ -321,6 +322,8 @@ class commentary_service {
                 'versions' => self::versions(),
                 'persona' => $persona,
                 'groupstatements' => count($groupfacts),
+                // Event types without data on this site: no statement about them, and silence is not "nobody".
+                'groupunknown' => instance_config::unknown_group_events($sideline),
             ], $now);
 
             // Write, then check, after the LAST write: a withdrawal that happened after the checks above is seen

@@ -35,6 +35,10 @@ function xmldb_sideline_upgrade($oldversion) {
     global $DB;
     $dbman = $DB->get_manager();
 
+    // Files that a release removed must be gone before any step runs (copying a new release over an old one
+    // leaves them behind; db/caches.php of 0.4.1 would register a cache that holds user ids again).
+    mod_sideline_upgrade_check_removed_files();
+
     // 0.1.0 (2026102400) to 0.2.0: inline display, scope, personas, dialog, rules, group mode,
     // tracing and audit. Existing rows keep their values; every new field has a safe default.
     if ($oldversion < 2026102500) {
@@ -183,9 +187,23 @@ function xmldb_sideline_upgrade($oldversion) {
 
         mod_sideline_upgrade_attribute_ai_calls();
         // The application cache "groupsnapshot" of 0.4.1 held user ids. Its definition is gone from db/caches.php;
-        // the purge of all caches that every regular upgrade runs (upgrade_noncore()) removes its entries. An upgrade
-        // without maintenance mode requires that purge afterwards, as Moodle itself states.
+        // step 2026110900 removes its files from every file store.
         upgrade_mod_savepoint(true, 2026110302, 'sideline');
+    }
+
+    // 0.4.3: a time window per instance for group statements; the files of the 0.4.1 cache "groupsnapshot" removed
+    // from every file store, whatever the purge of all caches reaches (#31); and the moment from which every AI call
+    // of the plugin has a record of origin: entries before it without one are those of 0.4.1 (and calls of 0.4.2
+    // whose attribution failed), which only the administrator can empty (cli/privacy_check.php).
+    if ($oldversion < 2026110900) {
+        $table = new xmldb_table('sideline');
+        $field = new xmldb_field('groupwindow', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '604800', 'groupevents');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+        mod_sideline_upgrade_remove_group_snapshots();
+        set_config('aiattributionsince', time(), 'mod_sideline');
+        upgrade_mod_savepoint(true, 2026110900, 'sideline');
     }
 
     return true;
@@ -251,4 +269,78 @@ function mod_sideline_upgrade_attribute_ai_calls(): void {
         }
     }
     $rs->close();
+}
+
+/**
+ * Stop the upgrade if files removed by a release are still in the plugin directory.
+ *
+ * Moodle's own check covers only core. A release copied over the old plugin directory keeps every file the new
+ * release no longer has, and some of them change behaviour (a cache definition, a task, a capability). The admin
+ * gets the list and the remedy: replace the directory instead of copying into it.
+ *
+ * @throws moodle_exception When such a file is present.
+ *
+ * @param string|null $base Plugin directory (tests only), default this one.
+ */
+function mod_sideline_upgrade_check_removed_files(?string $base = null): void {
+    $base = $base ?? dirname(__DIR__);
+    $list = $base . '/db/removed_files.txt';
+    if (!is_readable($list)) {
+        return;
+    }
+    $present = [];
+    foreach (file($list, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+        $path = trim($line);
+        if ($path === '' || str_starts_with($path, '#') || str_contains($path, '..')) {
+            continue;
+        }
+        if (file_exists($base . '/' . $path)) {
+            $present[] = $path;
+        }
+    }
+    if ($present) {
+        throw new moodle_exception('err_removed_files', 'mod_sideline', '', implode(', ', $present));
+    }
+}
+
+/**
+ * Delete what file stores still hold of the application cache "groupsnapshot" of 0.4.1 (user ids).
+ *
+ * An upgrade in maintenance mode purges all caches, but only through the cache configuration as it stands, and
+ * the file store deletes an expired entry only when it is read again, which never happens for a definition that
+ * is gone (and a stale db/caches.php kept the definition alive on GitHub, #31). So the directories of the
+ * definition are removed from every file store directly, whatever else happens: the default stores in the cache
+ * directories and stores with a path of their own in the cache configuration. Stores with a time to live of
+ * their own (Redis, Memcached, APCu) let the entries expire after two days, as the definition said.
+ */
+function mod_sideline_upgrade_remove_group_snapshots(): void {
+    global $CFG;
+
+    $roots = [
+        $CFG->cachedir . '/cachestore_file',
+        $CFG->localcachedir . '/cachestore_file',
+        $CFG->dataroot . '/cache/cachestore_file',
+    ];
+    $configfile = !empty($CFG->altcacheconfigpath) ? $CFG->altcacheconfigpath : $CFG->dataroot . '/muc/config.php';
+    if (is_dir($configfile)) {
+        $configfile .= '/cacheconfig.php';
+    }
+    if (is_readable($configfile)) {
+        $configuration = [];
+        include($configfile);
+        foreach ($configuration['stores'] ?? [] as $store) {
+            if (($store['plugin'] ?? '') === 'file' && !empty($store['configuration']['path'])) {
+                $roots[] = (string) $store['configuration']['path'];
+            }
+        }
+    }
+    foreach (array_unique($roots) as $root) {
+        $dirs = array_merge(
+            glob($root . '/mod_sideline_groupsnapshot', GLOB_ONLYDIR) ?: [],
+            glob($root . '/*/mod_sideline_groupsnapshot', GLOB_ONLYDIR) ?: []
+        );
+        foreach ($dirs as $dir) {
+            remove_dir($dir);
+        }
+    }
 }

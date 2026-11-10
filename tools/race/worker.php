@@ -29,6 +29,7 @@ define('CLI_SCRIPT', true);
 require(__DIR__ . '/../../../../config.php');
 require_once($CFG->libdir . '/clilib.php');
 require_once(__DIR__ . '/slow_text_generator.php');
+require_once(__DIR__ . '/slow_ai_manager.php');
 
 [$options] = cli_get_params(['action' => '', 'start' => 0, 'delay' => 0, 'instance' => 0, 'user' => 0, 'slot' => 0,
     'signal' => '', 'waitfor' => '']);
@@ -66,6 +67,32 @@ switch ($options['action']) {
         $result = ['status' => $out['status'], 'source' => $out['commentary']['source'] ?? '', 'attempts' => $service->attempts,
             'calls' => $fake->calls];
         break;
+    case 'generate_core':
+        // The real path through Moodle's AI subsystem: core_text_generator, the configured provider, core's own
+        // storage of prompt and answer. Only the network call of the provider is replaced (slow_ai_manager).
+        $user = \core_user::get_user((int) $options['user'], '*', MUST_EXIST);
+        \core\session\manager::set_user($user);
+        $manager = new \mod_sideline\tools\slow_ai_manager($DB);
+        $manager->signal = (string) $options['signal'];
+        \core\di::set(\core_ai\manager::class, $manager);
+        [$course, $cm] = get_course_and_cm_from_instance($sideline->id, 'sideline');
+        $service = new \mod_sideline\local\service\commentary_service(
+            new \mod_sideline\local\ai\ai_gateway(new \mod_sideline\local\ai\core_text_generator())
+        );
+        $out = $service->get($sideline, $course, $user, context_module::instance($cm->id), time());
+        $result = ['status' => $out['status'], 'source' => $out['commentary']['source'] ?? ''];
+        break;
+    case 'privacy_delete':
+        // A deletion request of the person, as tool_dataprivacy runs it in another process.
+        [, $cm] = get_course_and_cm_from_instance($sideline->id, 'sideline');
+        $user = \core_user::get_user((int) $options['user'], '*', MUST_EXIST);
+        \mod_sideline\privacy\provider::delete_data_for_user(new \core_privacy\local\request\approved_contextlist(
+            $user,
+            'mod_sideline',
+            [context_module::instance($cm->id)->id]
+        ));
+        $result = ['deleted' => true];
+        break;
     case 'withdraw':
         [, $cm] = get_course_and_cm_from_instance($sideline->id, 'sideline');
         $status = \mod_sideline\local\consent\consent_manager::record_decision(
@@ -76,6 +103,42 @@ switch ($options['action']) {
             time()
         );
         $result = ['status' => $status];
+        break;
+    case 'foreign_same_prompt':
+        // Another plugin sends the very prompt of the generation in flight, for the same person, in the user context.
+        $prompt = (string) file_get_contents($options['waitfor']);
+        $manager = new \mod_sideline\tools\slow_ai_manager($DB);
+        $manager->millis = 0;
+        $response = $manager->process_action(new \core_ai\aiactions\generate_text(
+            contextid: context_user::instance((int) $options['user'])->id,
+            userid: (int) $options['user'],
+            prompttext: $prompt
+        ));
+        $result = ['sent' => $response->get_success(), 'length' => strlen($prompt)];
+        break;
+    case 'groupfacts':
+        // A group statement for a recipient: counts the sharing members of the day.
+        $user = \core_user::get_user((int) $options['user'], '*', MUST_EXIST);
+        [$course] = get_course_and_cm_from_instance($sideline->id, 'sideline');
+        [$facts] = (new \mod_sideline\local\group\group_service())->facts(
+            $sideline,
+            (int) $user->id,
+            get_fast_modinfo($course, $user->id)->get_cms(),
+            time()
+        );
+        $result = ['statements' => count($facts)];
+        break;
+    case 'stopsharing':
+        [, $cm] = get_course_and_cm_from_instance($sideline->id, 'sideline');
+        \mod_sideline\local\group\sharing_manager::record(
+            $sideline,
+            (int) $options['user'],
+            false,
+            false,
+            context_module::instance($cm->id)->id,
+            time()
+        );
+        $result = ['stopped' => true];
         break;
     case 'invalidate':
         \mod_sideline\local\cache\commentary_cache::mark_user_dirty((int) $sideline->course, (int) $options['user']);

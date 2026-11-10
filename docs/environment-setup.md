@@ -155,7 +155,7 @@ Schritte und Optionen sind die aus `.github/workflows/moodle-plugin-ci-main.yml`
 - `grunt --max-lint-warnings 0`;
 - `phpunit --fail-on-warning --fail-on-skipped --fail-on-incomplete` (ein übersprungener Test ist ein Fehler);
 - `adapters`: dieselbe PHPUnit-Prüfung für `slcmod_assign_testsuite` und `slcmod_quiz_testsuite`;
-- `race`: installiert die Hauptseite (`admin/cli/install_database.php`) und startet `tools/race/run.php`, echte Parallelprozesse für KI-Kontingent, Widerruf und Invalidierung (Issues #3, #8);
+- `race`: installiert die Hauptseite (`admin/cli/install_database.php`) und startet `tools/race/run.php`, echte Parallelprozesse für KI-Kontingent, Widerruf und Invalidierung (Issues #3, #8) sowie, ab 0.4.3, Privacy-Löschung während und nach einer Erzeugung durch den KI-Kern (`slow_ai_manager`, nur der Netzaufruf des Anbieters ist ersetzt; #28);
 - `behat --profile chrome --tags "@mod_sideline&&~@broken"`.
 
 Dazu kommen zwei weitere Jobs des Workflows:
@@ -167,9 +167,9 @@ SRC=/tmp/co bash /tmp/co/tools/ci-local/upgrade.sh MOODLE_405_STABLE pgsql 8.3 /
 SRC=/tmp/co bash /tmp/co/tools/ci-local/playwright.sh MOODLE_503_STABLE 3 10           # Workflow "playwright": 3 volle Läufe, Gruppen-Journey 10-mal
 ```
 
-`upgrade.sh` installiert Moodle mit einem älteren Release und legt mit dessen Code Daten an (`tools/ci/upgrade_seed.php`). Dann ersetzt es das Plugin durch die volle aktuelle Codebasis, führt das Upgrade aus, prüft das Schema (`check_database_schema.php`) und die Daten (`tools/ci/upgrade_verify.php`). Was angelegt und geprüft wird, hängt vom Ausgangsrelease ab: Daten wie vor 0.4.0 (damit die Upgrade-Schritte von 0.4.0 auf echten Daten laufen) oder Daten wie ab 0.4.0 (sie müssen unverändert bleiben). Jeder Ausgangsstand bekommt eine Gruppe mit teilenden Mitgliedern und einen KI-Aufruf so, wie das alte Release ihn registriert hat, neben dem Aufruf eines anderen Plugins; 0.4.1 zusätzlich einen Eintrag in seinem Anwendungscache `groupsnapshot`. Die Prüfung liest danach die Cache-Konfiguration (`muc/config.php`) und den Dateispeicher, bevor Code des Plugins läuft, erzeugt sofort eine Gruppenaussage ohne Debug-Meldung und prüft Zuordnung und gezieltes Leeren der KI-Einträge. Der GitHub-Job prüft drei Ausgangsstände, den direkten Vorgänger (0.4.1), 0.4.0 und 0.3.2, jeden auf 4.5 und 5.3 und auf PostgreSQL und MariaDB.
+`upgrade.sh` installiert Moodle mit einem älteren Release und legt mit dessen Code Daten an (`tools/ci/upgrade_seed.php`). Dann ersetzt es das Plugin durch die volle aktuelle Codebasis, führt das Upgrade aus, prüft das Schema (`check_database_schema.php`) und die Daten (`tools/ci/upgrade_verify.php`). Was angelegt und geprüft wird, hängt vom Ausgangsrelease ab: Daten wie vor 0.4.0 (damit die Upgrade-Schritte von 0.4.0 auf echten Daten laufen) oder Daten wie ab 0.4.0 (sie müssen unverändert bleiben). Jeder Ausgangsstand bekommt eine Gruppe mit teilenden Mitgliedern und einen KI-Aufruf so, wie das alte Release ihn registriert hat, neben dem Aufruf eines anderen Plugins; 0.4.1 zusätzlich einen Eintrag in seinem Anwendungscache `groupsnapshot`. Die Prüfung liest danach die Cache-Konfiguration (`muc/config.php`) und den Dateispeicher, bevor Code des Plugins läuft, erzeugt sofort eine Gruppenaussage ohne Debug-Meldung und prüft Zuordnung und gezieltes Leeren der KI-Einträge. Der GitHub-Job prüft vier Ausgangsstände in acht Zellen: den direkten Vorgänger (ab 0.4.3: 0.4.2 in dem Stand von GitHub, mit der veralteten `db/caches.php`), 0.4.1, 0.4.0 und 0.3.2, jeden auf 4.5 und 5.3 und auf PostgreSQL und MariaDB. Die Zellen ab 0.4.1 (`COPYOVER=1` in `upgrade.sh`) kopieren zuerst über das alte Verzeichnis und erwarten den Abbruch mit `db/caches.php` (#31). Am Ende läuft die operative Datenschutzprüfung (`operational_check`).
 
-Alte Releases für `upgrade.sh` aus der Historie: `git archive <commit> | tar -x -C /home/claude/prev-<release>` (0.4.1 = `afabccc`, 0.4.0 = `af87491`; 0.3.2 aus dem ZIP).
+Alte Releases für `upgrade.sh` aus der Historie: `git archive <commit> | tar -x -C /home/claude/prev-<release>` (0.4.1 = `afabccc`, 0.4.0 = `af87491`; 0.3.2 und 0.4.2 aus dem ZIP; „previous“ wie auf GitHub: 0.4.2 plus `db/caches.php` von 0.4.1).
 
 `playwright.sh` macht, was der manuelle Workflow macht: frischer Moodle-Klon, `install.php`, `seed.php`, `php -S 127.0.0.1:8000`, `npm ci`, `npx playwright test`. Ohne Wiederholung fehlgeschlagener Tests (`retries: 0`).
 
@@ -247,9 +247,9 @@ Reihenfolge, ohne Ausnahme:
 
 1. Version in `version.php` anheben: **Datum plus laufende Nummer** (`JJJJMMTTNN`, am selben Tag `…00`, `…01`, `…02`), immer höher als die zuletzt ausgelieferte, auch bei kleinen Änderungen. Jede Änderung unter `db/` (Tabellen, Caches, Aufgaben, Rechte, Ereignisse, Dienste) braucht eine höhere Nummer, sonst liest Moodle sie beim Update nicht ein (#29). Die Adapter nur, wenn sie sich ändern; es gibt keinen Versionsgleichlauf.
 2. `docs/CHANGELOG.md` ergänzen. Entfernte oder verschobene Dateien in `db/removed_files.txt` eintragen.
-3. ZIP bauen: volle Codebase ohne `.git`, `node_modules`, `test-results`, `playwright-report`. Name `mod_sideline-<release>.zip`, Wurzelordner `sideline/`.
+3. ZIP bauen: volle Codebase ohne `.git`, `node_modules`, `test-results`, `playwright-report`. Name `<Plugintyp>_<Pluginname>-<Versionsnummer>.zip`, also `mod_sideline-2026110900.zip` (ab 0.4.3; vorher `mod_sideline-<release>.zip`), Wurzelordner `sideline/`. Die Versionsnummer ist Datum plus laufende Nummer (`JJJJMMTTNN`).
 4. ZIP in ein leeres Verzeichnis entpacken und daraus mit `checkout.sh` den GitHub-Checkout bauen (Abschnitt 4.2). Meldet `checkout.sh` eine ignorierte Datei, ist `.gitignore` zu korrigieren.
-5. Auf diesem Checkout: die Matrix aus Abschnitt 4.3, `js-checks.sh` mit leerem `MPCI`, `upgrade.sh` mit den sechs Zellen des Upgrade-Jobs, `playwright.sh` auf 4.5 und 5.3. Bei Änderungen an Namensprüfung, Import oder Gruppenpfad zusätzlich `tools/bench_names.php`, `tools/bench_import.php`, `tools/bench_groups.php` auf PostgreSQL und MariaDB (Workflow `bench.yml`).
+5. Auf diesem Checkout: die Matrix aus Abschnitt 4.3, `js-checks.sh` mit leerem `MPCI`, `upgrade.sh` mit den acht Zellen des Upgrade-Jobs, `playwright.sh` auf 4.5 und 5.3. Bei Änderungen an Namensprüfung, Import oder Gruppenpfad zusätzlich `tools/bench_names.php` (auch mit `--siteusers=1000000`, gibt den Ausführungsplan aus), `tools/bench_import.php`, `tools/bench_groups.php` (auch mit `--events=viewed,active,completed,passed,improved`) auf PostgreSQL und MariaDB (Workflow `bench.yml`). Nach dem Upgrade einer Website: `php mod/sideline/cli/privacy_check.php`.
 6. Zusätzlich: die Stale-Files-Liste (kein Pfad aus `db/removed_files.txt` existiert).
 7. Erst wenn alles grün ist, wird ausgeliefert.
 
@@ -289,6 +289,6 @@ Reihenfolge, ohne Ausnahme:
 
 ## 10. Verifikationsstand
 
-Stand 03.11.2026, Version 0.4.2: siehe `docs/ISSUE_NACHWEISE_0.4.2.md`, Abschnitt „Gesamtergebnis“. Alle Läufe dort liefen auf dem GitHub-Checkout (`checkout.sh`) des entpackten Auslieferungs-ZIP.
+Stand 09.11.2026, Version 0.4.3 (`2026110900`): siehe `docs/ISSUE_NACHWEISE_0.4.3.md`, Abschnitt „Gesamtergebnis“. Alle Läufe dort liefen auf dem GitHub-Checkout (`checkout.sh`) des entpackten Auslieferungs-ZIP.
 
 Nicht lokal nachgebildet: der Selenium-Container (stattdessen ChromeDriver mit demselben Chromium, Profil `chrome`) und die GitHub-Dienste für PostgreSQL und MariaDB (stattdessen lokale Server derselben Hauptversionen).

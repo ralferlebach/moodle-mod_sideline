@@ -86,7 +86,7 @@ class config_transfer {
     /** @var string[] Settings that are transferred. */
     public const SETTINGS = ['display', 'scopetype', 'scopesubsections', 'persona', 'personas', 'personachoice', 'typing',
         'aienabled', 'consentrequired', 'dialogenabled', 'dialogcooldown', 'sharingmode', 'grouppublish', 'groupminsize',
-        'groupevents'];
+        'groupevents', 'groupwindow'];
 
     /**
      * Export an instance.

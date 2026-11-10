@@ -83,7 +83,8 @@ final class config_transfer_test extends \advanced_testcase {
         $manager = $DB->get_field('role', 'id', ['shortname' => 'manager']);
         role_assign($manager, $this->teacher->id, \context_coursecat::instance($category->id)->id);
         $red = $gen->create_group(['courseid' => $this->source->id, 'name' => 'Red team']);
-        $sideline = $this->coach($this->source, ['sharingmode' => 'closed', 'grouppublish' => 'general']);
+        $sideline = $this->coach($this->source, ['sharingmode' => 'closed', 'grouppublish' => 'general',
+            'groupevents' => 'viewed,active,improved', 'groupwindow' => 3 * DAYSECS]);
         instance_config::save_sources($sideline, [$further->id], (int) $this->teacher->id);
         instance_config::save_source_categories($sideline, [$category->id], (int) $this->teacher->id);
         instance_config::save_groups((int) $sideline->id, (int) $this->source->id, [(int) $red->id], []);
@@ -102,6 +103,10 @@ final class config_transfer_test extends \advanced_testcase {
         $this->assertSame([(int) $category->id], instance_config::get_source_categories((int) $target->id));
         $this->assertSame([[(int) $tred->id], []], instance_config::get_groups((int) $target->id));
         $this->assertSame('closed', $DB->get_field('sideline', 'sharingmode', ['id' => $target->id]));
+        // The event types and the time window of group statements (0.4.3) travel too.
+        $imported = $DB->get_record('sideline', ['id' => $target->id]);
+        $this->assertSame(['viewed', 'active', 'improved'], instance_config::group_events($imported));
+        $this->assertSame(3 * DAYSECS, instance_config::group_window($imported));
     }
 
     public function test_sources_the_importer_may_not_manage_are_skipped_with_a_warning(): void {

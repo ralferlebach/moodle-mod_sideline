@@ -34,7 +34,18 @@
  * Budgets per check: at most 2 queries, p99 at most 200 ms, peak memory at most 1 MiB, and the name at
  * the end is found.
  *
- * Usage: php tools/bench_names.php [--sizes=100,1000,5000,20000] [--runs=30] [--json=file]
+ * For every size it also prints the execution plan of the name query for the largest chunk of phrases (the
+ * distinct text), as the database runs it (with LIMIT 1, as record_exists_sql() asks): EXPLAIN (ANALYZE, BUFFERS)
+ * on PostgreSQL, ANALYZE on MariaDB, EXPLAIN ANALYZE on MySQL. The plan shows which indexes bound the scan
+ * (enrol.courseid, user_enrolments.enrolid, user.id); it is recorded, not judged (--json holds it as "plan").
+ *
+ * --siteusers=N adds N users before the courses are built, enrolled nowhere, or with --siteenrol spread over 100
+ * other courses (N enrolments more). The query compares the names of the course's enrolments only, but the database
+ * may scan the user or the enrolment table when that looks cheaper, so the cost can grow with the size of the site
+ * rather than of the course. The plans with and without them show which it is.
+ *
+ * Usage: php tools/bench_names.php [--sizes=100,1000,5000,20000] [--runs=30] [--json=file] [--noplan]
+ *     [--siteusers=N [--siteenrol]]
  *
  * @package    mod_sideline
  * @copyright  2026 Ralf Erlebach
@@ -52,9 +63,10 @@ if (file_exists($CFG->libdir . '/testing/classes/util.php')) {
 
 use mod_sideline\local\ai\prompt_text_guard;
 
-[$options] = cli_get_params(['sizes' => '100,1000,5000,20000', 'runs' => 30, 'json' => '', 'help' => false]);
+[$options] = cli_get_params(['sizes' => '100,1000,5000,20000', 'runs' => 30, 'json' => '', 'noplan' => false,
+    'siteusers' => 0, 'siteenrol' => false, 'help' => false]);
 if ($options['help'] || $CFG->wwwroot === 'https://moodle.example.org') {
-    echo "php tools/bench_names.php [--sizes=100,1000,5000,20000] [--runs=30] [--json=file]\n";
+    echo "php tools/bench_names.php [--sizes=100,1000,5000,20000] [--runs=30] [--json=file] [--noplan] [--siteusers=N]\n";
     exit(0);
 }
 \core\session\manager::set_user(get_admin());
@@ -63,6 +75,36 @@ $stamp = time();
 $runs = max(1, (int) $options['runs']);
 $budget = ['queries' => 2, 'p99ms' => 200, 'peakkib' => 1024];
 $failures = 0;
+
+// Users of the rest of the site, enrolled nowhere.
+$siteusers = max(0, (int) $options['siteusers']);
+for ($done = 0; $done < $siteusers; $done += 1000) {
+    $rows = [];
+    for ($i = $done; $i < min($siteusers, $done + 1000); $i++) {
+        $rows[] = ['auth' => 'manual', 'confirmed' => 1, 'mnethostid' => $CFG->mnet_localhost_id,
+            'username' => "bn{$stamp}_site_$i", 'firstname' => "Sitefirst$i", 'lastname' => "Sitelast$i",
+            'email' => "bns$i@example.invalid", 'timecreated' => $stamp, 'timemodified' => $stamp];
+    }
+    $DB->insert_records('user', $rows);
+}
+if ($siteusers && $options['siteenrol']) {
+    $enrolids = [];
+    for ($c = 0; $c < 100; $c++) {
+        $other = $gen->create_course(['shortname' => "bn{$stamp}_site_course_$c"]);
+        $enrolids[] = (int) $DB->get_field('enrol', 'id', ['courseid' => $other->id, 'enrol' => 'manual'], MUST_EXIST);
+    }
+    $ids = $DB->get_fieldset_select('user', 'id', $DB->sql_like('username', ':u'), ['u' => "bn{$stamp}_site_%"]);
+    foreach (array_chunk(array_values($ids), 5000, true) as $chunk) {
+        $rows = [];
+        foreach ($chunk as $i => $userid) {
+            $rows[] = ['enrolid' => $enrolids[$i % 100], 'userid' => $userid, 'status' => 0, 'timestart' => 0, 'timeend' => 0,
+                'modifierid' => 2, 'timecreated' => $stamp, 'timemodified' => $stamp];
+        }
+        $DB->insert_records('user_enrolments', $rows);
+    }
+}
+$siteusers = $DB->count_records('user', ['deleted' => 0]);
+$siteenrolments = $DB->count_records('user_enrolments');
 
 /**
  * Fill a text up to the maximum length with words from a generator.
@@ -103,6 +145,53 @@ function bench_names_cpu(): float {
     return ($u['ru_utime.tv_sec'] + $u['ru_stime.tv_sec']) * 1000 + ($u['ru_utime.tv_usec'] + $u['ru_stime.tv_usec']) / 1000;
 }
 
+/**
+ * The execution plan of a query, as the database runs it, one line per step: the full plan is JSON
+ * (PostgreSQL and MariaDB), so that a cursor or duplicate lines cannot lose a part of it.
+ *
+ * @param string $sql Query with Moodle table names and named parameters.
+ * @param array $params Parameters.
+ * @return string[] Lines of the plan.
+ */
+function bench_names_plan(string $sql, array $params): array {
+    global $DB;
+    // As record_exists_sql() runs it: the first row is enough, which lets the planner start from the course.
+    $sql .= ' LIMIT 1';
+    if ($DB->get_dbfamily() === 'postgres') {
+        $raw = $DB->get_field_sql('EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ' . $sql, $params);
+    } else if ($DB->get_dbfamily() === 'mysql' && $DB->get_dbvendor() === 'mariadb') {
+        $raw = $DB->get_field_sql('ANALYZE FORMAT=JSON ' . $sql, $params);
+    } else if ($DB->get_dbfamily() === 'mysql') {
+        return explode("\n", (string) $DB->get_field_sql('EXPLAIN ANALYZE ' . $sql, $params));
+    } else {
+        return ['no plan for ' . $DB->get_dbfamily()];
+    }
+    $lines = [];
+    $walk = static function ($node, int $depth) use (&$walk, &$lines): void {
+        if (!is_array($node)) {
+            return;
+        }
+        if (isset($node['Node Type'])) {
+            $lines[] = str_repeat('  ', $depth) . $node['Node Type']
+                . (isset($node['Relation Name']) ? ' on ' . $node['Relation Name'] : '')
+                . (isset($node['Index Name']) ? ' using ' . $node['Index Name'] : '')
+                . sprintf(' rows=%s time=%.2fms', $node['Actual Rows'] ?? '?', $node['Actual Total Time'] ?? 0)
+                . (isset($node['Shared Hit Blocks'])
+                    ? ' hit=' . $node['Shared Hit Blocks'] . ' read=' . $node['Shared Read Blocks'] : '');
+            $depth++;
+        } else if (isset($node['table_name'])) {
+            $lines[] = str_repeat('  ', $depth) . 'table ' . $node['table_name'] . ' access=' . ($node['access_type'] ?? '?')
+                . ' key=' . ($node['key'] ?? 'none') . ' r_rows=' . ($node['r_rows'] ?? '?')
+                . sprintf(' time=%.2fms', $node['r_table_time_ms'] ?? $node['r_total_time_ms'] ?? 0);
+        }
+        foreach ($node as $child) {
+            $walk($child, $depth);
+        }
+    };
+    $walk(json_decode((string) $raw, true), 0);
+    return $lines;
+}
+
 $two = static fn(int $i): string => chr(97 + intdiv($i, 26) % 26) . chr(97 + $i % 26);
 $letters = ['ä', 'é', 'ø', 'ñ', 'ş', 'ж', 'ю', 'ő', 'ł', 'å'];
 $symbols = str_split('abcdefghijklmnopqrstuvwxyz0123456789');
@@ -130,8 +219,9 @@ printf(
     'peakKiB',
     'result'
 );
-$report = ['budget' => $budget, 'runs' => $runs, 'db' => $DB->get_dbfamily(), 'dbversion' => $DB->get_server_info()['version'],
-    'php' => PHP_VERSION, 'sizes' => []];
+$report = ['budget' => $budget, 'runs' => $runs, 'siteusers' => $siteusers, 'siteenrolments' => $siteenrolments,
+    'db' => $DB->get_dbfamily(),
+    'dbversion' => $DB->get_server_info()['version'], 'php' => PHP_VERSION, 'sizes' => []];
 foreach (array_map('intval', explode(',', $options['sizes'])) as $size) {
     $course = $gen->create_course(['shortname' => "bn{$stamp}_$size"]);
     $enrol = $DB->get_record('enrol', ['courseid' => $course->id, 'enrol' => 'manual'], '*', MUST_EXIST);
@@ -163,6 +253,16 @@ foreach (array_map('intval', explode(',', $options['sizes'])) as $size) {
     $last = $size - 1;
     $sizetexts = $texts + ['namelast' => mb_substr($texts['distinct'], 0, prompt_text_guard::MAX_LENGTH - 20) . " lastname$last"];
     $expected = ['namelast' => 'name'];
+    if (!$options['noplan']) {
+        $chunk = array_slice(prompt_text_guard::candidates($texts['distinct']), 0, prompt_text_guard::CHUNK);
+        [$sql, $params] = prompt_text_guard::name_query([(int) $course->id], $chunk);
+        $plan = bench_names_plan($sql, $params);
+        $report['plans'][$size] = ['phrases' => count($chunk), 'plan' => $plan];
+        echo "Plan of the name query, $size enrolments; before this run the site had $siteusers users and $siteenrolments"
+            . " enrolments; "
+            . count($chunk) . " phrases:\n  "
+            . implode("\n  ", $plan) . "\n";
+    }
     $toolong = prompt_text_guard::course_name(str_repeat('a', prompt_text_guard::MAX_LENGTH + 1), (int) $course->id);
     if ($toolong !== 'length') {
         $failures++;

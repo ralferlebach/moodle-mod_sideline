@@ -37,7 +37,7 @@ class panel {
         'consentWithdraw', 'consentDeclined', 'questionSubmit', 'questionSkip', 'questionTitle', 'answersShow',
         'answersHide', 'answersEmpty', 'answerDelete', 'answerEffect', 'personaLabel', 'personaDefault',
         'sharingTitle', 'sharingText', 'sharingPublish', 'sharingNamed', 'sharingReconsent', 'sharingSave',
-        'sliderValue', 'textRemaining', 'selectHint', 'translatedNote', 'languageFallback',
+        'sliderValue', 'textRemaining', 'selectHint', 'translatedNote', 'languageFallback', 'saved',
     ];
 
     /**

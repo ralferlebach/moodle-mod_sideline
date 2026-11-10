@@ -407,10 +407,14 @@ class claim_checker {
             $allowed[] = self::ACTION;
             $allowed[] = self::UNLOCKED;
         }
-        if (str_starts_with($rec->key, 'group_') && ($rec->facts['event'] ?? 'completed') !== 'viewed') {
+        $event = $rec->facts['event'] ?? 'completed';
+        if (str_starts_with($rec->key, 'group_') && in_array($event, ['completed', 'passed'], true)) {
             // Others completed something; the learner's own state is not part of a group statement. Somebody
-            // who only opened an activity has not completed it.
+            // who only opened an activity or worked in it has not completed it.
             $allowed[] = self::DONE;
+            $allowed[] = self::SUCCESS;
+        } else if (str_starts_with($rec->key, 'group_') && $event === 'improved') {
+            // A better result than before is a success, not a completion.
             $allowed[] = self::SUCCESS;
         }
         // Custom rules: whatever the teacher's own template states may be stated (in any supported language).

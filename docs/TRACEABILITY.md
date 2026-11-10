@@ -1,10 +1,12 @@
-# Abdeckungsmatrix mod_sideline 0.4.2
+# Abdeckungsmatrix mod_sideline 0.4.3
 
-Stand: 03.11.2026. Jede Zeile nennt die Umsetzung und den **ausgeführten** Nachweis. Ausgeführt heißt: lokal im Container gelaufen, nicht in GitHub-CI (siehe P-37).
+Stand: 09.11.2026. Jede Zeile nennt die Umsetzung und den **ausgeführten** Nachweis. Ausgeführt heißt: lokal im Container gelaufen, nicht in GitHub-CI (siehe P-37).
 
 Legende: ✔ umgesetzt und getestet · ◐ teilweise / mit benannter Lücke · ✘ offen
 
 Testorte: `tests/**/*_test.php` (PHPUnit, mod_sideline_testsuite), `adapter/*/tests` (slcmod-Suites), `tests/behat/*.feature` (Behat), `js/esm/tests` und `tests/js` (Jest), `tests/playwright` (Playwright).
+Läufe (0.4.3, 09.11.2026): auf dem GitHub-Checkout des entpackten Auslieferungs-ZIP `mod_sideline-2026110900.zip`, mit moodle-plugin-ci 4.5.11 lokal. Ergebnisse: `docs/ISSUE_NACHWEISE_0.4.3.md`, Abschnitt „Gesamtergebnis“. Matrix 8/8, PHPUnit 500/500, Behat 35/35 Szenarien, Races 9/9, Upgrade 8/8, Coverage 90,20 %, Playwright 3 × 15/15 auf 5.3 und 4.5, k6 mit Gruppenpfad ohne Web-Service-Fehler. Neu gegenüber 0.4.2: PHPUnit `group_events_test`, `operational_check_test`, vier Fälle in `ai_records_test`; Behat `group_events.feature`; Playwright `screenreader.spec.js` (React und AMD); Jest Statusmeldung; Races Privacy-Löschung gegen den KI-Kern, gleicher Prompt eines anderen Plugins, Ende des Teilens auf zweitem Prozess; Upgrade aus vier Ausgangsständen in acht Zellen mit Darüberkopieren; Ausführungsplan und Million-Nutzende-Messung der Namensprüfung.
+
 Läufe (0.4.2, 03.11.2026): auf dem GitHub-Checkout des entpackten Auslieferungs-ZIP, mit moodle-plugin-ci 4.5.11 lokal. Ergebnisse: `docs/ISSUE_NACHWEISE_0.4.2.md`, Abschnitt „Gesamtergebnis“. Neu gegenüber 0.4.1: PHPUnit 474 (vorher 461; `ai_records_test`, `day_count_test`), Behat 32 Szenarien (vorher 30; `group_daycount.feature`), Upgrade aus drei Ausgangsständen in sechs Zellen, Negativkontrolle zu #29, Messprofile `bench_names.php` und `bench_import.php` auf PostgreSQL und MariaDB.
 
 Läufe (0.4.1, 03.11.2026): auf dem GitHub-Checkout (`tools/ci-local/checkout.sh`) des entpackten Auslieferungs-ZIP, mit moodle-plugin-ci 4.5.11 lokal. Ergebnisse und Einzelheiten: `docs/ISSUE_NACHWEISE_0.4.1.md`, Abschnitt „Gesamtergebnis“. Neu gegenüber 0.4.0: PHPUnit 461 (vorher 421), Behat 30 Szenarien (vorher 17; `course_union.feature`, `transfer.feature`, `languages.feature`), Playwright 10 Journeys (vorher 6; `a11y.spec.js`), Upgrade von 0.4.0 und von 0.3.2, `tools/bench_names.php`, unabhängiges Security-/Privacy-Review (`docs/security/REVIEW_0.4.1.md`).
@@ -97,7 +99,7 @@ Läufe (0.3.0, 29.10.2026):
 | P-23 Rückauflösung nach Validierung | ✔ | Auflösung nach Validator und Teilnehmer-Recheck | `group_mode_test` |
 | P-24 Übersetzungsschritt | ✔ | Direkt in der Nutzersprache, wo die Aussagenprüfung die Sprache kennt (de, en). Sonst auf Englisch erzeugen und prüfen, dann gesonderter Übersetzungsschritt ohne Fakten. Platzhalter und Zahlen müssen identisch bleiben, die Zielsprache wird geprüft. Unbekannte Sprache bekommt die Vorlage | `ai_language_test`, `ai_integration_test` |
 | P-25 Policy, Ausfall, Limits | ✔ | Policy, Capability, Stundenlimit, Fehler; websiteweit atomare Reservierung mit schlechtestem Fall (0.4.0, #8) | `ai_integration_test`, `commentary_service_test`, `ai_budget_test`, `tools/race/run.php` (20 Prozesse) |
-| P-26 Core-/Provider-Protokolle prüfen | ✔ / ◐ | Technisch geprüft für 4.5 bis 5.3: Core speichert Prompt und Antwort mit Platzhaltern unbefristet. Löschung über Privacy API oder Datenregister (`docs/adr/ADR-AI-02.md`) | `ai_integration_test` (beide Aufrufe, Löschung durch `core_ai\privacy\provider`). Offen: rechtliche Bewertung |
+| P-26 Core-/Provider-Protokolle prüfen | ✔ / ◐ | Technisch geprüft für 4.5 bis 5.3: Core speichert Prompt und Antwort mit Platzhaltern ohne Frist. Ab 0.4.3 leert die tägliche Aufgabe die Einträge des Plugins nach `airetentiondays`; operative Prüfung `cli/privacy_check.php`; Löschung sonst über Privacy API oder Datenregister (`docs/adr/ADR-AI-02.md`) | `ai_integration_test` (beide Aufrufe, Löschung durch `core_ai\privacy\provider`), `ai_records_test` (Frist, Einträge aus 0.4.1), `operational_check_test`, Race Privacy-Löschung. Offen: rechtliche Bewertung (E-14) |
 | P-27 Cache-Key | ✔ | Fingerprint über Nutzer, Instanz, Konfiguration, Regeln, Persona-Version, Sprache, Empfehlungen | `commentary_service_test` |
 | P-28 Invalidierung | ✔ | Completion, Grade, Versuche/Abgaben (Adapter), Struktur, Rollen, Einschreibung, Gruppen, Zeit | `cache_concurrency_test` |
 | P-29 Observer nur markieren; atomare Versionskontrolle | ✔ | `stamp`, bedingtes UPDATE; Kursbereiche, verschobene Kurse und Kategorien, Rollen der autorisierenden Lehrperson (0.4.0, #16) | `cache_concurrency_test`, `source_authority_test` |
@@ -109,7 +111,7 @@ Läufe (0.3.0, 29.10.2026):
 | P-35 Tests je Zustand, Regel, Persona, Dialogtyp, Subplugin, Recht | ✔ / ◐ | siehe Testorte; Property-Test der Regeln | Lücke wie L-15 |
 | P-36 Negativtests | ✔ | | `access_security_test`, `state_model_test`, `rule_evaluator_test` |
 | P-37 Matrix Moodle, PostgreSQL/MariaDB, CI | ◐ | lokal Moodle 4.5–5.3 auf PG 17, MariaDB 11.4 mit 4.5 und 5.3, Chrome 153; PHP 8.1 (4.5), 8.2 (5.0) und 8.3 zur Laufzeit | Lücke: GitHub-CI-Lauf steht aus; die CI-Schritte laufen lokal 1:1 (`tools/ci-local/`) |
-| P-38 Barrierefreiheit | ✔ | native Controls, Labels, Fokus, aria-live, reduzierte Bewegung | Jest (axe), Behat mit axe (WCAG 1.3.1, 1.4.1, 4.1.2), Playwright mit axe und Tastaturbedienung |
+| P-38 Barrierefreiheit | ✔ / ◐ | native Controls, Labels, Fokus, aria-live, reduzierte Bewegung; ab 0.4.3 Statusmeldung nach jeder Aktion (4.1.3) und Fokus-Umriss bei erzwungenen Farben (2.4.7) | Jest (axe), Behat mit axe (WCAG 1.3.1, 1.4.1, 4.1.2), Playwright mit axe und Tastaturbedienung, `screenreader.spec.js`; ◐ Screenreader von Hand (`docs/A11Y_SMOKE.md`, Abschnitt 3) |
 | P-39 Performance-Budgets | ✔ | Budgets siehe unten, `tools/bench.php`, k6-Lasttest über HTTP | Messung unten, `cache_concurrency_test`, `tests/load/README.md` |
 | P-40 Keine Lehrenden-Einsicht | ✔ | | `external_test` |
 | P-41 Debug-Export | ✔ | | `debug_export_test` |
@@ -139,7 +141,7 @@ Entscheidungen (vom Auftraggeber mit „Alle umsetzen“ übernommen): nur inner
 | P-G01 Mitgliedschaften, Wechsel, unsichtbare Gruppen | ✔ | `group_mode_test` 4, 5 |
 | P-G02 Stufen als Obergrenze | ✔ | `group_mode_test` 2, 3 |
 | P-G03 Versionierte Entscheidungen, kleine Aggregate, Interviews privat | ✔ | Freigabekreis mit Version (#9), Mindestgröße 3, Bänder, tagesstabiles Fenster (#12), Tageszählung in einer Tabelle mit gezielter Löschung (#30) | `group_mode_test` 6, 7, 8, `group_privacy_test`, `day_count_test`, `group_daycount.feature`; Restrisiken: `docs/privacy/GRUPPENAGGREGATE.md` |
-| P-G04 Positive Ereignisarten, keine Ranglisten | ✔ | geöffnet, abgeschlossen, bestanden, einstellbar; nie Fehlversuche oder Noten (0.4.0, #6) | `group_mode_test` 7, `group_privacy_test`; Matrix zur Freigabe: `docs/privacy/GRUPPENAGGREGATE.md` |
+| P-G04 Positive Ereignisarten, keine Ranglisten | ✔ | geöffnet, abgeschlossen, bestanden, einstellbar; nie Fehlversuche oder Noten (0.4.0, #6); ab 0.4.3 zusätzlich darin gearbeitet (Standardprotokoll) und Ergebnis verbessert (Bewertungsverlauf, nur anonym), Zeitfenster 1 bis 28 Tage, unbekannte Datenlage | `group_mode_test` 7, `group_privacy_test`, `group_events_test`, Behat `group_events.feature`; Matrix zur Freigabe: `docs/privacy/GRUPPENAGGREGATE.md`, Vorlage E-6 in `docs/privacy/ENTSCHEIDUNGEN.md` |
 | P-G05 Cache | ✔ | `group_mode_test` 6 |
 | P-G06 KI nur Tokens | ✔ | `group_mode_test` 9 |
 

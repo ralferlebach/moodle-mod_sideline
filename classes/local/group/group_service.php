@@ -25,9 +25,12 @@ use mod_sideline\local\instance_config;
  * people are published only after their active opt-in; only positive event types are used, never
  * failed attempts, grades or other negative events. No exact times are ever published.
  *
- * Event types, configured per instance: "viewed" (the activity was opened), "completed"
- * (it counts as completed), "passed" (completed with a pass grade). An activity whose completion is
- * not tracked has an unknown state for "completed" and "passed": nothing is said about it.
+ * Event types, configured per instance: "viewed" (the activity was opened), "active" (the person changed
+ * something in it: a submission, a post, an attempt; standard log), "completed" (it counts as completed),
+ * "passed" (completed with a pass grade), "improved" (a visible grade above every earlier grade of the person;
+ * grade history; never named). An activity whose completion is not tracked has an unknown state for
+ * "completed" and "passed", and a site without the standard log or the grade history has an unknown state for
+ * "active" or "improved": nothing is said about them. The time window is configured per instance as well.
  *
  * Protection of aggregates (docs/privacy/GRUPPENAGGREGATE.md):
  * - Anonymous statements need at least groupminsize persons (never fewer than three) and give a
@@ -58,6 +61,9 @@ class group_service {
     /** @var day_count|null Day counts of the current facts() call. */
     private ?day_count $daycount = null;
 
+    /** @var int Time window of the current facts() call (instance_config::group_window()). */
+    private int $window = self::RECENT;
+
     /** @var int Length of the window before the start of the current day. */
     public const RECENT = WEEKSECS;
     /** @var int Upper bound of names in one statement. */
@@ -65,7 +71,7 @@ class group_service {
     /** @var int Upper bound of statements per commentary. */
     public const MAX_STATEMENTS = 1;
     /** @var string[] Event types in the order in which they are told: the most specific first. */
-    public const EVENT_ORDER = ['passed', 'completed', 'viewed'];
+    public const EVENT_ORDER = ['passed', 'improved', 'completed', 'active', 'viewed'];
 
     /**
      * Group statements for a recipient.
@@ -102,16 +108,21 @@ class group_service {
             return [[], []];
         }
 
-        // Named statements: the last RECENT seconds. Anonymous statements: a window of the same length that
-        // ends at the start of today, stable within the day.
+        // Named statements: the instance's time window up to now. Anonymous statements: a window of the same
+        // length that ends at the start of today, stable within the day. Event types without data on this site
+        // (unknown_group_events()) are never stated.
         $daystart = self::day_start($now);
-        $types = array_values(array_intersect(self::EVENT_ORDER, instance_config::group_events($sideline)));
+        $this->window = instance_config::group_window($sideline);
+        $types = array_values(array_diff(
+            array_intersect(self::EVENT_ORDER, instance_config::group_events($sideline)),
+            instance_config::unknown_group_events($sideline)
+        ));
         $events = $this->events(
             $sideline,
             array_keys($visiblecms),
             array_keys($circles),
             $types,
-            min($now, $daystart) - self::RECENT,
+            min($now, $daystart) - $this->window,
             $now + 1,
             $recipientid
         );
@@ -180,7 +191,8 @@ class group_service {
      * @param array $circle Circle: own (bool), groupname (string|null).
      * @param \cm_info $cm Activity.
      * @param string $type Event type.
-     * @param array $people User id => [named consent (bool), time of the event], sharing members with this event.
+     * @param array $people User id => [named consent (bool), time of the earliest and latest event in the window],
+     *     sharing members with this event.
      * @param string $level Instance maximum level.
      * @param int $minsize Smallest anonymous aggregate.
      * @param int $daystart Start of today: the end of the anonymous window.
@@ -198,7 +210,8 @@ class group_service {
         int $now,
     ): ?array {
         $label = clean_param(format_string($cm->name, true, ['context' => $cm->context]), PARAM_NOTAGS);
-        $recent = array_filter($people, static fn(array $p): bool => $p['time'] >= $now - self::RECENT);
+        $window = $this->window;
+        $recent = array_filter($people, static fn(array $p): bool => $p['latest'] >= $now - $window);
         $named = array_keys(array_filter($recent, static fn(array $p): bool => $p['named']));
         sort($named);
         $base = ['cmid' => (int) $cm->id, 'label' => $label, 'event' => $type];
@@ -206,7 +219,9 @@ class group_service {
             $base['outcome'] = 'passed';
         }
 
-        if (in_array($level, ['named', 'named_with_group'], true) && $named) {
+        // An improved result is told only anonymously: a name would also say that the person did worse before.
+        $nameable = !in_array($type, instance_config::GROUP_EVENTS_ANONYMOUS, true);
+        if ($nameable && in_array($level, ['named', 'named_with_group'], true) && $named) {
             $chosen = array_slice($named, 0, self::MAX_NAMES);
             if ($circle['own']) {
                 return $base + ['key' => 'group_named', 'names' => $this->names($chosen), 'contributors' => $chosen];
@@ -227,7 +242,7 @@ class group_service {
             $type,
             array_keys(array_filter(
                 $people,
-                static fn(array $p): bool => $p['time'] < $daystart && $p['time'] >= $daystart - self::RECENT
+                static fn(array $p): bool => $p['time'] < $daystart && $p['time'] >= $daystart - $window
             )),
             array_keys($people)
         );
@@ -281,15 +296,18 @@ class group_service {
         }
         $circles = $owncircles + $othercircles;
         if ($circles) {
-            // How many other people each circle has: an anonymous statement may never cover all of them.
+            // How many other people each circle has: an anonymous statement may never cover all of them. Only
+            // members who are actively enrolled count; a suspended member would make the group look larger.
             global $DB;
             [$insql, $params] = $DB->get_in_or_equal(array_keys($circles), SQL_PARAMS_NAMED);
+            [$esql, $eparams] = get_enrolled_sql($context, '', 0, true);
             $counts = $DB->get_records_sql_menu(
-                "SELECT groupid, COUNT(userid)
-                   FROM {groups_members}
-                  WHERE groupid $insql AND userid <> :recipient
-               GROUP BY groupid",
-                $params + ['recipient' => $recipientid]
+                "SELECT gm.groupid, COUNT(gm.userid)
+                   FROM {groups_members} gm
+                   JOIN ($esql) je ON je.id = gm.userid
+                  WHERE gm.groupid $insql AND gm.userid <> :recipient
+               GROUP BY gm.groupid",
+                $params + $eparams + ['recipient' => $recipientid]
             );
             foreach ($circles as $gid => &$circle) {
                 $circle['others'] = (int) ($counts[$gid] ?? 0);
@@ -312,7 +330,7 @@ class group_service {
      * @param int $since Start of the window.
      * @param int $until End of the window (exclusive).
      * @param int $recipientid The recipient, never part of a statement about others.
-     * @return array groupid => cmid => type => [user id => [named (bool), time (int)]].
+     * @return array groupid => cmid => type => [user id => [named (bool), time (int, earliest), latest (int)]].
      */
     private function events(
         \stdClass $sideline,
@@ -346,35 +364,79 @@ class group_service {
             'until' => $until,
         ];
         $where = "gm.groupid $gsql AND gm.userid <> :recipient AND $consentsql";
+        // One row per group membership and activity: the key makes the rows unique, so that each type costs
+        // one read (a recordset is a cursor on PostgreSQL and costs three).
+        $key = static fn(string $cm): string => $DB->sql_concat('gm.id', "'_'", $cm) . ' AS rowkey';
+        $completedkey = $key('x.coursemoduleid');
+        $activekey = $key('x.contextinstanceid');
+        $improvedkey = $key('cm.id');
         $queries = [
-            'completed' => "SELECT gm.id, gm.groupid, gm.userid, x.coursemoduleid, x.timemodified AS eventtime, p.named $base
+            'completed' => "SELECT $completedkey, gm.groupid, gm.userid, x.coursemoduleid, x.timemodified AS eventtime,
+                                   p.named $base
                               JOIN {course_modules_completion} x ON x.userid = gm.userid
                              WHERE $where AND x.coursemoduleid $cmsql AND x.completionstate IN (:complete, :pass)
                                    AND x.timemodified >= :since AND x.timemodified < :until",
-            'passed' => "SELECT gm.id, gm.groupid, gm.userid, x.coursemoduleid, x.timemodified AS eventtime, p.named $base
+            'passed' => "SELECT $completedkey, gm.groupid, gm.userid, x.coursemoduleid, x.timemodified AS eventtime,
+                                p.named $base
                            JOIN {course_modules_completion} x ON x.userid = gm.userid
                           WHERE $where AND x.coursemoduleid $cmsql AND x.completionstate = :pass
                                 AND x.timemodified >= :since AND x.timemodified < :until",
-            'viewed' => "SELECT gm.id, gm.groupid, gm.userid, x.coursemoduleid, x.timecreated AS eventtime, p.named $base
+            'viewed' => "SELECT $completedkey, gm.groupid, gm.userid, x.coursemoduleid, x.timecreated AS eventtime,
+                                p.named $base
                            JOIN {course_modules_viewed} x ON x.userid = gm.userid
                           WHERE $where AND x.coursemoduleid $cmsql
                                 AND x.timecreated >= :since AND x.timecreated < :until",
+            // Use: the person's own changes in the activity (crud c or u by a participant: a submission, a post,
+            // an attempt), from the standard log. Never an event that core logs as anonymous (an anonymous
+            // feedback, a submission under blind marking), and never one done by somebody logged in as the person.
+            // The earliest one in the window decides the anonymous count, so that work before today keeps a
+            // person in the count of the day; the latest one decides a named statement.
+            'active' => "SELECT $activekey, gm.groupid, gm.userid, x.contextinstanceid AS coursemoduleid,
+                                MIN(x.timecreated) AS eventtime, MAX(x.timecreated) AS latesttime, p.named $base
+                           JOIN {logstore_standard_log} x ON x.userid = gm.userid AND x.contextlevel = :modulelevel
+                                AND x.crud IN ('c', 'u') AND x.edulevel = :participating
+                                AND x.anonymous = 0 AND x.realuserid IS NULL
+                          WHERE $where AND x.contextinstanceid $cmsql
+                                AND x.timecreated >= :since AND x.timecreated < :until
+                       GROUP BY gm.id, gm.groupid, gm.userid, x.contextinstanceid, p.named",
+            // Improved result: a grade of the activity above every earlier grade of the same person (a new best),
+            // from the grade history. A first grade, an equal grade saved again and a grade below an earlier best
+            // are no event. Only grades the person can see now count: the course shows grades to learners, and the
+            // grade item and the grade are not hidden (or no longer hidden). Only that it rose is used, never the grade.
+            'improved' => "SELECT $improvedkey, gm.groupid, gm.userid, cm.id AS coursemoduleid,
+                                  MIN(h.timemodified) AS eventtime, MAX(h.timemodified) AS latesttime, p.named $base
+                             JOIN {grade_grades_history} h ON h.userid = gm.userid
+                             JOIN {grade_items} gi ON gi.id = h.itemid AND gi.itemtype = 'mod' AND gi.itemnumber = 0
+                                  AND (gi.hidden = 0 OR (gi.hidden > 1 AND gi.hidden < :itemvisible))
+                             JOIN {grade_grades} g ON g.itemid = h.itemid AND g.userid = h.userid
+                                  AND (g.hidden = 0 OR (g.hidden > 1 AND g.hidden < :gradevisible))
+                             JOIN {modules} m ON m.name = gi.itemmodule
+                             JOIN {course_modules} cm ON cm.module = m.id AND cm.instance = gi.iteminstance
+                                  AND cm.course = gi.courseid
+                             JOIN {course} co ON co.id = cm.course AND co.showgrades = 1
+                            WHERE $where AND cm.id $cmsql AND h.finalgrade IS NOT NULL
+                                  AND h.timemodified >= :since AND h.timemodified < :until
+                                  AND h.finalgrade > (SELECT MAX(ph.finalgrade) FROM {grade_grades_history} ph
+                                                       WHERE ph.itemid = h.itemid AND ph.userid = h.userid
+                                                             AND ph.timemodified < h.timemodified)
+                         GROUP BY gm.id, gm.groupid, gm.userid, cm.id, p.named",
         ];
-        $params += ['complete' => COMPLETION_COMPLETE, 'pass' => COMPLETION_COMPLETE_PASS];
+        $params += ['complete' => COMPLETION_COMPLETE, 'pass' => COMPLETION_COMPLETE_PASS, 'modulelevel' => CONTEXT_MODULE,
+            'participating' => \core\event\base::LEVEL_PARTICIPATING, 'itemvisible' => $until, 'gradevisible' => $until];
 
         $result = [];
         foreach ($types as $type) {
             $sql = $queries[$type];
-            // Named parameters must all be used: drop the ones a query does not contain.
-            $used = array_filter($params, static fn(string $name): bool => str_contains($sql, ':' . $name), ARRAY_FILTER_USE_KEY);
-            $rs = $DB->get_recordset_sql($sql, $used);
-            foreach ($rs as $row) {
+            // Named parameters must all be used: keep exactly the ones the query contains (":cm1" is not ":cm10").
+            preg_match_all('/:([a-z][a-z0-9_]*)/', $sql, $names);
+            $used = array_intersect_key($params, array_flip($names[1]));
+            foreach ($DB->get_records_sql($sql, $used) as $row) {
                 $result[(int) $row->groupid][(int) $row->coursemoduleid][$type][(int) $row->userid] = [
                     'named' => (bool) $row->named,
                     'time' => (int) $row->eventtime,
+                    'latest' => (int) ($row->latesttime ?? $row->eventtime),
                 ];
             }
-            $rs->close();
         }
         return $result;
     }

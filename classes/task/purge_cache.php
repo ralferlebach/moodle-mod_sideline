@@ -64,6 +64,14 @@ class purge_cache extends \core\task\scheduled_task {
         // Day counts of group statements are needed on their day only.
         \mod_sideline\local\group\day_count::purge($now);
 
+        // Prompts and answers that Moodle's AI subsystem kept of the plugin's calls (the subsystem never deletes);
+        // 0 keeps them as long as the subsystem does.
+        $aidays = (int) get_config('mod_sideline', 'airetentiondays');
+        if ($aidays > 0) {
+            $emptied = \mod_sideline\local\ai\ai_records::forget_older_than($now - $aidays * DAYSECS);
+            mtrace("mod_sideline: emptied $emptied entries of the AI subsystem older than $aidays days.");
+        }
+
         // The AI usage ledger is needed for the hourly and daily caps only.
         \mod_sideline\local\ai\ai_usage::purge($now);
 

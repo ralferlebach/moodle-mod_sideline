@@ -124,6 +124,7 @@ const CommentaryPanel = ({cmid, typing, strings}: PanelProps) => {
     const [answers, setAnswers] = useState<Answer[] | null>(null);
     const [publish, setPublish] = useState(false);
     const [named, setNamed] = useState(false);
+    const [notice, setNotice] = useState('');
 
     const load = useCallback(async() => {
         setFailed(false);
@@ -141,12 +142,17 @@ const CommentaryPanel = ({cmid, typing, strings}: PanelProps) => {
         load();
     }, [load]);
 
-    /** Run an action, reload, and keep the keyboard focus inside the panel. */
+    /**
+     * Run an action, reload, keep the keyboard focus inside the panel and announce that it is done: the reload may
+     * change nothing visible (an answer without effect), and a screen reader would then say nothing (WCAG 4.1.3).
+     */
     const act = async(action: () => Promise<unknown>) => {
         try {
             await action();
             await load();
             region.current?.focus();
+            // A different text each time, so that a repeated action is announced again.
+            setNotice((n) => (n === strings.saved ? strings.saved + '\u00a0' : strings.saved));
         } catch {
             setFailed(true);
         }
@@ -265,6 +271,8 @@ const CommentaryPanel = ({cmid, typing, strings}: PanelProps) => {
         <section ref={region} tabIndex={-1} className="mod_sideline-panel card card-body" role="region"
             aria-label={strings.region} aria-live="polite">
             {body}
+            {/* The panel is the live region: a live region of its own here would be announced twice. */}
+            <p className="visually-hidden" data-region="notice">{notice}</p>
         </section>
     );
 };

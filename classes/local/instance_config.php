@@ -57,8 +57,18 @@ class instance_config {
     /** @var int Upper bound of courses observed for one learner through course branches (N-02). */
     public const MAX_BRANCH_COURSES = 20;
 
-    /** @var string[] Event types that group mode may publish: none of them is negative. */
-    public const GROUP_EVENTS = ['viewed', 'completed', 'passed'];
+    /**
+     * @var string[] Event types that group mode may publish, none of them negative: opened the activity (access),
+     * worked in it (use: own changes such as a submission, a post or an attempt), completed it, passed it, and
+     * improved a result in it (a higher grade than before; never the grade, never a lower one).
+     */
+    public const GROUP_EVENTS = ['viewed', 'active', 'completed', 'passed', 'improved'];
+
+    /** @var string[] Event types that are only ever told anonymously, about a group of at least the minimum size. */
+    public const GROUP_EVENTS_ANONYMOUS = ['improved'];
+
+    /** @var int[] Time windows of group statements, in seconds. */
+    public const GROUP_WINDOWS = [DAYSECS, 3 * DAYSECS, WEEKSECS, 2 * WEEKSECS, 4 * WEEKSECS];
 
     /** @var int Smallest anonymous aggregate (: two people are never enough). */
     public const MIN_GROUP_SIZE = 3;
@@ -108,6 +118,7 @@ class instance_config {
         }
         $data->groupminsize = min(50, max(self::MIN_GROUP_SIZE, (int) ($data->groupminsize ?? 3)));
         $data->groupevents = implode(',', self::group_events($data));
+        $data->groupwindow = self::group_window($data);
         return $data;
     }
 
@@ -132,8 +143,9 @@ class instance_config {
         $wider = array_search($new->grouppublish, $levels) > array_search($old->grouppublish, $levels)
             || ($modes[$new->sharingmode] ?? 0) > ($modes[$old->sharingmode] ?? 0)
             || (int) $new->groupminsize < (int) $old->groupminsize;
-        // A new event type tells recipients more about the same people.
-        $wider = $wider || array_diff(self::group_events($new), self::group_events($old));
+        // A new event type, or a longer time window, tells recipients more about the same people.
+        $wider = $wider || array_diff(self::group_events($new), self::group_events($old))
+            || self::group_window($new) > self::group_window($old);
         $new->groupversion = (int) $old->groupversion + ($wider ? 1 : 0);
     }
 
@@ -148,6 +160,42 @@ class instance_config {
         $types = is_array($value) ? $value : explode(',', (string) $value);
         $types = array_values(array_intersect(self::GROUP_EVENTS, array_map('trim', array_map('strval', $types))));
         return $types ?: ['completed'];
+    }
+
+    /**
+     * The time window of group statements, one of GROUP_WINDOWS (default: a week).
+     *
+     * @param \stdClass $sideline Instance record or form data.
+     * @return int Seconds.
+     */
+    public static function group_window(\stdClass $sideline): int {
+        $window = (int) ($sideline->groupwindow ?? WEEKSECS);
+        return in_array($window, self::GROUP_WINDOWS, true) ? $window : WEEKSECS;
+    }
+
+    /**
+     * Which configured event types have no data on this site: the standard log is off (use) or the grade history
+     * is off (improved results). These are never stated; the settings and the trace name them as unknown, so that
+     * no silence is read as "nobody did it".
+     *
+     * @param \stdClass $sideline Instance record.
+     * @return string[]
+     */
+    public static function unknown_group_events(\stdClass $sideline): array {
+        global $CFG;
+
+        $unknown = [];
+        $types = self::group_events($sideline);
+        if (in_array('active', $types, true)) {
+            $stores = explode(',', (string) get_config('tool_log', 'enabled_stores'));
+            if (!in_array('logstore_standard', $stores, true)) {
+                $unknown[] = 'active';
+            }
+        }
+        if (in_array('improved', $types, true) && !empty($CFG->disablegradehistory)) {
+            $unknown[] = 'improved';
+        }
+        return $unknown;
     }
 
     /**

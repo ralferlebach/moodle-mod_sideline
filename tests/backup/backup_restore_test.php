@@ -95,7 +95,8 @@ final class backup_restore_test extends \advanced_testcase {
         // The Sideline activity is created before its targets on purpose: they are restored after it.
         $sideline = $gen->create_module('sideline', [
             'course' => $course->id, 'persona' => 'reporter', 'consentrequired' => 1, 'aienabled' => 1,
-            'scopetype' => instance_config::SCOPE_ACTIVITIES,
+            'scopetype' => instance_config::SCOPE_ACTIVITIES, 'sharingmode' => 'closed',
+            'groupevents' => 'active,improved', 'groupwindow' => 2 * WEEKSECS,
         ]);
         $p1 = $gen->create_module('page', ['course' => $course->id, 'name' => 'Target one']);
         $gen->create_module('page', ['course' => $course->id, 'name' => 'Not observed']);
@@ -115,6 +116,9 @@ final class backup_restore_test extends \advanced_testcase {
         $this->assertSame('reporter', $copy->persona);
         $this->assertSame(instance_config::SCOPE_ACTIVITIES, $copy->scopetype);
         $this->assertEquals(1, $copy->consentrequired);
+        // The event types and the time window of group statements (0.4.3) travel with the copy.
+        $this->assertSame(['active', 'improved'], instance_config::group_events($copy));
+        $this->assertSame(2 * WEEKSECS, instance_config::group_window($copy));
 
         // Scope points at the copy of "Target one" in the new course, not at the old course.
         $pages = $DB->get_records('page', ['course' => $new->id], '', 'id, name');

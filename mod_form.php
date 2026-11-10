@@ -177,6 +177,29 @@ class mod_sideline_mod_form extends moodleform_mod {
         $mform->setDefault('groupevents', ['completed']);
         $mform->addHelpButton('groupevents', 'groupevents', 'mod_sideline');
         $mform->hideIf('groupevents', 'sharingmode', 'eq', instance_config::GROUP_INDIVIDUAL);
+        // Event types this site has no data for are named, when adding and when editing, whatever is selected:
+        // a missing statement is not read as "nobody did it", and a type is not chosen in vain.
+        $unknown = instance_config::unknown_group_events((object) ['groupevents' => instance_config::GROUP_EVENTS]);
+        if ($unknown) {
+            $names = implode(', ', array_map(
+                static fn(string $t): string => get_string('groupevent_' . $t, 'mod_sideline'),
+                $unknown
+            ));
+            $mform->addElement('static', 'groupeventsunknown', '', \html_writer::div(
+                get_string('groupevents_unknown', 'mod_sideline', $names),
+                'alert alert-warning'
+            ));
+            $mform->hideIf('groupeventsunknown', 'sharingmode', 'eq', instance_config::GROUP_INDIVIDUAL);
+        }
+        $windows = [];
+        foreach (instance_config::GROUP_WINDOWS as $seconds) {
+            $windows[$seconds] = get_string('numdays', 'core', $seconds / DAYSECS);
+        }
+        $windows[DAYSECS] = get_string('groupwindow_day', 'mod_sideline');
+        $mform->addElement('select', 'groupwindow', get_string('groupwindow', 'mod_sideline'), $windows);
+        $mform->setDefault('groupwindow', WEEKSECS);
+        $mform->addHelpButton('groupwindow', 'groupwindow', 'mod_sideline');
+        $mform->hideIf('groupwindow', 'sharingmode', 'eq', instance_config::GROUP_INDIVIDUAL);
         [$groups, $groupings] = $this->group_options();
         $mform->addElement('autocomplete', 'groupids', get_string('groupids', 'mod_sideline'), $groups, ['multiple' => true]);
         $mform->hideIf('groupids', 'sharingmode', 'eq', instance_config::GROUP_INDIVIDUAL);

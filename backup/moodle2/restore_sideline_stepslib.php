@@ -58,6 +58,7 @@ class restore_sideline_activity_structure_step extends restore_activity_structur
         // Backups of older versions: the same minimum as the form, completions as event type.
         $data->groupminsize = max(\mod_sideline\local\instance_config::MIN_GROUP_SIZE, (int) ($data->groupminsize ?? 3));
         $data->groupevents = $data->groupevents ?? 'completed';
+        $data->groupwindow = \mod_sideline\local\instance_config::group_window($data);
         $data->groupcircle = null;
         // Whatever was generated elsewhere is stale here: start the configuration version afresh.
         $data->configversion = (int) $data->configversion + 1;

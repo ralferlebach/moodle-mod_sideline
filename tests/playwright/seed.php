@@ -111,8 +111,10 @@ $exports = ['SL_BASE_URL' => $CFG->wwwroot, 'SL_COURSEID' => $course->id, 'SL_TY
     'SL_MULTI_CMID' => $multi->cmid, 'SL_GROUP_CMID' => $groupcoach->cmid, 'SL_A11Y_CMID' => $a11y->cmid,
     'SL_PASSWORD' => $password];
 $users = [];
+// Student6 and student7: the screen reader proxy (screenreader.spec.js), each journey with a learner of its own.
 $roles = ['teacher' => 'editingteacher', 'student1' => 'student', 'student2' => 'student', 'student3' => 'student',
-    'student4' => 'student', 'student5' => 'student'];
+    'student4' => 'student', 'student5' => 'student', 'student6' => 'student', 'student7' => 'student',
+    'student8' => 'student'];
 foreach ($roles as $key => $role) {
     $user = $gen->create_user(['username' => 'slpw' . $stamp . $key, 'password' => $password, 'firstname' => ucfirst($key),
         'lastname' => 'Test', 'policyagreed' => 1, 'lang' => $key === 'student5' ? 'he' : 'en']);

@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.4.3 (beta)
+
+Nacharbeit zu den offenen Issues #31, #30, #29, #28, #26, #25, #24, #14, #12 und #6 und zum CI-Lauf 115655888628. Nachweise je Issue: `docs/ISSUE_NACHWEISE_0.4.3.md`. Version `2026110900`, Upgrade-Schritt `2026110900` (Feld `groupwindow`). Auslieferung als `mod_sideline-2026110900.zip`.
+
+**CI und Upgrade (#31)**
+* **Ursache des roten CI-Laufs:** Auf GitHub lag nach 0.4.2 noch `db/caches.php` von 0.4.1, weil das Release über das Repository kopiert worden war. Moodle lud die Definition `groupsnapshot` wieder; PHPUnit, Coverage, der Stale-Files-Job und alle sechs Upgrade-Jobs schlugen deshalb fehl. Die Datei ist auf GitHub gelöscht.
+* **Das Upgrade bricht ab, solange eine entfernte Datei vorhanden ist,** und nennt sie mit der Anweisung, das Verzeichnis zu ersetzen statt darüberzukopieren (`db/removed_files.txt`, das jetzt mit ausgeliefert wird). README: neuer Abschnitt „Aktualisieren“.
+* **Der Upgrade-Schritt löscht die Dateien der Cache-Definition von 0.4.1 selbst** aus allen Dateispeichern, auch aus solchen mit eigenem Pfad. Das hängt nicht mehr am Leeren aller Caches durch Moodle.
+* Upgrade-Job: acht statt sechs Zellen. „previous“ ist jetzt 0.4.2 in dem Stand, den GitHub an seinem Versions-Commit hat (mit der veralteten `db/caches.php`). Zwei neue Zellen ab 0.4.1 kopieren zuerst über das alte Verzeichnis und erwarten den Abbruch mit `db/caches.php`, danach ersetzen sie das Verzeichnis. Die Prüfung nach dem Upgrade läuft zusätzlich durch die operative Datenschutzprüfung. Der Release-Artefakt-Job verlangt `db/removed_files.txt` und `cli/privacy_check.php` im Archiv.
+* Ein Upgrade ohne Wartungsmodus (`--maintenance=false`) verweigert Moodle, sobald sich unter `db/` einer Komponente etwas geändert hat (Hash aller `db/`-Verzeichnisse), also bei jedem Release mit Upgrade-Schritt wie diesem; eine eigene Upgrade-Zelle dafür gibt es deshalb nicht. Das direkte Löschen der Cache-Dateien wirkt trotzdem unabhängig davon.
+
+**Gruppenmodus (#6, #12)**
+* **Neue Ereignisarten:** „darin gearbeitet“ (eigene ändernde Ereignisse der Person aus dem Standardprotokoll: Abgabe, Beitrag, Versuch) und „Ergebnis verbessert“ (eine Bewertung über jeder früheren derselben Person, also eine neue Bestleistung, aus dem Bewertungsverlauf; nur sichtbare Bewertungen in Kursen, die Bewertungen zeigen; nur anonym, nie Note, Differenz oder Verschlechterung).
+* **Zeitfenster je Instanz:** 1, 3, 7, 14 oder 28 Tage (Standard 7). Ein längeres Fenster und eine weitere Ereignisart verlangen neue Entscheidungen der Teilenden.
+* **Unbekannte Datenlage:** Ist das Standardprotokoll oder der Bewertungsverlauf aus, wird die Art nie erzählt; das Formular warnt, das Entscheidungsprotokoll nennt sie.
+* Benannte Aussagen über die Nutzung richten sich nach der letzten Änderung im Fenster, anonyme nach der ersten (tagesstabil).
+* Ereignismatrix, Risikoanalyse mit Restrisikoregister R1 bis R9 und Entscheidungsvorlagen: `docs/privacy/GRUPPENAGGREGATE.md`, `docs/privacy/ENTSCHEIDUNGEN.md`.
+
+**Datenschutz (#14, #28)**
+* **Frist für KI-Einträge des Plugins:** neue Einstellung `airetentiondays` (90 Tage). Die tägliche Aufgabe leert Prompt und Antwort älterer Aufrufe des Plugins im KI-Kern; Einträge anderer Plugins bleiben.
+* **Operative Datenschutzprüfung:** `php mod/sideline/cli/privacy_check.php` meldet Fristen, überfällige Einträge, Einträge aus 0.4.1 ohne Instanz, aktive KI-Anbieter, alte Tageszählungen, Cache-Reste, entfernte Dateien, Entscheidungsprotokolle und Debug-Abrufe (OK, WARN, FAIL; Exit 1 bei FAIL). `--empty-unattributed` leert die Einträge aus 0.4.1, die kein Widerruf erreicht.
+* Prozess für Prüfung, Auskunft und Löschung auf dem Zielsystem: `docs/privacy/DATENSCHUTZ.md`, Abschnitt 7.
+* **Herkunft auch bei gleichem Prompt eindeutig (#28, Re-Audit 0.4.2):** Die Zuordnung eines KI-Eintrags verlangt zusätzlich die Antwort-ID des Anbieters für genau diesen Aufruf. Ein anderes Plugin, das im selben Moment denselben Prompt für dieselbe Person sendet, wird nie zugeordnet; bei Mehrdeutigkeit wird nichts zugeordnet (fail-closed).
+* Neue Wettläufe mit echten Prozessen (`tools/race/run.php`): Privacy-Löschung während und nach einer Erzeugung durch den KI-Kern; ein anderes Plugin mit demselben Prompt während der Erzeugung; Ende des Teilens auf einem Knoten, während ein anderer die Gruppenaussage zählt (#30).
+
+**Barrierefreiheit (#25)**
+* **Statusmeldung nach jeder Aktion** („Gespeichert.“) in beiden Panels: Eine Antwort ohne Wirkung auf den Kommentar änderte bisher nichts Sichtbares, ein Screenreader sagte nichts (WCAG 4.1.3).
+* **Fokus im Windows-Kontrastmodus:** Bootstrap zeichnet den Fokus als Schatten, den erzwungene Farben entfernen; jetzt zeichnet das Plugin dort einen Umriss (WCAG 2.4.7).
+* Neue Playwright-Prüfungen `screenreader.spec.js` für React und AMD: Barrierefreiheitsbaum, Ansagen, Fokus, keine Tastaturfalle, erzwungene Farben, reduzierte Bewegung. Ergebnismatrix in `docs/A11Y_SMOKE.md`. Der Test mit NVDA und VoiceOver bleibt von Hand.
+
+**Leistung (#24, #26)**
+* `tools/bench_names.php` gibt den Ausführungsplan der Namensprüfung aus, so wie die Prüfung sie stellt (`LIMIT 1`), und misst mit `--siteusers --siteenrol` auf einer Website mit über einer Million weiterer Nutzender und Einschreibungen: Beide Datenbanken beginnen beim Kurs, der Aufwand wächst mit dem Kurs, nicht mit der Website. `tools/bench_groups.php --events` misst den Gruppenpfad mit allen fünf Ereignisarten. `bench.yml` führt beides zusätzlich aus.
+
+**Tests**
+* PHPUnit 500 (0.4.2: 477): `group_events_test` (12), `operational_check_test` (7), vier neue Fälle in `ai_records_test`, Ergänzungen in `backup_restore_test` und `config_transfer_test`; Behat `group_events.feature` (3 Szenarien, echte Antwort in einer Abstimmung); Jest für die Statusmeldung beider Panels; Playwright `screenreader.spec.js` (5 je Panel); Races 9 (0.4.2: 5).
+* Eine unabhängige Prüfung fand 20 Punkte, darunter echte Fehler in den neuen Ereignisarten (Verschlechterung als Verbesserung, anonyme Ereignisse, verborgene Bewertungen) und zwei zu lange Zeilen, an denen die CI gescheitert wäre; alle sind behoben (`docs/ISSUE_NACHWEISE_0.4.3.md`, „Unabhängige Prüfung“).
+
 ## 0.4.2 (beta)
 
 Nacharbeit aus dem Critical-Friend-Re-Audit von 0.4.1 (03.11.2026, Issues #28 bis #30, #24, #26). Nachweise je Issue: `docs/ISSUE_NACHWEISE_0.4.2.md`. Version `2026110302` (Datum plus laufende Nummer; 0.4.1 hätte `2026110301` sein müssen). Neue Tabellen `sideline_daycount` und `sideline_aicall`, Upgrade-Schritt `2026110302`; die Cache-Definition `groupsnapshot` entfällt.

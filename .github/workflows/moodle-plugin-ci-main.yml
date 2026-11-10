@@ -213,7 +213,7 @@ jobs:
 
       - name: The artefact must still contain what Moodle runs
         run: |
-          for required in sideline/version.php sideline/lang sideline/db; do
+          for required in sideline/version.php sideline/lang sideline/db sideline/db/removed_files.txt sideline/cli/privacy_check.php; do
             if ! grep -q "^${required}" /tmp/release.list; then
               echo "FEHLT im Release-Artefakt: $required"
               exit 1
@@ -396,13 +396,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # "previous": the last commit with a different release string (0.4.1, whose application cache held
-        # user ids). "0.4.0": the release before the first cache definition, with the same version number as
+        # "previous": the last commit with a different release string. "0.4.1": the release whose application
+        # cache held user ids; its cells first copy the current code over the old directory, as happened on
+        # GitHub with 0.4.2 (#31): the upgrade must stop and name db/caches.php, and succeed once the directory
+        # is replaced. "0.4.0": the release before the first cache definition, with the same version number as
         # 0.4.1. "0.3.2": the last release before the schema changes of 0.4.0, so that every upgrade step runs
         # on real data at least once. Each starting point on both Moodle versions and both databases.
         include:
           - { from: previous, moodle: MOODLE_405_STABLE, php: '8.3', database: pgsql }
           - { from: previous, moodle: MOODLE_503_STABLE, php: '8.3', database: mariadb }
+          - { from: '0.4.1', moodle: MOODLE_405_STABLE, php: '8.3', database: mariadb, copyover: true }
+          - { from: '0.4.1', moodle: MOODLE_503_STABLE, php: '8.3', database: pgsql, copyover: true }
           - { from: '0.4.0', moodle: MOODLE_405_STABLE, php: '8.3', database: mariadb }
           - { from: '0.4.0', moodle: MOODLE_503_STABLE, php: '8.3', database: pgsql }
           - { from: '0.3.2', moodle: MOODLE_405_STABLE, php: '8.3', database: pgsql }
@@ -456,6 +460,16 @@ jobs:
           # Data of the old release, written with its own code (the seed script comes from the current code).
           cp current/tools/ci/upgrade_seed.php "$root/mod/sideline/upgrade_seed.php"
           php "$root/mod/sideline/upgrade_seed.php" 2>&1 | tee upgrade-seed.log
+          if [[ "${{ matrix.copyover }}" == "true" ]]; then
+            # The current code copied over the old directory: a file that the release removed stays behind.
+            rsync -a --exclude=.git current/ "$root/mod/sideline/"
+            if php moodle/admin/cli/upgrade.php --non-interactive > upgrade-copyover.log 2>&1; then
+              echo "FAIL the upgrade ran although db/caches.php of the old release is still there"; exit 1
+            fi
+            grep -q "removed are still in its directory: db/caches.php" upgrade-copyover.log \
+              || { tail -30 upgrade-copyover.log; echo "FAIL the upgrade did not name the removed file"; exit 1; }
+            echo "PASS the upgrade stops and names db/caches.php while it is still in the directory"
+          fi
           # The full code base replaces the old one, as an administrator does it.
           rm -rf "$root/mod/sideline"
           rsync -a --exclude=.git current/ "$root/mod/sideline/"
@@ -469,6 +483,7 @@ jobs:
           name: upgrade-${{ matrix.from }}-${{ matrix.moodle }}-${{ matrix.database }}
           path: |
             upgrade-seed.log
+            upgrade-copyover.log
             upgrade.log
             upgrade-schema.log
             upgrade-verify.log

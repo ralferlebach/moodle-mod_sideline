@@ -117,7 +117,8 @@ trait core_ai_provider {
                 $content = 'Answer of the provider';
             }
             return new Response(200, ['Content-Type' => 'application/json'], json_encode([
-                'id' => 'x', 'object' => 'chat.completion', 'created' => 1, 'model' => 'gpt-4o', 'system_fingerprint' => 'f',
+                'id' => 'chatcmpl-' . random_string(12),
+                'object' => 'chat.completion', 'created' => 1, 'model' => 'gpt-4o', 'system_fingerprint' => 'f',
                 'choices' => [[
                     'index' => 0,
                     'message' => ['role' => 'assistant', 'content' => $content],

@@ -57,3 +57,12 @@
     display: inline-flex;
     align-items: center;
 }
+
+/* Forced colours (Windows contrast mode) drop box shadows, and with them the focus ring of Bootstrap: the keyboard
+   focus would be invisible (WCAG 2.4.7). An outline in the current (system) colour takes its place. */
+@media (forced-colors: active) {
+    .mod_sideline-panel :is(a, button, input, select, textarea, [tabindex]):focus-visible {
+        outline: 2px solid currentcolor;
+        outline-offset: 2px;
+    }
+}

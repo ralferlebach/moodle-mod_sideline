@@ -52,6 +52,7 @@ $unconfirmed = \mod_sideline\local\instance_config::count_unconfirmed_sources((i
 $cms = (new \mod_sideline\local\service\scope_resolver())->resolve($sideline, (int) $student->id);
 $names = array_map(static fn($cm) => $cm->name, $cms);
 $check('group minimum at least three', (int) $sideline->groupminsize === 3, (string) $sideline->groupminsize);
+$check('time window of group statements: a week', (int) $sideline->groupwindow === WEEKSECS, (string) $sideline->groupwindow);
 if ($from < 2026110300) {
     // The upgrade steps of 0.4.0 ran on data of an older release.
     $check('event types default', $sideline->groupevents === 'completed', (string) $sideline->groupevents);
@@ -197,6 +198,11 @@ $check(
 );
 $check('no outdated cached text delivered', !$DB->record_exists('sideline_cache', ['sidelineid' => $sideline->id,
     'fingerprint' => 'old']));
+
+// The operational privacy check of the target system (#14) finds nothing that retention or the upgrade left behind.
+foreach (\mod_sideline\local\privacy\operational_check::run(time()) as [$name, $result, $detail]) {
+    $check("privacy check $name: $result", $result !== \mod_sideline\local\privacy\operational_check::FAIL, $detail);
+}
 
 echo $failures ? "$failures check(s) failed.\n" : "Upgrade verified (from $seeded).\n";
 exit($failures ? 1 : 0);

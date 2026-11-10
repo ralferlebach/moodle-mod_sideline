@@ -58,4 +58,4 @@ Messung vom 03.11.2026: Moodle 5.3, PHP 8.3, eingebauter Server mit 8 Workern au
 | Race: 20 Sitzungen derselben Person | max. 613 ms, `verify_load.php` OK | max. 434 ms, `verify_load.php` OK |
 | Cachezeilen mit Gruppenaussage | 16 von 21 | 16 von 21 |
 
-Ohne HTTP misst `tools/bench_groups.php` den Gruppenpfad allein. Für 100, 1000 und 5000 Personen mit 0, 10, 50 und 200 Gruppen bleibt er bei höchstens 7 Lesezugriffen (warm) und höchstens 32 ms; die Werte stehen in `docs/ISSUE_NACHWEISE_0.4.0.md`.
+Ohne HTTP misst `tools/bench_groups.php` den Gruppenpfad allein. Für 100, 1000 und 5000 Personen mit 0, 10, 50 und 200 Gruppen bleibt er bei höchstens 7 Lesezugriffen (warm) und höchstens 32 ms; die Werte stehen in `docs/ISSUE_NACHWEISE_0.4.0.md`. Mit allen fünf Ereignisarten (`--events=viewed,active,completed,passed,improved`, ab 0.4.3) höchstens 11 Lesezugriffe warm und 170 ms kalt; die Werte stehen in `docs/ISSUE_NACHWEISE_0.4.3.md`.

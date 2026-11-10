@@ -290,4 +290,147 @@ final class ai_records_test extends \advanced_testcase {
         mod_sideline_upgrade_attribute_ai_calls();
         $this->assertSame(1, $DB->count_records('sideline_aicall', ['actionid' => $own]));
     }
+
+    public function test_the_retention_empties_only_entries_older_than_the_period(): void {
+        global $DB;
+        [$a, $b, $foreign] = $this->three_callers();
+        $now = time();
+        $DB->set_field('sideline_aicall', 'timecreated', $now - 100 * DAYSECS, ['sidelineid' => $this->a->id]);
+        set_config('airetentiondays', 90, 'mod_sideline');
+
+        ob_start();
+        (new \mod_sideline\task\purge_cache())->execute();
+        $log = ob_get_clean();
+        $this->assertStringContainsString('emptied 1 entries of the AI subsystem older than 90 days', $log);
+        $this->assertFalse($this->holds_text($a[0]), 'Older than the period: emptied');
+        $this->assertTrue($this->holds_text($b[0]), 'Within the period: kept');
+        $this->assertTrue($this->holds_text($foreign), 'Another plugin\'s entry is never touched');
+        $this->assertSame([], $this->entries($this->a));
+        $this->assertSame(3, $DB->count_records('ai_action_register'), 'Time and tokens stay');
+
+        // 0 keeps the entries as long as the subsystem does.
+        $DB->set_field('sideline_aicall', 'timecreated', $now - 1000 * DAYSECS, ['sidelineid' => $this->b->id]);
+        set_config('airetentiondays', 0, 'mod_sideline');
+        ob_start();
+        (new \mod_sideline\task\purge_cache())->execute();
+        ob_end_clean();
+        $this->assertTrue($this->holds_text($b[0]));
+    }
+
+    public function test_entries_of_0_4_1_without_an_instance_are_found_and_emptied_by_the_administrator(): void {
+        global $DB;
+        [$a, , $foreign] = $this->three_callers();
+        $usercontext = (int) \context_user::instance($this->student->id)->id;
+        $text = (int) $DB->insert_record('ai_action_generate_text', (object) [
+            'prompt' => "You phrase.\n\nFACTS:\n{}\n\nOUTPUT FORMAT: respond with JSON only, no other text:\n{}",
+            'generatedcontent' => '{"commentary":"Well done"}',
+        ]);
+        $register = ['actionname' => 'generate_text', 'actionid' => $text, 'success' => 1, 'userid' => $this->student->id,
+            'contextid' => $usercontext, 'provider' => 'aiprovider_openai', 'timecreated' => time(), 'timecompleted' => time()];
+        if (array_key_exists('courseid', $DB->get_columns('ai_action_register'))) {
+            $register['courseid'] = 0;
+        }
+        $DB->insert_record('ai_action_register', (object) $register);
+
+        $this->assertSame([], ai_records::unattributed(), 'A site installed with 0.4.3 has no entries of 0.4.1');
+        // The upgrade to 0.4.3 records when every call got a record of origin. Entries after it are never included:
+        // a call in flight writes its record only after the provider's answer.
+        set_config('aiattributionsince', time() + 1, 'mod_sideline');
+        $late = (int) $DB->insert_record('ai_action_generate_text', (object) [
+            'prompt' => "You phrase.\n\nFACTS:\n{}\n\nOUTPUT FORMAT: respond with JSON only, no other text:\n{}",
+            'generatedcontent' => '{"commentary":"In flight"}',
+        ]);
+        $DB->insert_record('ai_action_register', (object) (['actionid' => $late, 'timecreated' => time() + 5] + $register));
+        $this->assertSame([$text], ai_records::unattributed(), 'Only the prompt of the plugin without a record of origin');
+        $this->assertSame(1, ai_records::forget_unattributed());
+        $this->assertFalse($this->holds_text($text));
+        $this->assertTrue($this->holds_text($a[0]), 'Attributed entries are the instances\' to empty');
+        $this->assertTrue($this->holds_text($foreign), 'Another plugin\'s entry is never touched');
+        $this->assertSame([], ai_records::unattributed(), 'Nothing left: a second run finds nothing');
+        $this->assertTrue($this->holds_text($late), 'The call in flight keeps its entry');
+    }
+
+    public function test_a_call_of_another_plugin_with_the_same_prompt_at_the_same_moment_is_never_taken_for_its_own(): void {
+        global $DB;
+        $usercontext = \context_user::instance($this->student->id);
+        $studentid = (int) $this->student->id;
+        $sent = false;
+        // While the provider answers the coach, another plugin sends the very same prompt for the same person in the
+        // same context. Core registers that call first: it is the entry right after the coach's lower bound.
+        $this->mock_provider(200, 2, function (string $prompt) use (&$sent, $usercontext, $studentid) {
+            if ($sent) {
+                return;
+            }
+            $sent = true;
+            $foreign = new \core_ai\aiactions\generate_text(
+                contextid: $usercontext->id,
+                userid: $studentid,
+                prompttext: $prompt
+            );
+            \core\di::get(\core_ai\manager::class)->process_action($foreign);
+        });
+        $this->assertSame('ai', $this->get($this->a)['commentary']['source']);
+        $this->assertTrue($sent);
+
+        $entries = $DB->get_records_sql(
+            'SELECT r.id AS registerid, t.id AS textid, t.responseid
+               FROM {ai_action_register} r
+               JOIN {ai_action_generate_text} t ON t.id = r.actionid
+           ORDER BY r.id'
+        );
+        $this->assertCount(2, $entries, 'Two entries with the same prompt in the same user context');
+        [$foreign, $own] = array_values($entries);
+        $this->assertNotSame($foreign->responseid, $own->responseid);
+        $this->assertSame([(int) $own->registerid], array_map('intval', $DB->get_fieldset_select(
+            'sideline_aicall',
+            'actionid',
+            'sidelineid = ?',
+            [$this->a->id]
+        )), 'Only the entry with the answer of the coach\'s own call is recorded');
+
+        $sideline = $DB->get_record('sideline', ['id' => $this->a->id]);
+        consent_manager::record_decision($sideline, $studentid, false, \context_module::instance($this->a->cmid)->id, time());
+        $this->assertFalse($this->holds_text((int) $own->textid), 'The own entry is emptied');
+        $this->assertTrue($this->holds_text((int) $foreign->textid), 'The other plugin\'s entry with the same prompt is kept');
+    }
+
+    public function test_an_ambiguous_entry_is_never_recorded(): void {
+        global $DB;
+        $usercontext = (int) \context_user::instance($this->student->id)->id;
+        $prompt = "You phrase.\n\nFACTS:\n{}\n\nOUTPUT FORMAT: respond with JSON only, no other text:\n{}";
+        $after = ai_records::last_id();
+        foreach (['one', 'two'] as $responseid) {
+            $text = $DB->insert_record('ai_action_generate_text', (object) ['prompt' => $prompt, 'responseid' => $responseid,
+                'generatedcontent' => 'x']);
+            $register = ['actionname' => 'generate_text', 'actionid' => $text, 'success' => 1, 'userid' => $this->student->id,
+                'contextid' => $usercontext, 'provider' => 'aiprovider_openai', 'timecreated' => time(),
+                'timecompleted' => time()];
+            if (array_key_exists('courseid', $DB->get_columns('ai_action_register'))) {
+                $register['courseid'] = 0;
+            }
+            $DB->insert_record('ai_action_register', (object) $register);
+        }
+        // Without an answer id, two entries match: none is recorded (fail-closed).
+        $this->assertSame(0, ai_records::attribute(
+            (int) $this->a->id,
+            (int) $this->student->id,
+            $usercontext,
+            $after,
+            $prompt,
+            time()
+        ));
+        $this->assertDebuggingCalled();
+        $this->assertSame(0, $DB->count_records('sideline_aicall'));
+        // With the answer id, exactly the own one.
+        $this->assertSame(1, ai_records::attribute(
+            (int) $this->a->id,
+            (int) $this->student->id,
+            $usercontext,
+            $after,
+            $prompt,
+            time(),
+            'two'
+        ));
+        $this->assertSame(1, $DB->count_records('sideline_aicall'));
+    }
 }

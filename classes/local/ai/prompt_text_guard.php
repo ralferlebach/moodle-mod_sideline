@@ -99,7 +99,7 @@ final class prompt_text_guard {
      * about 750 phrases at the very most (one-letter words, every sequence different; tools/bench_names.php, text
      * "letters"). Two lists of this length stay below the parameter limits of every database Moodle supports.
      */
-    private const CHUNK = 750;
+    public const CHUNK = 750;
 
     /** @var int Results kept for the request, per course and text. */
     private const CACHE_SIZE = 200;
@@ -243,17 +243,9 @@ final class prompt_text_guard {
         }
         $result = null;
         try {
-            [$incourse, $courseparams] = $DB->get_in_or_equal($courseids, SQL_PARAMS_NAMED, 'sgc');
             foreach (array_chunk($candidates, self::CHUNK) as $chunk) {
-                [$first, $firstparams] = $DB->get_in_or_equal($chunk, SQL_PARAMS_NAMED, 'sgf');
-                [$last, $lastparams] = $DB->get_in_or_equal($chunk, SQL_PARAMS_NAMED, 'sgl');
-                $sql = "SELECT 1
-                          FROM {user} u
-                          JOIN {user_enrolments} ue ON ue.userid = u.id
-                          JOIN {enrol} e ON e.id = ue.enrolid
-                         WHERE e.courseid $incourse AND u.deleted = 0
-                               AND (LOWER(TRIM(u.firstname)) $first OR LOWER(TRIM(u.lastname)) $last)";
-                if ($DB->record_exists_sql($sql, $courseparams + $firstparams + $lastparams)) {
+                [$sql, $params] = self::name_query($courseids, $chunk);
+                if ($DB->record_exists_sql($sql, $params)) {
                     $result = 'name';
                     break;
                 }
@@ -270,6 +262,29 @@ final class prompt_text_guard {
     }
 
     /**
+     * The query of course_name() for one chunk of phrases: whether somebody enrolled in the courses has one of them
+     * as first or last name. Public for the execution plan in tools/bench_names.php.
+     *
+     * @param int[] $courseids Course ids, at least one.
+     * @param string[] $phrases Phrases in lower case, at most CHUNK.
+     * @return array [sql, params]
+     */
+    public static function name_query(array $courseids, array $phrases): array {
+        global $DB;
+
+        [$incourse, $courseparams] = $DB->get_in_or_equal($courseids, SQL_PARAMS_NAMED, 'sgc');
+        [$first, $firstparams] = $DB->get_in_or_equal($phrases, SQL_PARAMS_NAMED, 'sgf');
+        [$last, $lastparams] = $DB->get_in_or_equal($phrases, SQL_PARAMS_NAMED, 'sgl');
+        $sql = "SELECT 1
+                  FROM {user} u
+                  JOIN {user_enrolments} ue ON ue.userid = u.id
+                  JOIN {enrol} e ON e.id = ue.enrolid
+                 WHERE e.courseid $incourse AND u.deleted = 0
+                       AND (LOWER(TRIM(u.firstname)) $first OR LOWER(TRIM(u.lastname)) $last)";
+        return [$sql, $courseparams + $firstparams + $lastparams];
+    }
+
+    /**
      * Every phrase of one to NAME_WORDS consecutive words of a text, lower case, at least two characters.
      *
      * A phrase runs from the start of a word to the end of a later word with the text in between as
@@ -279,7 +294,7 @@ final class prompt_text_guard {
      * @param string $text Free text of at most MAX_LENGTH characters.
      * @return string[]
      */
-    private static function candidates(string $text): array {
+    public static function candidates(string $text): array {
         $lower = mb_strtolower($text);
         preg_match_all('/[\p{L}\p{M}\p{N}]+/u', $lower, $words, PREG_OFFSET_CAPTURE);
         $words = $words[0];

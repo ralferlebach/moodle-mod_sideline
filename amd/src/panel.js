@@ -247,14 +247,23 @@ export const init = (rootid) => {
     let answersOpen = false;
     const uid = 'mod_sideline_p' + (++uniq);
 
+    // Says that an action is done: the reload may change nothing visible (an answer without effect), and a screen
+    // reader would then say nothing (WCAG 4.1.3). It stays the last child of the panel, empty until an action. The
+    // panel itself is the live region; a live region of its own here would be announced twice.
+    const notice = el('p', {className: HIDDEN, 'data-region': 'notice'});
     const show = (...nodes) => {
-        section.replaceChildren(...nodes);
+        notice.textContent = '';
+        section.replaceChildren(...nodes, notice);
     };
     const fail = () => show(el('div', {role: 'alert'}, [el('p', {text: s.error}),
         el('button', {type: 'button', className: 'btn btn-secondary btn-sm', text: s.retry, on: {click: () => load()}})]));
-    const act = (promise) => promise.then(() => load()).then(() => section.focus()).catch(fail);
+    const act = (promise) => promise.then(() => load()).then(() => {
+        section.focus();
+        notice.textContent = s.saved;
+        return null;
+    }).catch(fail);
 
-    const deleteAnswer = (questionid) => call('delete_answer', {cmid, questionid}).then(() => load()).catch(fail);
+    const deleteAnswer = (questionid) => act(call('delete_answer', {cmid, questionid}));
 
     const answerList = (container, answers) => {
         container.replaceChildren();
