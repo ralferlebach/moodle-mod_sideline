@@ -47,6 +47,10 @@ Werkzeuge, Pipelines und Testinfrastruktur. Fachliche Dokumentation: `DOCUMENTAT
 - **Das Plugin nicht per `add-plugin` hinzufügen.** `moodle-plugin-ci install` übernimmt es schon; ein zweiter Klon bricht die Installation ab.
 - **Playwright und Moodle-Login:** Erst nach `networkidle` ausfüllen, sonst ersetzt Moodles JavaScript das Feld und der Login scheitert mit „invalid login token“. Benutzertouren abschalten, ihr Dialog setzt `aria-hidden` auf die Seite.
 - **`db/removed_files.txt` pflegen.** Ein Plugin-Paket löscht nie etwas. Eine entfernte Datei überlebt sonst in einem in-place aktualisierten Repository.
+- **Ein Release nie über das alte Verzeichnis oder das Repository kopieren.** Entfernte Dateien bleiben sonst liegen und werden geladen; nach 0.4.2 hielt `db/caches.php` von 0.4.1 die alte Cache-Definition am Leben und machte PHPUnit, Coverage und alle Upgrade-Jobs rot (#31). Das Upgrade bricht seit 0.4.3 in diesem Fall ab.
+- **`rsync -a` kopiert nicht jede Datei.** Gleiche Größe und gleiche Änderungssekunde gelten als gleich; zwei Arbeitsbäume aus derselben Sekunde (`actions/checkout` und `git worktree add`) teilen sich die Sekunde. So blieb `version.php` von 0.4.1 im Copy-over-Test stehen (Lauf 115988086541). Für Kopien über bestehende Verzeichnisse `rsync --checksum`.
+- **MariaDB-Dienst-Container legen die Datenbank in `latin1` an** (11.4). Moodle verlangt `utf8mb4`; vor `install.php` umstellen (`bench.yml`). `moodle-plugin-ci install` legt die Datenbank selbst richtig an.
+- **Pläne hängen an Statistiken.** Dieselbe Abfrage lief lokal über den Index und auf GitHub als sequenzieller Scan über eine Million Einschreibungen. Wo ein Pfad begrenzt sein muss, die Begrenzung in die Abfrage schreiben (IDs statt Join), nicht dem Planer überlassen.
 
 ## Voraussetzungen
 Moodle 4.5 bis 5.3, PHP 8.1 oder neuer, Node.js für Build, Jest und Playwright, k6 für den Lasttest.

@@ -37,7 +37,8 @@
  * For every size it also prints the execution plan of the name query for the largest chunk of phrases (the
  * distinct text), as the database runs it (with LIMIT 1, as record_exists_sql() asks): EXPLAIN (ANALYZE, BUFFERS)
  * on PostgreSQL, ANALYZE on MariaDB, EXPLAIN ANALYZE on MySQL. The plan shows which indexes bound the scan
- * (enrol.courseid, user_enrolments.enrolid, user.id); it is recorded, not judged (--json holds it as "plan").
+ * (user_enrolments.enrolid with the enrolment methods of the course, user.id); it is recorded, not judged (--json
+ * holds it as "plan").
  *
  * --siteusers=N adds N users before the courses are built, enrolled nowhere, or with --siteenrol spread over 100
  * other courses (N enrolments more). The query compares the names of the course's enrolments only, but the database
@@ -255,7 +256,7 @@ foreach (array_map('intval', explode(',', $options['sizes'])) as $size) {
     $expected = ['namelast' => 'name'];
     if (!$options['noplan']) {
         $chunk = array_slice(prompt_text_guard::candidates($texts['distinct']), 0, prompt_text_guard::CHUNK);
-        [$sql, $params] = prompt_text_guard::name_query([(int) $course->id], $chunk);
+        [$sql, $params] = prompt_text_guard::name_query(prompt_text_guard::enrol_ids([(int) $course->id]), $chunk);
         $plan = bench_names_plan($sql, $params);
         $report['plans'][$size] = ['phrases' => count($chunk), 'plan' => $plan];
         echo "Plan of the name query, $size enrolments; before this run the site had $siteusers users and $siteenrolments"

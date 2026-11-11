@@ -81,6 +81,9 @@ jobs:
           if [ "$DB" = pgsql ]; then
             dbargs="--dbtype=pgsql --dbport=5432 --dbuser=moodle --dbpass=moodle"
           else
+            # The service creates the database with the server default latin1 (MariaDB 11.4); Moodle requires utf8mb4.
+            php -r '$db = new mysqli("127.0.0.1", "root", "moodle", "moodle", 3306);
+              exit($db->query("ALTER DATABASE moodle CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci") ? 0 : 1);'
             dbargs="--dbtype=mariadb --dbport=3306 --dbuser=root --dbpass=moodle"
           fi
           php moodle/admin/cli/install.php --non-interactive --agree-license $dbargs \

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.4 (beta)
+
+Behebt die roten Jobs des GitHub-Laufs 115988086541 (Main-CI auf 0.4.3) und des ersten Laufs von `bench.yml` (115989969517). Version `2026111000`, kein Upgrade-Schritt. Nachweise: `docs/ISSUE_NACHWEISE_0.4.4.md`.
+
+* **Upgrade-Job, Zellen ab 0.4.1 (#31):** Das Darüberkopieren mit `rsync -a` übersprang `version.php`. Die Dateien von 0.4.1 und 0.4.3 sind gleich groß, und beide Arbeitsbäume entstanden in derselben Sekunde; rsync hält Dateien mit gleicher Größe und gleicher Änderungszeit für gleich. Moodle sah dann keine neue Version („No upgrade needed“, Exit 0), und der Job meldete „the upgrade ran“. Jetzt `rsync --checksum` und eine Prüfung, dass `version.php` tatsächlich die aktuelle ist. Das Plugin war nicht betroffen: Mit kopierter `version.php` bricht das Upgrade wie vorgesehen ab, lokal mit genau diesem Ablauf nachgestellt.
+* **Namensprüfung auf großen Websites (#24):** Auf GitHub wählte PostgreSQL 17 mit einer Million Einschreibungen in anderen Kursen einen sequenziellen Scan über alle Einschreibungen (bis 241 ms, Budget 200 ms). Die Prüfung liest jetzt zuerst die Einschreibungsmethoden des Kurses und fragt die Einschreibungen über deren IDs ab (Index `enrolid, userid`), unabhängig von der Schätzung des Planers. Zwei Abfragen statt einer, im Budget von zwei.
+* **`bench.yml` auf MariaDB:** Der Dienst-Container legt die Datenbank mit `latin1` an, Moodle verlangt `utf8mb4`; die Datenbank wird vor der Installation umgestellt.
+* **Upgrade-Job ab 0.4.3:** `upgrade_seed.php` legt den KI-Eintrag ab einem Stand mit `sideline_aicall` wie das Plugin mit Herkunftssatz an. Sonst wären die Zellen „previous“ im nächsten Lauf rot gewesen.
+
 ## 0.4.3 (beta)
 
 Nacharbeit zu den offenen Issues #31, #30, #29, #28, #26, #25, #24, #14, #12 und #6 und zum CI-Lauf 115655888628. Nachweise je Issue: `docs/ISSUE_NACHWEISE_0.4.3.md`. Version `2026110900`, Upgrade-Schritt `2026110900` (Feld `groupwindow`). Auslieferung als `mod_sideline-2026110900.zip`.

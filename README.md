@@ -5,7 +5,7 @@ Eine Moodle-Aktivität, die Lernenden einen kurzen, persönlichen „Sportreport
 PHP entscheidet deterministisch, was gesagt wird (Deadlines, Sperren, Erfolge); KI formuliert höchstens den Wortlaut.
 Fällt KI aus oder liefert ungültigen Text, greifen lokalisierte Vorlagen, zuletzt ein generischer Text.
 
-Status: **0.4.3 beta** (Version `2026110900`) – siehe `docs/CHANGELOG.md`, Nachweise in `docs/TRACEABILITY.md` und `docs/ISSUE_NACHWEISE_0.4.3.md`.
+Status: **0.4.4 beta** (Version `2026111000`) – siehe `docs/CHANGELOG.md`, Nachweise in `docs/TRACEABILITY.md`, `docs/ISSUE_NACHWEISE_0.4.3.md` und `docs/ISSUE_NACHWEISE_0.4.4.md`.
 
 Anforderungen
 -------------

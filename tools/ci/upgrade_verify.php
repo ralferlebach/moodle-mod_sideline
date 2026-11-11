@@ -132,8 +132,9 @@ $check('stopped sharing removes the day count', !$DB->record_exists('sideline_da
     'userid' => $member->id]));
 
 // AI calls of the old release: attributed when the old release registered them in the activity's context and the
-// prompt has the plugin's form, never an entry of another plugin or of the editor in the same activity context; a
-// withdrawal empties only what belongs to the instance.
+// prompt has the plugin's form (upgrade step 2026110302), or when it recorded the origin itself (0.4.2 and later);
+// never an entry of another plugin or of the editor in the same activity context; a withdrawal empties only what
+// belongs to the instance.
 $sidelineprompt = $DB->get_record_select(
     'ai_action_generate_text',
     $DB->sql_like('prompt', '?'),

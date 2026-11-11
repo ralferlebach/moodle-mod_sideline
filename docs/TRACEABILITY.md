@@ -1,6 +1,6 @@
-# Abdeckungsmatrix mod_sideline 0.4.3
+# Abdeckungsmatrix mod_sideline 0.4.4
 
-Stand: 09.11.2026. Jede Zeile nennt die Umsetzung und den **ausgeführten** Nachweis. Ausgeführt heißt: lokal im Container gelaufen, nicht in GitHub-CI (siehe P-37).
+Stand: 11.11.2026 (0.4.4 behebt nur CI- und Messbefunde; die Nachweise der Anforderungen gelten aus 0.4.3, Läufe auf 0.4.4 in `docs/ISSUE_NACHWEISE_0.4.4.md`). Jede Zeile nennt die Umsetzung und den **ausgeführten** Nachweis. Ausgeführt heißt: lokal im Container gelaufen, nicht in GitHub-CI (siehe P-37).
 
 Legende: ✔ umgesetzt und getestet · ◐ teilweise / mit benannter Lücke · ✘ offen
 

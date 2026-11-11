@@ -24,7 +24,14 @@ php moodle/admin/cli/install_database.php --agree-license --adminpass=Admin1! --
 cp "$SRC/tools/ci/upgrade_seed.php" "$root/mod/sideline/upgrade_seed.php"
 php "$root/mod/sideline/upgrade_seed.php" || exit 1
 if [[ ${COPYOVER:-0} == 1 ]]; then
-    (cd "$SRC" && tar --exclude=.git --exclude=node_modules -cf - .) | tar -xf - -C "$root/mod/sideline"
+    # As the job does it: rsync with --checksum (without it, a file of the same size and modification second is
+    # skipped, run 115988086541); tar where rsync is missing.
+    if command -v rsync > /dev/null; then
+        rsync -a --checksum --exclude=.git --exclude=node_modules "$SRC/" "$root/mod/sideline/"
+    else
+        (cd "$SRC" && tar --exclude=.git --exclude=node_modules -cf - .) | tar -xf - -C "$root/mod/sideline"
+    fi
+    cmp -s "$SRC/version.php" "$root/mod/sideline/version.php" || { echo "FAIL the current version.php was not copied"; exit 1; }
     if php moodle/admin/cli/upgrade.php --non-interactive > upgrade-copyover.log 2>&1; then
         echo "FAIL the upgrade ran although db/caches.php of the old release is still there"; exit 1
     fi

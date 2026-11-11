@@ -174,9 +174,16 @@ final class prompt_guard_test extends \advanced_testcase {
         prompt_text_guard::reset();
         $course = $this->getDataGenerator()->create_course();
         $realdb = $DB;
-        $DB = $this->getMockBuilder(get_class($realdb))->onlyMethods(['record_exists_sql'])->getMock();
-        $DB->method('record_exists_sql')->willThrowException(new \dml_read_exception('timeout'));
         try {
+            // The name query fails.
+            $DB = $this->getMockBuilder(get_class($realdb))->onlyMethods(['record_exists_sql', 'get_fieldset_select'])->getMock();
+            $DB->method('get_fieldset_select')->willReturn([1]);
+            $DB->method('record_exists_sql')->willThrowException(new \dml_read_exception('timeout'));
+            $this->assertSame('budget', prompt_text_guard::course_name('Keep at it.', (int) $course->id));
+            // Reading the enrolment methods of the course fails.
+            prompt_text_guard::reset();
+            $DB = $this->getMockBuilder(get_class($realdb))->onlyMethods(['get_fieldset_select'])->getMock();
+            $DB->method('get_fieldset_select')->willThrowException(new \dml_read_exception('timeout'));
             $this->assertSame('budget', prompt_text_guard::course_name('Keep at it.', (int) $course->id));
         } finally {
             $DB = $realdb;

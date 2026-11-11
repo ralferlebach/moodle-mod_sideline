@@ -243,8 +243,9 @@ final class prompt_text_guard {
         }
         $result = null;
         try {
-            foreach (array_chunk($candidates, self::CHUNK) as $chunk) {
-                [$sql, $params] = self::name_query($courseids, $chunk);
+            $enrolids = self::enrol_ids($courseids);
+            foreach ($enrolids ? array_chunk($candidates, self::CHUNK) : [] as $chunk) {
+                [$sql, $params] = self::name_query($enrolids, $chunk);
                 if ($DB->record_exists_sql($sql, $params)) {
                     $result = 'name';
                     break;
@@ -262,26 +263,40 @@ final class prompt_text_guard {
     }
 
     /**
-     * The query of course_name() for one chunk of phrases: whether somebody enrolled in the courses has one of them
-     * as first or last name. Public for the execution plan in tools/bench_names.php.
+     * The enrolment methods of the courses. course_name() reads them first, so that the name query starts from the
+     * enrolments of these courses (index enrolid, userid) whatever the planner estimates: on PostgreSQL with a
+     * million enrolments elsewhere on the site, a join with enrol let the planner scan all enrolments (#24).
      *
      * @param int[] $courseids Course ids, at least one.
+     * @return int[] Ids in enrol, possibly none.
+     */
+    public static function enrol_ids(array $courseids): array {
+        global $DB;
+
+        [$incourse, $params] = $DB->get_in_or_equal($courseids);
+        return array_map('intval', $DB->get_fieldset_select('enrol', 'id', "courseid $incourse", $params));
+    }
+
+    /**
+     * The query of course_name() for one chunk of phrases: whether somebody enrolled by one of the enrolment methods
+     * has one of them as first or last name. Public for the execution plan in tools/bench_names.php.
+     *
+     * @param int[] $enrolids Enrolment methods of the courses (enrol_ids()), at least one.
      * @param string[] $phrases Phrases in lower case, at most CHUNK.
      * @return array [sql, params]
      */
-    public static function name_query(array $courseids, array $phrases): array {
+    public static function name_query(array $enrolids, array $phrases): array {
         global $DB;
 
-        [$incourse, $courseparams] = $DB->get_in_or_equal($courseids, SQL_PARAMS_NAMED, 'sgc');
+        [$inenrol, $enrolparams] = $DB->get_in_or_equal($enrolids, SQL_PARAMS_NAMED, 'sge');
         [$first, $firstparams] = $DB->get_in_or_equal($phrases, SQL_PARAMS_NAMED, 'sgf');
         [$last, $lastparams] = $DB->get_in_or_equal($phrases, SQL_PARAMS_NAMED, 'sgl');
         $sql = "SELECT 1
-                  FROM {user} u
-                  JOIN {user_enrolments} ue ON ue.userid = u.id
-                  JOIN {enrol} e ON e.id = ue.enrolid
-                 WHERE e.courseid $incourse AND u.deleted = 0
+                  FROM {user_enrolments} ue
+                  JOIN {user} u ON u.id = ue.userid
+                 WHERE ue.enrolid $inenrol AND u.deleted = 0
                        AND (LOWER(TRIM(u.firstname)) $first OR LOWER(TRIM(u.lastname)) $last)";
-        return [$sql, $courseparams + $firstparams + $lastparams];
+        return [$sql, $enrolparams + $firstparams + $lastparams];
     }
 
     /**

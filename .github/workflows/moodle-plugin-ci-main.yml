@@ -462,7 +462,11 @@ jobs:
           php "$root/mod/sideline/upgrade_seed.php" 2>&1 | tee upgrade-seed.log
           if [[ "${{ matrix.copyover }}" == "true" ]]; then
             # The current code copied over the old directory: a file that the release removed stays behind.
-            rsync -a --exclude=.git current/ "$root/mod/sideline/"
+            # --checksum: rsync would otherwise skip a file of the same size and modification second, such as
+            # version.php of 0.4.1, checked out in the same second as the current code (#31, run 115988086541).
+            rsync -a --checksum --exclude=.git current/ "$root/mod/sideline/"
+            cmp -s current/version.php "$root/mod/sideline/version.php" \
+              || { echo "FAIL the current version.php was not copied"; exit 1; }
             if php moodle/admin/cli/upgrade.php --non-interactive > upgrade-copyover.log 2>&1; then
               echo "FAIL the upgrade ran although db/caches.php of the old release is still there"; exit 1
             fi

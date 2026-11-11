@@ -115,8 +115,9 @@ if ($is041) {
     }
 }
 
-// An AI call of the learner as the old release registered it (0.4.1 in the user context, earlier releases in
-// the activity's context), and one of another plugin in the same user context.
+// An AI call of the learner as the old release registered it (0.4.2 and later in the user context with a record of
+// origin, 0.4.1 in the user context without, earlier releases in the activity's context), and one of another plugin
+// in the same user context.
 $aicall = static function (int $contextid, string $prompt) use ($DB, $student, $now): int {
     $text = ['prompt' => $prompt, 'responseid' => 'resp', 'fingerprint' => 'fp', 'generatedcontent' => 'Answer to ' . $prompt];
     $register = ['actionname' => 'generate_text', 'success' => 1, 'userid' => $student->id, 'contextid' => $contextid,
@@ -131,7 +132,13 @@ $aicall = static function (int $contextid, string $prompt) use ($DB, $student, $
 $usercontext = context_user::instance($student->id)->id;
 // The form of the plugin's prompts (prompt_builder) since 0.3.0.
 $sidelineprompt = "Sideline prompt of the old release.\n\nFACTS:\n{}\n\nOUTPUT FORMAT: respond with JSON only, no other text:\n{}";
-$aicall($is041 ? $usercontext : context_module::instance($sidelinecm->id)->id, $sidelineprompt);
+if ($DB->get_manager()->table_exists('sideline_aicall')) {
+    // 0.4.2 and later register the call in the user context and record its origin right away, as the plugin does.
+    $DB->insert_record('sideline_aicall', (object) ['sidelineid' => $instance->id, 'userid' => $student->id,
+        'actionid' => $aicall($usercontext, $sidelineprompt), 'timecreated' => $now - 29]);
+} else {
+    $aicall($is041 ? $usercontext : context_module::instance($sidelinecm->id)->id, $sidelineprompt);
+}
 $aicall($usercontext, 'Prompt of another plugin');
 // Another placement in the activity's own context, for example the text editor while a teacher edits the activity.
 $aicall(context_module::instance($sidelinecm->id)->id, 'Prompt of the editor in the activity');
