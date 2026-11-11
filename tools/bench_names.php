@@ -35,7 +35,7 @@
  * the end is found.
  *
  * For every size it also prints the execution plan of the name query for the largest chunk of phrases (the
- * distinct text), as the database runs it (with LIMIT 1, as record_exists_sql() asks): EXPLAIN (ANALYZE, BUFFERS)
+ * distinct text), as the database runs it: EXPLAIN (ANALYZE, BUFFERS)
  * on PostgreSQL, ANALYZE on MariaDB, EXPLAIN ANALYZE on MySQL. The plan shows which indexes bound the scan
  * (user_enrolments.enrolid with the enrolment methods of the course, user.id); it is recorded, not judged (--json
  * holds it as "plan").
@@ -156,8 +156,6 @@ function bench_names_cpu(): float {
  */
 function bench_names_plan(string $sql, array $params): array {
     global $DB;
-    // As record_exists_sql() runs it: the first row is enough, which lets the planner start from the course.
-    $sql .= ' LIMIT 1';
     if ($DB->get_dbfamily() === 'postgres') {
         $raw = $DB->get_field_sql('EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ' . $sql, $params);
     } else if ($DB->get_dbfamily() === 'mysql' && $DB->get_dbvendor() === 'mariadb') {

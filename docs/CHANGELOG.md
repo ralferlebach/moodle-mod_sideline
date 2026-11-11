@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.5 (beta)
+
+Behebt den roten Schritt des Laufs 116338059388 von `bench.yml` auf 0.4.4. Version `2026111100`, kein Upgrade-Schritt. Nachweise: `docs/ISSUE_NACHWEISE_0.4.5.md`.
+
+* **Namensprüfung auf großen Websites, zweiter Anlauf (#24):** Auf GitHub wählte PostgreSQL bei 20 000 Einschreibungen eines Kurses und einer Million Nutzender einen Merge Join über alle Nutzenden (1,2 s, Budget 200 ms). Ursache: Die Abfrage verband Einschreibungen und Nutzende per Join, und mit dem `LIMIT 1` von `record_exists_sql()` setzt der Planer auf einen frühen Treffer, den es fast nie gibt. Die Person einer Einschreibung wird jetzt über eine skalare Unterabfrage gelesen (je Einschreibung über den Primärschlüssel), und die Abfrage zählt ohne `LIMIT`. Damit gibt es keinen Join, den der Planer anders ordnen könnte: Gelesen werden die Einschreibungen des Kurses, sonst nichts.
+
 ## 0.4.4 (beta)
 
 Behebt die roten Jobs des GitHub-Laufs 115988086541 (Main-CI auf 0.4.3) und des ersten Laufs von `bench.yml` (115989969517). Version `2026111000`, kein Upgrade-Schritt. Nachweise: `docs/ISSUE_NACHWEISE_0.4.4.md`.

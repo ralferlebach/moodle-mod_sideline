@@ -246,7 +246,7 @@ final class prompt_text_guard {
             $enrolids = self::enrol_ids($courseids);
             foreach ($enrolids ? array_chunk($candidates, self::CHUNK) : [] as $chunk) {
                 [$sql, $params] = self::name_query($enrolids, $chunk);
-                if ($DB->record_exists_sql($sql, $params)) {
+                if ((int) $DB->get_field_sql($sql, $params) > 0) {
                     $result = 'name';
                     break;
                 }
@@ -278,8 +278,8 @@ final class prompt_text_guard {
     }
 
     /**
-     * The query of course_name() for one chunk of phrases: whether somebody enrolled by one of the enrolment methods
-     * has one of them as first or last name. Public for the execution plan in tools/bench_names.php.
+     * The query of course_name() for one chunk of phrases: how many enrolments by one of the enrolment methods
+     * belong to somebody with one of them as first or last name. Public for the execution plan in tools/bench_names.php.
      *
      * @param int[] $enrolids Enrolment methods of the courses (enrol_ids()), at least one.
      * @param string[] $phrases Phrases in lower case, at most CHUNK.
@@ -291,11 +291,18 @@ final class prompt_text_guard {
         [$inenrol, $enrolparams] = $DB->get_in_or_equal($enrolids, SQL_PARAMS_NAMED, 'sge');
         [$first, $firstparams] = $DB->get_in_or_equal($phrases, SQL_PARAMS_NAMED, 'sgf');
         [$last, $lastparams] = $DB->get_in_or_equal($phrases, SQL_PARAMS_NAMED, 'sgl');
-        $sql = "SELECT 1
+        // The person of each enrolment is looked up by a scalar subquery, never by a join: a join lets the planner
+        // walk the user table instead, and with a LIMIT 1 (record_exists_sql()) it does so whenever it expects an
+        // early hit (PostgreSQL on GitHub: a merge join over a million users, 1.2 s, bench.yml run 116338059388).
+        // A scalar subquery runs once per enrolment of the course, through the primary key, on both databases. The
+        // count has no LIMIT either, so that no plan may bet on an early hit: it reads the course's enrolments.
+        $sql = "SELECT COUNT(1)
                   FROM {user_enrolments} ue
-                  JOIN {user} u ON u.id = ue.userid
-                 WHERE ue.enrolid $inenrol AND u.deleted = 0
-                       AND (LOWER(TRIM(u.firstname)) $first OR LOWER(TRIM(u.lastname)) $last)";
+                 WHERE ue.enrolid $inenrol
+                       AND (SELECT 1
+                              FROM {user} u
+                             WHERE u.id = ue.userid AND u.deleted = 0
+                                   AND (LOWER(TRIM(u.firstname)) $first OR LOWER(TRIM(u.lastname)) $last)) = 1";
         return [$sql, $enrolparams + $firstparams + $lastparams];
     }
 

@@ -176,9 +176,9 @@ final class prompt_guard_test extends \advanced_testcase {
         $realdb = $DB;
         try {
             // The name query fails.
-            $DB = $this->getMockBuilder(get_class($realdb))->onlyMethods(['record_exists_sql', 'get_fieldset_select'])->getMock();
+            $DB = $this->getMockBuilder(get_class($realdb))->onlyMethods(['get_field_sql', 'get_fieldset_select'])->getMock();
             $DB->method('get_fieldset_select')->willReturn([1]);
-            $DB->method('record_exists_sql')->willThrowException(new \dml_read_exception('timeout'));
+            $DB->method('get_field_sql')->willThrowException(new \dml_read_exception('timeout'));
             $this->assertSame('budget', prompt_text_guard::course_name('Keep at it.', (int) $course->id));
             // Reading the enrolment methods of the course fails.
             prompt_text_guard::reset();

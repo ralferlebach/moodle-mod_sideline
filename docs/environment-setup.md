@@ -289,6 +289,6 @@ Reihenfolge, ohne Ausnahme:
 
 ## 10. Verifikationsstand
 
-Stand 11.11.2026, Version 0.4.4 (`2026111000`): siehe `docs/ISSUE_NACHWEISE_0.4.4.md`, Abschnitt 3, und `docs/ISSUE_NACHWEISE_0.4.3.md`. Alle Läufe dort liefen auf dem GitHub-Checkout (`checkout.sh`) des entpackten Auslieferungs-ZIP.
+Stand 11.11.2026, Version 0.4.5 (`2026111100`): siehe `docs/ISSUE_NACHWEISE_0.4.5.md`, Abschnitt 5, und `docs/ISSUE_NACHWEISE_0.4.3.md`. Alle Läufe dort liefen auf dem GitHub-Checkout (`checkout.sh`) des entpackten Auslieferungs-ZIP.
 
 Nicht lokal nachgebildet: der Selenium-Container (stattdessen ChromeDriver mit demselben Chromium, Profil `chrome`) und die GitHub-Dienste für PostgreSQL und MariaDB (stattdessen lokale Server derselben Hauptversionen).
